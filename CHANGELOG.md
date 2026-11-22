@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 1.4.0 — 2026-11-22
+
+- Activité : carte repliable « Temps et sessions par personne » et liste repliable des sessions par année (numéro, mois, Yann / Olivier / les deux, temps moteur).
+- Compteur moteur : un écart de 10 min ou moins entre deux sessions est ignoré (le temps chronométré fait foi) ; au-delà, alerte pendant la saisie du compteur de départ et ligne « Trou de compteur » dans la liste des sessions.
+- Le compteur de départ proposé se met à jour quand d'autres téléphones ont synchronisé de nouvelles sessions.
+- Photo de slalom à l'accueil et en vignette du bandeau Session ; jauge d'essence de l'accueil réduite.
+
 ## 1.3.0 — 2026-11-22
 
 - Documents : envoi de plusieurs fichiers d'un coup ; l'app propose la catégorie, l'année et la personne d'après le nom du fichier, à vérifier avant l'envoi dans Google Drive.

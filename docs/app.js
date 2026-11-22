@@ -63,14 +63,14 @@
   function famDot(f) { return '<span class="dot f-' + f + '"></span>'; }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.3.0", SCHEMA = 1;
+  var APP_VERSION = "1.4.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
   var sessionsArr = [], bidons = [], dettes = [], moves = [], depenses = [];
   var lastPlein = "", lastLevel = 16, lastLevelDate = "";
   var ETAT = { id: "etat", gapsRecherche: [] };
-  var docYear = "Toutes", ui = { spec: false, maint: false, conn: false };
+  var docYear = "Toutes", ui = { spec: false, maint: false, conn: false, perso: false };
   /* Pièces à renouveler sur un inboard Malibu (moteur Indmar) : intervalles indicatifs, à confirmer dans le manuel du bateau. */
   var ENTR = [
     ["Pompe à eau (turbine / impeller)", 100, 2, "inspection à chaque hivernage"],
@@ -207,7 +207,18 @@
     el.title = s === "err" ? Sync.lastError : QUEUE.length ? QUEUE.length + " modification(s) en attente" : CONF.lastSync ? "Dernière synchro : " + new Date(CONF.lastSync).toLocaleString("fr-FR") : "Base partagée non configurée (onglet Bateau)";
   }
   function savedMsg(msg) { var s = netState(); return s === "off" || s === "err" ? msg.replace(/\.$/, "") + " sur le téléphone, envoi au retour du réseau." : msg; }
-  function lastCompteur() { var v = SPEC.hAchat || 0; sessionsArr.forEach(function (s) { if ((s.bateau || SPEC.devise) === SPEC.devise && Number(s.compteurFin) > v) v = Number(s.compteurFin); }); return v; }
+  /* Compteur moteur : la fin d'une session = compteur relevé à la clôture (pré-rempli avec départ + temps chronométré).
+     Un écart de GAP_TOL ou moins avec le départ de la session suivante est ignoré (le compteur est peu précis, on suit le chrono). */
+  var GAP_TOL = 10 / 60;
+  function hasNum(v) { return v != null && v !== "" && !isNaN(Number(v)); }
+  function sessionEnd(s) { return hasNum(s.compteurFin) ? Number(s.compteurFin) : Number(s.compteurDeb) + (Number(s.engineMin) || 0) / 60; }
+  function lastCompteur() { var v = SPEC.hAchat || 0; sessionsArr.forEach(function (s) { if ((s.bateau || SPEC.devise) === SPEC.devise && hasNum(s.compteurDeb) && sessionEnd(s) > v) v = sessionEnd(s); }); return Math.round(v * 10) / 10; }
+  function startWarnHtml(val) {
+    var last = lastCompteur(), d = (val - last) * 60;
+    if (!sessionsArr.some(function (s) { return (s.bateau || SPEC.devise) === SPEC.devise && hasNum(s.compteurDeb); }) || Math.abs(d) <= GAP_TOL * 60 + 0.01) return "";
+    return d > 0 ? '<div class="alert"><b>Écart de ' + hm(d) + " avec la fin de la dernière session (" + dec1.format(last) + " h).</b>Une session a-t-elle été oubliée ? Vous pouvez démarrer quand même : le trou sera signalé sur l’accueil et dans la liste des sessions, et pourra être rattrapé.</div>"
+      : '<div class="alert"><b>Compteur plus bas de ' + hm(-d) + " que la fin de la dernière session (" + dec1.format(last) + " h).</b>Vérifiez la saisie.</div>";
+  }
 
   /* ---------- Jauge ronde, de E (sous l'horizontale à gauche) à F (sous l'horizontale à droite) ---------- */
   var GC = { x: 120, y: 118 }, G0 = 210, GSWEEP = 240;
@@ -383,9 +394,11 @@
       '<div class="actions"><button class="btn ghost sm" id="cancelNo">Non, continuer</button><button class="btn stop sm" id="cancelYes">Oui, annuler la session</button></div></div>';
   }
   function renderStart() {
+    if (!sortie.debEdited) sortie.compteurDeb = lastCompteur(); // suit les sessions arrivées par synchronisation
     var h = '<div class="card"><h3>Nouvelle session</h3><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
+      '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div>" +
       '<div class="field"><span class="flabel">Jauge au départ</span>' + gaugeHtml("start", startJauge) + "</div>" +
-      '<p class="small muted m0">Le compteur est pré-rempli avec celui de la fin de la dernière session. Un écart est signalé sur l’accueil, sans rien bloquer.</p></div>';
+      '<p class="small muted m0">Pré-rempli avec la fin de la dernière session (départ + temps chronométré). Saisissez le compteur lu : jusqu’à 10 min d’écart, on garde votre saisie sans compter de trou, car le chrono fait foi. Au-delà, un trou est signalé, sans rien bloquer.</p></div>';
     h += boardHtml();
     if (startList.length) h += '<div class="card"><div class="field"><label for="pilStart">Pilote</label><select id="pilStart">' + startList.map(function (p) { return '<option value="' + p.pid + '"' + (p.pid === startPilote ? " selected" : "") + ">" + esc(person(p.pid).name) + "</option>"; }).join("") + "</select></div></div>";
     return h + '<button class="btn big run" id="goStart">Démarrer la session</button>';
@@ -475,12 +488,15 @@
   /* ---------- Accueil ---------- */
   /* Trous de compteur : écart entre la fin d'une session et le début de la suivante, sur le même bateau. */
   function findGaps() {
-    var list = sessionsArr.filter(function (s) { return s.compteurDeb != null && s.compteurFin != null && s.compteurDeb !== "" && s.compteurFin !== ""; })
-      .sort(function (a, b) { return Number(a.compteurDeb) - Number(b.compteurDeb); }), out = [];
-    for (var i = 1; i < list.length; i++) {
-      var a = list[i - 1], b = list[i], g = Number(b.compteurDeb) - Number(a.compteurFin);
-      if ((a.bateau || "") === (b.bateau || "") && g > 0.25) out.push({ key: a.id + ">" + b.id, from: a, to: b, h: g });
-    }
+    var out = [], by = {};
+    sessionsArr.forEach(function (s) { if (hasNum(s.compteurDeb) && (hasNum(s.compteurFin) || Number(s.engineMin) > 0)) (by[s.bateau || ""] = by[s.bateau || ""] || []).push(s); });
+    Object.keys(by).forEach(function (k) {
+      var list = by[k].sort(function (a, b) { return Number(a.compteurDeb) - Number(b.compteurDeb); });
+      for (var i = 1; i < list.length; i++) {
+        var a = list[i - 1], b = list[i], g = Number(b.compteurDeb) - sessionEnd(a);
+        if (g > GAP_TOL + 0.001) out.push({ key: a.id + ">" + b.id, from: a, to: b, h: g });
+      }
+    });
     return out;
   }
   function renderAccueil() {
@@ -498,9 +514,9 @@
     if (gp) {
       var srch = false;
       gap.key = gp.key;
-      h += '<div class="alert"><b>' + (srch ? "Trou de compteur en recherche : " : "Trou de compteur : ") + dec1.format(gp.h) + " h</b>Entre la session du " + esc(isoToFr(dkey(gp.from))) + " (fin " + dec1.format(gp.from.compteurFin) + " h) et celle du " + esc(isoToFr(dkey(gp.to))) + " (début " + dec1.format(gp.to.compteurDeb) + " h). Ça ne bloque rien." + (gap.open ? "" : '<div><button class="btn sm" id="gapOpen">Rattraper cette session</button></div>') + "</div>";
+      h += '<div class="alert"><b>' + (srch ? "Trou de compteur en recherche : " : "Trou de compteur : ") + hm(gp.h * 60) + "</b>Entre la session du " + esc(isoToFr(dkey(gp.from))) + " (fin " + dec1.format(sessionEnd(gp.from)) + " h) et celle du " + esc(isoToFr(dkey(gp.to))) + " (début " + dec1.format(gp.to.compteurDeb) + " h). Ça ne bloque rien." + (gap.open ? "" : '<div><button class="btn sm" id="gapOpen">Rattraper cette session</button></div>') + "</div>";
       if (gap.open) h += '<div class="card"><h3>Session rattrapée</h3><div class="two"><div class="field"><label for="gD">Date</label><input id="gD" type="date" value="' + esc(dkey(gp.from)) + '"></div><div class="field"><label for="gM">Durée (min)</label><input id="gM" inputmode="numeric" placeholder="si connue"></div></div>' +
-        '<div class="two"><div class="field"><label for="gC1">Compteur début</label><input id="gC1" inputmode="decimal" value="' + dec1.format(gp.from.compteurFin) + '"></div><div class="field"><label for="gC2">Compteur fin</label><input id="gC2" inputmode="decimal" value="' + dec1.format(gp.to.compteurDeb) + '"></div></div>' +
+        '<div class="two"><div class="field"><label for="gC1">Compteur début</label><input id="gC1" inputmode="decimal" value="' + dec1.format(sessionEnd(gp.from)) + '"></div><div class="field"><label for="gC2">Compteur fin</label><input id="gC2" inputmode="decimal" value="' + dec1.format(gp.to.compteurDeb) + '"></div></div>' +
         '<div class="field"><span class="flabel">Rattacher à</span>' + segHtml("fam", "data-grat", [["YC", "Famille Yann"], ["OC", "Famille Olivier"], ["search", "À rechercher"]], gap.rat) + "</div>" +
         '<div class="actions"><button class="btn ghost" id="gapCancel">Annuler</button><button class="btn" id="gapSave">Enregistrer</button></div></div>';
     }
@@ -858,16 +874,51 @@
       '<div class="legend"><span>' + famDot("YC") + 'Famille Yann <b class="num">' + int0.format(D.fam.YC) + " min · " + Math.round(D.fam.YC / t * 100) + " %</b></span><span>" + famDot("OC") + 'Famille Olivier <b class="num">' + int0.format(D.fam.OC) + " min · " + Math.round(D.fam.OC / t * 100) + " %</b></span></div>" +
       '<div class="small muted">Invités compris dans leur famille ; temps commun et mécanique partagés.</div></div>';
     var ppl = D.people;
-    if (!ppl.length) return h;
-    var w = ppl.filter(function (p) { return p[0] === bilanWho; })[0] || ppl[0]; bilanWho = w[0];
-    var max = Math.max(ppl[0][2], D.commun || 0, D.meca || 0, 1);
-    h += '<div class="card"><h3>Par personne</h3><div class="field"><label for="bWho">Personne</label><select id="bWho">' + ppl.map(function (p) { return "<option" + (p[0] === bilanWho ? " selected" : "") + ">" + esc(p[0]) + "</option>"; }).join("") + "</select></div>" +
-      '<div class="kpis"><div class="kpi"><span class="label">Temps de ski</span><span class="v">' + w[2] + ' min</span><span class="s">' + bilanYear + '</span></div><div class="kpi"><span class="label">Sessions</span><span class="v">' + w[3] + '</span><span class="s">≈ ' + Math.round(w[2] / Math.max(1, w[3])) + " min par session</span></div></div>" +
-      '<div style="display:grid;gap:7px">';
-    ppl.forEach(function (p) { h += '<div class="bar-row"><span>' + esc(p[0]) + '</span><div class="track"><div class="fill ' + p[1] + '" style="width:' + (p[2] / max * 100) + '%"></div></div><span class="n">' + p[2] + "</span></div>"; });
-    if (D.commun) h += '<div class="bar-row"><span>Commun</span><div class="track"><div class="fill X" style="width:' + (D.commun / max * 100) + '%"></div></div><span class="n">' + Math.round(D.commun) + "</span></div>";
-    if (D.meca) h += '<div class="bar-row"><span>Mécanique</span><div class="track"><div class="fill X" style="width:' + (D.meca / max * 100) + '%"></div></div><span class="n">' + Math.round(D.meca) + "</span></div>";
-    return h + '</div><div class="small muted">En minutes de tours (temps commun et mécanique à part).</div></div>';
+    if (ppl.length) {
+      var w = ppl.filter(function (p) { return p[0] === bilanWho; })[0] || ppl[0]; bilanWho = w[0];
+      var max = Math.max(ppl[0][2], D.commun || 0, D.meca || 0, 1);
+      h += '<div class="card">' + collHead("perso", "Temps et sessions par personne", ppl.length + " personne" + (ppl.length > 1 ? "s" : "") + " · " + esc(bilanYear));
+      if (ui.perso) {
+        h += '<div class="field" style="margin-top:12px"><label for="bWho">Personne</label><select id="bWho">' + ppl.map(function (p) { return "<option" + (p[0] === bilanWho ? " selected" : "") + ">" + esc(p[0]) + "</option>"; }).join("") + "</select></div>" +
+          '<div class="kpis"><div class="kpi"><span class="label">Temps de ski</span><span class="v">' + Math.round(w[2]) + ' min</span><span class="s">' + bilanYear + '</span></div><div class="kpi"><span class="label">Sessions</span><span class="v">' + w[3] + '</span><span class="s">≈ ' + Math.round(w[2] / Math.max(1, w[3])) + " min par session</span></div></div>" +
+          '<div style="display:grid;gap:7px">';
+        ppl.forEach(function (p) { h += '<div class="bar-row"><span>' + esc(p[0]) + '</span><div class="track"><div class="fill ' + p[1] + '" style="width:' + (p[2] / max * 100) + '%"></div></div><span class="n">' + Math.round(p[2]) + "</span></div>"; });
+        if (D.commun) h += '<div class="bar-row"><span>Commun</span><div class="track"><div class="fill X" style="width:' + (D.commun / max * 100) + '%"></div></div><span class="n">' + Math.round(D.commun) + "</span></div>";
+        if (D.meca) h += '<div class="bar-row"><span>Mécanique</span><div class="track"><div class="fill X" style="width:' + (D.meca / max * 100) + '%"></div></div><span class="n">' + Math.round(D.meca) + "</span></div>";
+        h += '</div><div class="small muted">En minutes de tours (temps commun et mécanique à part).</div>';
+      }
+      h += "</div>";
+    }
+    return h + sessionListHtml(bilanYear);
+  }
+  /* Liste des sessions d'une année (ou de toutes), une carte repliable par année */
+  var MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+  function sessionWho(s) {
+    var f = s.famMin || {}, y = Number(f.YC) > 0, o = Number(f.OC) > 0;
+    return y && o ? famDot("YC") + famDot("OC") + "Yann et Olivier" : y ? famDot("YC") + "Yann" : o ? famDot("OC") + "Olivier" : '<span class="muted">—</span>';
+  }
+  function sessionListHtml(sel) {
+    var by = {};
+    sessionsArr.forEach(function (s) { var y = yearOf(s); if (y) (by[y] = by[y] || []).push(s); });
+    var yrs = sel === "Toutes" ? Object.keys(by).sort().reverse() : (by[sel] ? [sel] : []);
+    var gapBefore = {}; findGaps().forEach(function (g) { gapBefore[g.to.id] = g; });
+    return yrs.map(function (y) {
+      var list = by[y].slice().sort(function (a, b) { return dkey(a) < dkey(b) ? -1 : 1; }), key = "ses" + y;
+      var tot = list.reduce(function (t, s) { return t + (Number(s.engineMin) || 0); }, 0);
+      var nGaps = list.filter(function (s) { return gapBefore[s.id]; }).length;
+      var h = '<div class="card">' + collHead(key, "Sessions " + y, list.length + " session" + (list.length > 1 ? "s" : "") + " · " + hm(tot) + " de moteur" + (nGaps ? " · " + nGaps + " trou" + (nGaps > 1 ? "s" : "") + " de compteur" : ""));
+      if (ui[key]) {
+        h += '<table class="rtable ses-list" style="margin-top:10px"><thead><tr><th>N°</th><th>Mois</th><th>Qui</th><th>Temps</th></tr></thead><tbody>';
+        list.slice().reverse().forEach(function (s, i) {
+          var d = dkey(s), m = Number(d.slice(5, 7));
+          h += "<tr><td>" + (list.length - i) + "</td><td>" + (m ? MOIS[m - 1] : "—") + '<span class="sub">' + isoToFr(d).slice(0, 5) + (s.mode === "rattrapage" ? " · rattrapage" : "") + "</span></td><td>" + sessionWho(s) + "</td><td>" + hm(s.engineMin) + "</td></tr>";
+          var g = gapBefore[s.id];
+          if (g) h += '<tr class="ses-gap"><td>⚠</td><td colspan="2">Trou de compteur<span class="sub">fin ' + dec1.format(sessionEnd(g.from)) + " h le " + isoToFr(dkey(g.from)).slice(0, 5) + " → début " + dec1.format(Number(g.to.compteurDeb)) + " h</span></td><td>" + hm(g.h * 60) + "</td></tr>";
+        });
+        h += "</tbody></table>";
+      }
+      return h + "</div>";
+    }).join("");
   }
   var chartPts = [];
   function chartHtml(D, fixM, essM, usM) {
@@ -1288,6 +1339,7 @@
     var el = e.target;
     if (el.dataset.f && el.tagName === "INPUT") { findTour(Number(el.dataset.id))[el.dataset.f] = el.value.replace(/\D/g, ""); return; }
     if (el.dataset.spec) { var key = el.dataset.spec; SPEC[key] = el.classList.contains("txt") ? el.value : parseNum(el.value); return; }
+    if (el.id === "cDeb") { sortie.compteurDeb = parseNum(el.value); sortie.debEdited = true; var wd = document.getElementById("cDebWarn"); if (wd) wd.innerHTML = startWarnHtml(parseNum(el.value)); return; }
     if (el.id === "cFin") { sortie.compteurFin = parseNum(el.value); document.getElementById("recapCard").innerHTML = recapHtml(Date.now()); }
     if (el.id === "dM" || el.id === "dPct") depPreview();
     if (el.id === "aL" || el.id === "aP") achatPreview();
