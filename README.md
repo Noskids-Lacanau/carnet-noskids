@@ -32,7 +32,7 @@ Chaque téléphone garde une copie des données : l'app s'ouvre et enregistre sa
 1. Créer un compte sur github.com (dans les paramètres e-mail, cocher « Keep my email addresses private » pour ne pas exposer l'adresse).
 2. Créer un dépôt **public** nommé **carnet-noskids**, vide (sans README ni licence).
 3. Envoyer le projet depuis ce dossier : `git push -u origin main --tags`. La première fois, une fenêtre GitHub demande de se connecter.
-4. **Settings > Pages** : Source *Deploy from a branch*, branche *main*, dossier */docs*. Après une minute, l'app est en ligne à l'adresse `https://<votre-pseudo>.github.io/carnet-noskids/`.
+4. **Settings > Pages** : Source *GitHub Actions*. Le fichier `.github/workflows/pages.yml` publie alors le dossier `docs/` à chaque envoi (suivi dans l'onglet **Actions**). Après une à deux minutes, l'app est en ligne à l'adresse `https://noskids-lacanau.github.io/carnet-noskids/`.
 5. **Releases > Draft a new release** : choisir le tag `v1.0.0`, titre « Version 1.0.0 », coller la partie 1.0.0 du `CHANGELOG.md`.
 
 Sans Git, on peut aussi déposer les fichiers depuis le site (**Add file > Upload files**), en gardant le dossier `docs`.
