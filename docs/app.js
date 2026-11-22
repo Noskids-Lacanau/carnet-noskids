@@ -63,7 +63,7 @@
   function famDot(f) { return '<span class="dot f-' + f + '"></span>'; }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.2.0", SCHEMA = 1;
+  var APP_VERSION = "1.3.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -89,7 +89,8 @@
     ["Hivernage (vidange de l’eau, antigel)", null, 1, "chaque fin de saison"]
   ];
   var maint = ENTR.map(function (e, i) { return { id: "m" + i, i: i, date: "", h: "" }; });
-  var DOC_CATS = ["Titre de navigation / carte grise", "Assurance", "Permis bateau", "Factures", "Adhésions et licences", "Taxe / corps mort lac", "Notice et fiche technique", "Photos du bateau", "Autres"];
+  var DOC_CATS = ["Titre de navigation / carte grise", "Assurance", "Permis bateau", "Diplômes et formations", "Factures", "Adhésions et licences", "Taxe / corps mort lac", "Réglementation", "Notice et fiche technique", "Photos du bateau", "Autres"];
+  var docPending = [];
   var docs = {}; DOC_CATS.forEach(function (c) { docs[c] = []; });
   var view = { essence: null, dep: false, cancelAsk: false, purge: null };
   var finView = "bilan", pilotSel = "";
@@ -898,6 +899,54 @@
     if (e[2] && m.date) { var d = new Date(m.date); d.setFullYear(d.getFullYear() + e[2]); var days = (d - now) / 86400000; parts.push(d.toLocaleDateString("fr-FR", { month: "2-digit", year: "numeric" })); if (days < 0) late = true; else if (days < 60) soon = true; }
     return late ? ["à faire", "late", parts.join(" ou ")] : soon ? ["bientôt", "soon", parts.join(" ou ")] : ["OK", "okp", parts.join(" ou ")];
   }
+  /* ---------- Documents : envoi groupé avec catégorie, année et personne devinées ---------- */
+  function sizeTxt(n) { return n > 1048576 ? dec1.format(n / 1048576) + " Mo" : Math.max(1, Math.round(n / 1024)) + " ko"; }
+  function guessDoc(name, lastMod) {
+    var s = name.toLowerCase(), cat = "Autres", pid = "";
+    PEOPLE.forEach(function (p) { if (!p.hidden && s.indexOf(p.name.toLowerCase()) >= 0) pid = p.id; });
+    if (/permis|code ?c[oô]tier|code ?bateau|codecotier|codebateau|cerfa_?14682/.test(s)) cat = "Permis bateau";
+    else if (/afps|psc|secouris|dipl[oô]me|initiateur|monitorat|cqp|bpjeps|formation/.test(s)) cat = "Diplômes et formations";
+    else if (/carte grise|titre de nav|immatric|navigation int/.test(s)) cat = "Titre de navigation / carte grise";
+    else if (/factur|bon de commande|devis/.test(s)) cat = "Factures";
+    else if (/assurance/.test(s)) cat = "Assurance";
+    else if (/r[eè]glement/.test(s)) cat = "Réglementation";
+    else if (/adh[eé]sion|licence|cotisation/.test(s)) cat = "Adhésions et licences";
+    else if (/corps mort|taxe|droit de nav/.test(s)) cat = "Taxe / corps mort lac";
+    else if (/notice|manuel|fiche technique|configuration/.test(s)) cat = "Notice et fiche technique";
+    else if (/\.(jpe?g|png|heic|webp)$/.test(s) || /^img|photo/.test(s)) cat = "Photos du bateau";
+    var m = s.match(/(19[89]\d|20[0-4]\d)/), y = m ? m[1] : String(new Date(lastMod || Date.now()).getFullYear());
+    if (cat !== "Permis bateau" && cat !== "Diplômes et formations") pid = ""; // factures, titres… : pas rattachés à une personne
+    return { cat: cat, y: y, pid: pid };
+  }
+  function pendingHtml() {
+    if (!docPending.length) return "";
+    var opts = function (cur) { return DOC_CATS.map(function (c) { return "<option" + (c === cur ? " selected" : "") + ">" + esc(c) + "</option>"; }).join(""); };
+    var ppl = function (cur) { return '<option value="">—</option>' + PEOPLE.filter(function (p) { return !p.hidden; }).map(function (p) { return '<option value="' + p.id + '"' + (p.id === cur ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join(""); };
+    var h = '<div class="picker"><b class="small">À vérifier avant l’envoi (' + docPending.length + ")</b>";
+    docPending.forEach(function (it, i) {
+      h += '<div class="pend"><div class="row"><span class="small" style="overflow-wrap:anywhere"><b>' + esc(it.file.name) + "</b> · " + sizeTxt(it.file.size) + '</span><button class="x" data-pdel="' + i + '" aria-label="Retirer ce fichier">×</button></div>' +
+        '<div class="pend-f"><select data-pi="' + i + '" data-pk="cat" aria-label="Catégorie">' + opts(it.cat) + '</select><input data-pi="' + i + '" data-pk="y" value="' + esc(it.y) + '" inputmode="numeric" aria-label="Année"><select data-pi="' + i + '" data-pk="pid" aria-label="Personne">' + ppl(it.pid) + "</select></div></div>";
+    });
+    return h + '<div class="actions"><button class="btn ghost sm" id="pendCancel">Annuler</button><button class="btn sm" id="pendSend">' + (CONF.url && CONF.code ? "Envoyer " + docPending.length + " document(s) dans Drive" : "Noter " + docPending.length + " document(s)") + "</button></div></div>";
+  }
+  function readB64(file) { return new Promise(function (ok, ko) { var fr = new FileReader(); fr.onload = function () { ok(String(fr.result).split(",")[1]); }; fr.onerror = function () { ko(new Error("lecture impossible")); }; fr.readAsDataURL(file); }); }
+  /* Envoie les fichiers un par un dans Drive et crée la fiche de chaque document. */
+  function addDocs(items) {
+    var connected = CONF.url && CONF.code && navigator.onLine, ok = 0, ko = 0;
+    var recs = items.map(function (it) { var r = { id: uid(), n: it.file.name, y: String(it.y || ""), pid: it.pid || "", s: sizeTxt(it.file.size) + " · " + todayFr() }; (docs[it.cat] || docs["Autres"]).unshift(r); return { rec: r, it: it }; });
+    render();
+    if (!connected) { toast(recs.length + " document(s) noté(s). Les fichiers pourront être envoyés une fois l’app connectée."); return; }
+    recs.reduce(function (p, x, i) {
+      return p.then(function () {
+        if (x.it.file.size > 15 * 1048576) { ko++; return; }
+        toast("Envoi " + (i + 1) + "/" + recs.length + " : " + x.it.file.name);
+        return readB64(x.it.file)
+          .then(function (b64) { return Sync.call({ action: "upload", name: x.it.file.name, mime: x.it.file.type || "application/octet-stream", data: b64, cat: x.it.cat, y: x.rec.y }); })
+          .then(function (res) { if (!res.ok) throw new Error(res.error); x.rec.url = res.url; ok++; render(); })
+          .catch(function () { ko++; });
+      });
+    }, Promise.resolve()).then(function () { toast(ok + " document(s) rangé(s) dans Google Drive" + (ko ? ", " + ko + " en échec (trop lourd ou réseau)." : ".")); render(); });
+  }
   /* Connexion à la base partagée, import, export, version */
   function connHtml() {
     var s = netState(), conf = !!(CONF.url && CONF.code);
@@ -942,15 +991,15 @@
     }
     h += "</div>";
     var years = ["2023", "2024", "2025", "2026", "2027"];
-    h += '<div class="card"><h3>Documents</h3><div class="field"><label for="docCat">Catégorie</label><select id="docCat">' + Object.keys(docs).map(function (k) { return "<option>" + esc(k) + "</option>"; }).join("") + "</select></div>" +
-      '<div class="two"><div class="field"><label for="docYearIn">Année</label><select id="docYearIn">' + years.map(function (y) { return "<option" + (y === "2026" ? " selected" : "") + ">" + y + "</option>"; }).join("") + '</select></div><div class="field"><label for="docFile">Fichier ou photo</label><input id="docFile" class="file-in" type="file" accept="image/*,application/pdf"></div></div>' +
-      '<div class="small muted">Assurance, adhésions, licences, taxe et corps mort sont annuels : choisissez l’année. Sur le téléphone, on peut photographier directement le document. Les fichiers sont rangés dans un dossier Google Drive.</div>' +
+    h += '<div class="card"><h3>Documents</h3><div class="field"><label for="docFile">Ajouter des documents (un ou plusieurs fichiers, ou une photo)</label><input id="docFile" class="file-in" type="file" multiple accept="image/*,application/pdf,.tif,.tiff"></div>' +
+      '<div class="small muted">L’app propose la catégorie, l’année et la personne d’après le nom du fichier : vérifiez avant l’envoi. Les fichiers sont rangés dans un dossier Google Drive ; permis, diplômes et formations apparaissent aussi sur la fiche du pilote.</div>' +
+      pendingHtml() +
       '<div class="chips">' + ["Toutes"].concat(years.slice(0, 4)).map(function (y) { return '<button class="chip" data-docyear="' + y + '" aria-pressed="' + (y === docYear) + '">' + y + "</button>"; }).join("") + "</div>";
     Object.keys(docs).forEach(function (k) {
       var list = docs[k].filter(function (d) { return docYear === "Toutes" || d.y === docYear; });
       h += '<div class="doc-cat"><div class="row"><b class="small">' + esc(k) + '</b><span class="small muted">' + list.length + "</span></div>";
       if (!list.length) h += '<div class="small muted">Aucun document' + (docYear === "Toutes" ? "" : " en " + docYear) + ".</div>";
-      list.forEach(function (d) { h += '<div class="doc"><span>' + (d.url ? '<a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.n) + "</a>" : esc(d.n)) + ' <span class="tag">' + esc(d.y) + '</span></span><span class="muted small">' + esc(d.s) + (d.url ? "" : " · non envoyé") + "</span></div>"; });
+      list.forEach(function (d) { h += '<div class="doc"><span>' + (d.url ? '<a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.n) + "</a>" : esc(d.n)) + ' <span class="tag">' + esc(d.y) + "</span>" + (d.pid && person(d.pid) ? ' <span class="tag">' + esc(person(d.pid).name) + "</span>" : "") + '</span><span class="muted small">' + esc(d.s) + (d.url ? "" : " · non envoyé") + "</span></div>"; });
       h += "</div>";
     });
     return h + "</div>";
@@ -1041,6 +1090,13 @@
       '<div class="kpi"><span class="label">Passager</span><span class="v">' + hm(s.pass) + '</span><span class="s">sessions à bord sans skier</span></div>' +
       '<div class="kpi"><span class="label">Pilotage</span><span class="v">' + hm(s.pilot) + '</span><span class="s">tours tractés et trajets</span></div></div>';
     if (s.hist) h += '<div class="small muted">Historique 2024-2025 : ' + hm(s.hist) + " de tours, sans le détail ski ou wake. " + s.sessions + " session(s) au total.</div>";
+    var mine = flatDocs().filter(function (d) { return d.pid === p.id; });
+    h += '<div class="card"><h3>Pièces : permis, diplômes, formations</h3>' +
+      (mine.length ? '<div class="list small">' + mine.map(function (d) {
+        return '<div class="item"><span>' + (d.url ? '<a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.n) + "</a>" : esc(d.n)) + '</span><span class="tag">' + esc(d.y) + '</span><span class="d">' + esc(d.cat) + " · " + esc(d.s) + (d.url ? "" : " · non envoyé") + "</span></div>";
+      }).join("") + "</div>" : '<div class="small muted">Aucune pièce pour l’instant.</div>') +
+      '<div class="two"><div class="field"><label for="pjType">Type de pièce</label><select id="pjType"><option value="Permis bateau">Permis ou code</option><option value="Diplômes et formations">Diplôme, formation, secourisme</option><option value="Autres">Autre</option></select></div>' +
+      '<div class="field"><label for="pjFile">Fichier ou photo</label><input id="pjFile" class="file-in" type="file" multiple accept="image/*,application/pdf,.tif,.tiff"></div></div></div>';
     h += '<div class="card"><h3>Grade</h3>';
     GRADES.forEach(function (gr, i) {
       var n = i + 1;
@@ -1123,6 +1179,9 @@
     if (b.id === "cancelYes") { view.cancelAsk = false; sortie = { active: false, compteurDeb: lastCompteur(), tours: [], participants: [] }; toast("Session annulée : rien n’a été enregistré."); return render(); }
     if (ds.fin) { finView = ds.fin; screen.scrollTop = 0; return render(); }
     if (ds.pilot !== undefined) { pilotSel = ds.pilot; screen.scrollTop = 0; return render(); }
+    if (ds.pdel !== undefined) { docPending.splice(Number(ds.pdel), 1); return render(); }
+    if (b.id === "pendCancel") { docPending = []; return render(); }
+    if (b.id === "pendSend") { var items = docPending.slice(); docPending = []; addDocs(items); return; }
     if (ds.dipl) { var pdp = person(pilotSel); if (pdp) { var lst2 = (pdp.diplomes || []).slice(), ix = lst2.indexOf(ds.dipl); if (ix >= 0) lst2.splice(ix, 1); else lst2.push(ds.dipl); pdp.diplomes = lst2; } return render(); }
     if (ds.grade) { var pg = person(pilotSel); if (pg && canValidate()) { pg.grade = Number(ds.grade); pg.gradePar = person(CONF.moi).name; pg.gradeLe = todayFr(); toast(pg.name + " : " + GRADES[pg.grade - 1].label + " validé."); } return render(); }
     if (b.id === "gradeRetire") { var pr = person(pilotSel); if (pr && canValidate()) { pr.grade = 0; pr.gradePar = person(CONF.moi).name; pr.gradeLe = todayFr(); } return render(); }
@@ -1245,21 +1304,14 @@
     if (el.id === "pilStart") { startPilote = el.value; return; }
     if (el.id === "bWho") { bilanWho = el.value; return render(); }
     if (el.id === "dCat") { depForm.cat = el.value; CATS.forEach(function (c) { if (c[0] === el.value) depForm.regle = c[1]; }); return render(); }
-    if (el.id === "docFile" && el.files && el.files[0]) {
-      var fl = el.files[0], cat = document.getElementById("docCat").value, dy = document.getElementById("docYearIn").value;
-      var drec = { id: uid(), n: fl.name, y: dy, s: (fl.size > 1048576 ? dec1.format(fl.size / 1048576) + " Mo" : Math.max(1, Math.round(fl.size / 1024)) + " ko") + " · " + todayFr() };
-      docs[cat].unshift(drec); render();
-      if (CONF.url && CONF.code && navigator.onLine) {
-        if (fl.size > 15 * 1048576) return toast("Fichier trop lourd (15 Mo maximum) : il est noté mais pas envoyé.");
-        var frd = new FileReader();
-        frd.onload = function () {
-          toast("Envoi du document…");
-          Sync.call({ action: "upload", name: fl.name, mime: fl.type, data: String(frd.result).split(",")[1], cat: cat, y: dy })
-            .then(function (res) { if (!res.ok) throw new Error(res.error); drec.url = res.url; render(); toast("Document rangé dans Google Drive."); })
-            .catch(function (er) { toast("Envoi impossible : " + er.message); });
-        };
-        frd.readAsDataURL(fl);
-      } else toast("Document noté. Le fichier pourra être envoyé une fois l’app connectée.");
+    if (el.id === "docFile" && el.files && el.files.length) {
+      Array.prototype.forEach.call(el.files, function (f) { var g = guessDoc(f.name, f.lastModified); docPending.push({ file: f, cat: g.cat, y: g.y, pid: g.pid }); });
+      return render();
+    }
+    if (el.dataset.pi !== undefined) { var itp = docPending[Number(el.dataset.pi)]; if (itp) itp[el.dataset.pk] = el.value.trim(); return; }
+    if (el.id === "pjFile" && el.files && el.files.length) {
+      var typ = document.getElementById("pjType").value;
+      addDocs(Array.prototype.map.call(el.files, function (f) { return { file: f, cat: typ, y: guessDoc(f.name, f.lastModified).y, pid: pilotSel }; }));
       return;
     }
     if (el.id === "impFile" && el.files && el.files[0]) {

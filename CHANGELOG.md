@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.3.0 — 2026-11-22
+
+- Documents : envoi de plusieurs fichiers d'un coup ; l'app propose la catégorie, l'année et la personne d'après le nom du fichier, à vérifier avant l'envoi dans Google Drive.
+- Nouvelles catégories : Diplômes et formations, Réglementation.
+- Fiche pilote : pièces rattachées (permis, code, diplômes, formations, secourisme), avec ajout direct depuis la fiche.
+
 ## 1.2.0 — 2026-11-22
 
 - Menu Activité (bilan de l'année : coût par minute, temps par famille et par personne) en premier ; les dépenses et la balance s'ouvrent par un lien en bas de page.
