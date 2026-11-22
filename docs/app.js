@@ -61,9 +61,26 @@
   function half(n) { return String(n).replace(".", ","); }
   function segHtml(cls, attr, opts, cur) { return '<div class="seg ' + cls + '">' + opts.map(function (o) { return "<button " + attr + '="' + o[0] + '" data-v="' + o[0] + '" aria-pressed="' + (o[0] === cur) + '">' + esc(o[1]) + "</button>"; }).join("") + "</div>"; }
   function famDot(f) { return '<span class="dot f-' + f + '"></span>'; }
+  /* Photos (familles, pilotes) : petites images JPEG gardées dans la base partagée, sous la forme { d: "data:…" } */
+  function photoSrc(ph) { return ph && ph.d ? ph.d : ""; }
+  function famAvatar(f) { var s = photoSrc((SPEC.famPhotos || {})[f]); return s ? '<img class="fam-av f-' + f + '" src="' + s + '" alt="">' : famDot(f); }
+  var EXT_ICON = '<svg class="ext-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20.5c.6-4 3.4-6.5 7-6.5s6.4 2.5 7 6.5"/></svg>';
+  /* Réduit une photo choisie en carré (recadrage au centre) pour qu'elle tienne dans la base partagée. */
+  function shrinkPhoto(file, size, q) {
+    return new Promise(function (ok, ko) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var s = Math.min(img.naturalWidth, img.naturalHeight), cv = document.createElement("canvas"); cv.width = cv.height = size;
+        cv.getContext("2d").drawImage(img, (img.naturalWidth - s) / 2, (img.naturalHeight - s) / 2, s, s, 0, 0, size, size);
+        URL.revokeObjectURL(url); ok({ d: cv.toDataURL("image/jpeg", q) });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); ko(new Error("Photo illisible (formats acceptés : JPEG, PNG).")); };
+      img.src = url;
+    });
+  }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.4.0", SCHEMA = 1;
+  var APP_VERSION = "1.5.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -398,7 +415,7 @@
     var h = '<div class="card"><h3>Nouvelle session</h3><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
       '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div>" +
       '<div class="field"><span class="flabel">Jauge au départ</span>' + gaugeHtml("start", startJauge) + "</div>" +
-      '<p class="small muted m0">Pré-rempli avec la fin de la dernière session (départ + temps chronométré). Saisissez le compteur lu : jusqu’à 10 min d’écart, on garde votre saisie sans compter de trou, car le chrono fait foi. Au-delà, un trou est signalé, sans rien bloquer.</p></div>';
+      '<p class="small muted m0">Ajustez le niveau tel que constaté et saisissez les heures moteur au départ de la session.</p></div>';
     h += boardHtml();
     if (startList.length) h += '<div class="card"><div class="field"><label for="pilStart">Pilote</label><select id="pilStart">' + startList.map(function (p) { return '<option value="' + p.pid + '"' + (p.pid === startPilote ? " selected" : "") + ">" + esc(person(p.pid).name) + "</option>"; }).join("") + "</select></div></div>";
     return h + '<button class="btn big run" id="goStart">Démarrer la session</button>';
@@ -409,7 +426,7 @@
     var list = curList(), h = '<div class="card"><div class="row"><h3>À bord</h3><span class="small muted">' + list.length + " personne" + (list.length > 1 ? "s" : "") + "</span></div>";
     ["YF", "OF", "EXT"].forEach(function (c) {
       var rows = list.filter(function (p) { return person(p.pid).c === c; }), open = picker === c;
-      h += '<div class="group"><div class="group-head"><span class="gt">' + (c === "EXT" ? "" : famDot(CATF[c])) + CAT[c] + (rows.length ? ' <span class="muted small">&nbsp;· ' + rows.length + "</span>" : "") + "</span>" +
+      h += '<div class="group"><div class="group-head"><span class="gt">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + CAT[c] + (rows.length ? ' <span class="muted small">&nbsp;· ' + rows.length + "</span>" : "") + "</span>" +
         '<button class="plus" data-pick="' + c + '" aria-expanded="' + open + '" aria-label="Ajouter : ' + CAT[c] + '">' + (open ? "−" : "+") + "</button></div>";
       if (open) {
         var avail = PEOPLE.filter(function (q) { return q.c === c && !inList(q.id); });
@@ -426,7 +443,7 @@
       });
       h += "</div>";
     });
-    return h + '<div class="small muted">Par défaut, chaque personne ajoutée est skieur ; on peut la passer en passager à tout moment.</div></div>';
+    return h + "</div>";
   }
   function totalMs(now) { return sortie.tours.reduce(function (a, t) { return a + tourMs(t, now); }, 0); }
   function computeRecap(now) {
@@ -1021,6 +1038,8 @@
   }
   function renderBateau() {
     var h = '<div class="card boat-hero img-boat" role="img" aria-label="Photo du bateau"><div class="cap"><b>' + esc(SPEC.devise) + "</b>" + esc(SPEC.modele) + " " + SPEC.annee + " · " + esc(SPEC.moteur.split(",")[0]) + "</div></div>";
+    var pils = PEOPLE.filter(function (p) { return !p.hidden; }), graded = pils.filter(function (p) { return p.grade; }).length;
+    h += '<button class="card link-card pilot-banner" data-go="pilotes"><span class="pb-ic" aria-hidden="true">' + starSvg(true, 24) + '</span><span><b>Pilotes</b><span class="small">' + pils.length + " personnes · " + graded + " avec un grade · fiches, heures, diplômes</span></span>" + '<span class="chev" aria-hidden="true">›</span></button>';
     h += connHtml();
     h += '<div class="card">' + collHead("spec", "Fiche technique", esc(SPEC.devise) + " · " + esc(SPEC.modele) + " " + SPEC.annee + " · " + SPEC.reservoir + " L · " + dec1.format(SPEC.conso) + " L/h");
     if (ui.spec) {
@@ -1043,7 +1062,6 @@
     h += "</div>";
     var years = ["2023", "2024", "2025", "2026", "2027"];
     h += '<div class="card"><h3>Documents</h3><div class="field"><label for="docFile">Ajouter des documents (un ou plusieurs fichiers, ou une photo)</label><input id="docFile" class="file-in" type="file" multiple accept="image/*,application/pdf,.tif,.tiff"></div>' +
-      '<div class="small muted">L’app propose la catégorie, l’année et la personne d’après le nom du fichier : vérifiez avant l’envoi. Les fichiers sont rangés dans un dossier Google Drive ; permis, diplômes et formations apparaissent aussi sur la fiche du pilote.</div>' +
       pendingHtml() +
       '<div class="chips">' + ["Toutes"].concat(years.slice(0, 4)).map(function (y) { return '<button class="chip" data-docyear="' + y + '" aria-pressed="' + (y === docYear) + '">' + y + "</button>"; }).join("") + "</div>";
     Object.keys(docs).forEach(function (k) {
@@ -1073,7 +1091,8 @@
     var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, bateau: renderBateau };
     screen.innerHTML = map[tab]();
     setTimeout(function () { persistAll(); updateNet(); }, 0);
-    document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
+    var navTab = tab === "pilotes" ? "bateau" : tab; // Pilotes est un sous-menu de Bateau
+    document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === navTab)); });
     if (tab === "activite" && finView === "dep") depPreview();
     if (tab === "essence" && view.essence === "achat") achatPreview();
     renderHead();
@@ -1085,7 +1104,51 @@
     { label: "Pilote 3 étoiles", detail: "Habilité à tracter en bi-ski, wake et kneeboard. Manœuvres au ponton. Connaît les risques liés." },
     { label: "Pilote 4 étoiles", detail: "Passages de slalom à haute vitesse, tout sport tracté autorisé. Autonome sur le bateau : vérifications moteur, petit dépannage." }
   ];
-  var DIPLOMES = ["Initiateur baby-ski", "Initiateur wake", "Initiateur slalom", "Initiateur bi-ski", "Initiateur barefoot", "Monitorat fédéral", "CQP", "BPJEPS"];
+  var DIPLOMES = ["Premiers secours (PSC1 / AFPS)", "Radio (CRR)", "Initiateur baby-ski", "Initiateur wake", "Initiateur slalom", "Initiateur bi-ski", "Initiateur barefoot", "Monitorat fédéral", "CQP", "BPJEPS"];
+  /* Performances : vitesses officielles du slalom (km/h, paliers de 3 jusqu'à 58) et longueurs de corde */
+  var SL_SPEEDS = [25, 28, 31, 34, 37, 40, 43, 46, 49, 52, 55, 58];
+  var SL_CORDES = ["23 m (corde longue)", "18,25 m", "16 m", "14,25 m", "13 m", "12 m", "11,25 m", "10,75 m", "10,25 m", "9,75 m", "9,50 m"];
+  var WK_SPEEDS = []; for (var wv = 16; wv <= 38; wv++) WK_SPEEDS.push(wv);
+  var WK_CORDES = ["1er nœud", "2e nœud", "3e nœud"];
+  var FIGURES = ["Ollie", "Surface 180", "Surface 360", "Saut d’une vague", "Saut des 2 vagues", "180 aérien", "360 aérien (Wake 360)", "Grab", "Back roll", "Front roll", "Tantrum", "Raley", "Scarecrow", "Switch (pied inversé)"];
+  var FIG_ETATS = [["", "—"], ["travail", "En travail"], ["fait", "Fait"], ["plustard", "Pour plus tard"]];
+  function selHtml(id, path, list, cur, fmt) {
+    return '<select id="' + id + '" data-pfo="' + path + '"><option value="">—</option>' + list.map(function (v) { v = String(v); return '<option value="' + esc(v) + '"' + (v === String(cur || "") ? " selected" : "") + ">" + esc(fmt ? fmt(v) : v) + "</option>"; }).join("") + "</select>";
+  }
+  function kmh(v) { return v + " km/h"; }
+  /* Paramètres de pratique : ski (démarrage, niveau actuel, meilleure performance), puis wake */
+  var BOUEES = ["0", "1", "2", "3", "4", "5", "6"];
+  function slLine(prefix, key, sl) {
+    return '<div class="three">' +
+      '<div class="field"><label for="' + prefix + 'V">Vitesse</label>' + selHtml(prefix + "V", "slalom." + key + "V", SL_SPEEDS, sl[key + "V"], kmh) + "</div>" +
+      '<div class="field"><label for="' + prefix + 'C">Corde</label>' + selHtml(prefix + "C", "slalom." + key + "C", SL_CORDES, sl[key + "C"]) + "</div>" +
+      '<div class="field"><label for="' + prefix + 'B">Bouées</label>' + selHtml(prefix + "B", "slalom." + key + "B", BOUEES, sl[key + "B"]) + "</div></div>";
+  }
+  function pratiqueHtml(p) {
+    var sl = p.slalom || {}, wk = p.wake || {};
+    return '<div class="card"><h3>Pratique</h3>' +
+      '<div class="field"><label for="pfAct">Activité préférée</label><select id="pfAct" data-pf="actPref">' + ACT_PREF.map(function (a) { return '<option value="' + a + '"' + (a === (p.actPref || "") ? " selected" : "") + ">" + (a || "—") + "</option>"; }).join("") + "</select></div>" +
+      '<div class="sub-h">Ski</div>' +
+      '<div class="field"><label for="slDV">Vitesse de démarrage actuelle</label>' + selHtml("slDV", "slalom.debV", SL_SPEEDS, sl.debV, kmh) + "</div>" +
+      '<div class="flabel">Niveau actuel</div>' + slLine("slN", "niv", sl) +
+      '<div class="flabel">Meilleure performance</div>' + slLine("slB", "best", sl) +
+      '<div class="sub-h">Wake</div><div class="two">' +
+      '<div class="field"><label for="wkV">Vitesse souhaitée</label>' + selHtml("wkV", "wake.v", WK_SPEEDS, wk.v, kmh) + "</div>" +
+      '<div class="field"><label for="wkC">Longueur de corde</label>' + selHtml("wkC", "wake.corde", WK_CORDES, wk.corde) + "</div></div></div>";
+  }
+  function figuresHtml(p) {
+    var fig = p.figures || {};
+    return '<div class="card"><h3>Figures de wake</h3><div class="small muted">Touchez une figure pour changer son état : en travail, fait, pour plus tard.</div><div class="chips figs">' +
+      FIGURES.map(function (f) { var e = fig[f] || ""; return '<button class="chip fig fig-' + (e || "none") + '" data-fig="' + esc(f) + '">' + (e === "fait" ? "✓ " : e === "travail" ? "◐ " : e === "plustard" ? "⏳ " : "") + esc(f) + "</button>"; }).join("") + "</div>" +
+      '<div class="field"><label for="pfFigA">Autres figures</label><input id="pfFigA" data-pf="figAutres" value="' + esc(p.figAutres || "") + '" placeholder="ex. HS 180, Whirlybird (en travail)"></div></div>';
+  }
+  function ageTxt(iso) { if (!iso) return ""; var b = new Date(iso), n = new Date(), a = n.getFullYear() - b.getFullYear(); if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) a--; return a >= 0 && a < 120 ? a + " ans" : ""; }
+  function permisHtml(p, key, label) {
+    var on = !!p[key];
+    return '<div class="perm"><label class="chk"><input type="checkbox" data-pfc="' + key + '"' + (on ? " checked" : "") + "> Permis " + label.toLowerCase() + "</label>" +
+      '<span class="tiny">obtenu le</span><input type="date" class="mini-date" data-pf="' + key + 'Date" value="' + esc(p[key + "Date"] || "") + '" aria-label="Date d’obtention du permis ' + label.toLowerCase() + '"' + (on ? "" : " disabled") + "></div>";
+  }
+  function pilotAvatar(p, cls) { var s = photoSrc(p.photo); return s ? '<img class="' + cls + '" src="' + s + '" alt="">' : '<span class="' + cls + ' ph-empty" aria-hidden="true">' + esc(p.name.charAt(0)) + "</span>"; }
   var ACT_PREF = ["", "Slalom", "Wake", "Bi-ski", "Ski libre", "Bouée", "Balade", "Pêche", "Pilotage"];
   function starSvg(on, size) {
     return '<svg class="star' + (on ? " on" : "") + '" width="' + (size || 18) + '" height="' + (size || 18) + '" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 6 6.5.7-4.9 4.4 1.4 6.4L12 17l-5.8 3.3 1.4-6.4-4.9-4.4 6.5-.7z"/></svg>';
@@ -1113,34 +1176,45 @@
   function renderPilotes() {
     var sel = pilotSel && person(pilotSel);
     if (sel) return pilotDetailHtml(sel);
-    var h = '<div class="card"><h3>Les pilotes</h3><div class="small muted">Grades validés par Yann ou Olivier. Touchez une personne pour voir sa fiche.</div><div class="list">';
+    var h = '<button class="btn link" data-go="bateau">← Retour au bateau</button><div class="card"><h3>Les pilotes</h3><div class="small muted">Grades validés par Yann ou Olivier. Touchez une personne pour voir sa fiche.</div><div class="list">';
     ["YF", "OF", "EXT"].forEach(function (c) {
       PEOPLE.filter(function (p) { return p.c === c && !p.hidden; }).forEach(function (p) {
         var s = pilotStats(p.id), f = c === "EXT" ? (p.host || "") : CATF[c];
-        h += '<button class="item pilot-row" data-pilot="' + p.id + '"><span>' + (f ? famDot(f) : "") + "<b>" + esc(p.name) + "</b>" + (p.actPref ? ' <span class="muted small">· ' + esc(p.actPref) + "</span>" : "") + "</span>" + starsHtml(p.grade || 0, 16) +
+        h += '<button class="item pilot-row" data-pilot="' + p.id + '"><span>' + (p.photo ? pilotAvatar(p, "row-av") : f ? famDot(f) : "") + "<b>" + esc(p.name) + "</b>" + (p.actPref ? ' <span class="muted small">· ' + esc(p.actPref) + "</span>" : "") + "</span>" + starsHtml(p.grade || 0, 16) +
           '<span class="d">' + (p.diplomes && p.diplomes.length ? "🎓 " + esc(p.diplomes.join(", ")) + " · " : "") + (s.sessions ? s.sessions + " session(s) · ski " + hm(s.ski + s.hist) + " · wake " + hm(s.wake) + " · pilotage " + hm(s.pilot) : "Aucune session") + "</span></button>";
       });
     });
     h += "</div></div>";
+    h += '<div class="card"><h3>Photos des familles</h3><div class="small muted">Elles s’affichent devant le nom de la famille dans l’onglet Session.</div><div class="fam-photos">' +
+      ["YC", "OC"].map(function (f) {
+        var s = photoSrc((SPEC.famPhotos || {})[f]);
+        return '<label class="fam-ph">' + (s ? '<img src="' + s + '" alt="">' : '<span class="ph-empty f-' + f + '">' + FAM[f].s.charAt(0) + "</span>") + "<span>" + FAM[f].n + '</span><span class="small muted">' + (s ? "Changer" : "Ajouter") + '</span><input type="file" accept="image/*" data-famphoto="' + f + '" hidden></label>';
+      }).join("") + "</div></div>";
     h += '<div class="card"><h3>Prérogatives selon le grade</h3><div class="small muted">Chaque grade inclut les prérogatives des grades précédents.</div>' + GRADES.map(function (g, i) { return '<div class="grade-row">' + starsHtml(i + 1, 14) + "<span><b>" + g.label + '</b><br><span class="small">' + esc(g.detail) + "</span></span><span></span></div>"; }).join("") + "</div>";
     return h;
   }
   function pilotDetailHtml(p) {
     var s = pilotStats(p.id), g = p.grade || 0;
     var h = '<button class="btn link" data-pilot="">← Tous les pilotes</button>';
-    h += '<div class="card"><div class="row"><h3>' + esc(p.name) + "</h3>" + starsHtml(g, 22) + "</div>" +
+    var age = ageTxt(p.naissance);
+    h += '<div class="card pilot-hero"><div class="ph-left">' +
+      "<h3>" + esc(p.name) + "</h3>" +
+      '<div class="birth"><input type="date" class="mini-date" data-pf="naissance" value="' + esc(p.naissance || "") + '" aria-label="Date de naissance">' + (age ? '<span class="small muted">' + age + "</span>" : '<span class="small muted">date de naissance</span>') + "</div>" +
+      starsHtml(g, 22) +
       '<div class="small muted">' + (g ? esc(GRADES[g - 1].label) + " · validé par " + esc(p.gradePar || "?") + (p.gradeLe ? " le " + esc(p.gradeLe) : "") : "Pas encore de grade") + "</div>" +
-      '<div class="field"><label for="pfDesc">Présentation</label><input id="pfDesc" data-pf="desc" value="' + esc(p.desc || "") + '" placeholder="ex. 14 ans, skie depuis 2020"></div>' +
-      '<div class="two"><div class="field"><label for="pfAct">Activité préférée</label><select id="pfAct" data-pf="actPref">' + ACT_PREF.map(function (a) { return '<option value="' + a + '"' + (a === (p.actPref || "") ? " selected" : "") + ">" + (a || "—") + "</option>"; }).join("") + "</select></div>" +
-      '<div class="field"><label for="pfPermis">Permis bateau</label><input id="pfPermis" data-pf="permis" value="' + esc(p.permis || "") + '" placeholder="ex. côtier, 2019"></div></div>' +
-      '<div class="field"><span class="flabel">Diplômes et qualifications fédérales</span><div class="chips">' +
-      DIPLOMES.map(function (d) { var on = (p.diplomes || []).indexOf(d) >= 0; return '<button class="chip" data-dipl="' + esc(d) + '" aria-pressed="' + on + '">' + (on ? "✓ " : "") + esc(d) + "</button>"; }).join("") + "</div></div>" +
-      '<div class="field"><label for="pfAutres">Autres qualifications</label><input id="pfAutres" data-pf="diplAutres" value="' + esc(p.diplAutres || "") + '" placeholder="ex. juge fédéral, secourisme PSC1"></div></div>';
+      '<div class="perms">' + permisHtml(p, "permisCotier", "Côtier") + permisHtml(p, "permisFluvial", "Fluvial") + "</div></div>" +
+      '<label class="ph-pick">' + pilotAvatar(p, "hero-av") + '<span class="small">' + (p.photo ? "Changer" : "Ajouter une photo") + '</span><input type="file" accept="image/*" id="pfPhoto" hidden></label></div>';
+    h += pratiqueHtml(p);
+    h += '<div class="card"><h3>Statistiques de pratique</h3>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Ski</span><span class="v">' + hm(s.ski) + '</span><span class="s">slalom, ski libre, formation</span></div>' +
       '<div class="kpi"><span class="label">Wake</span><span class="v">' + hm(s.wake) + '</span><span class="s">depuis l’app</span></div>' +
       '<div class="kpi"><span class="label">Passager</span><span class="v">' + hm(s.pass) + '</span><span class="s">sessions à bord sans skier</span></div>' +
       '<div class="kpi"><span class="label">Pilotage</span><span class="v">' + hm(s.pilot) + '</span><span class="s">tours tractés et trajets</span></div></div>';
     if (s.hist) h += '<div class="small muted">Historique 2024-2025 : ' + hm(s.hist) + " de tours, sans le détail ski ou wake. " + s.sessions + " session(s) au total.</div>";
+    h += "</div>" + figuresHtml(p);
+    h += '<div class="card"><h3>Diplômes et qualifications</h3><div class="chips">' +
+      DIPLOMES.map(function (d) { var on = (p.diplomes || []).indexOf(d) >= 0; return '<button class="chip" data-dipl="' + esc(d) + '" aria-pressed="' + on + '">' + (on ? "✓ " : "") + esc(d) + "</button>"; }).join("") + "</div>" +
+      '<div class="field"><label for="pfAutres">Autres qualifications</label><input id="pfAutres" data-pf="diplAutres" value="' + esc(p.diplAutres || "") + '" placeholder="ex. juge fédéral"></div></div>';
     var mine = flatDocs().filter(function (d) { return d.pid === p.id; });
     h += '<div class="card"><h3>Pièces : permis, diplômes, formations</h3>' +
       (mine.length ? '<div class="list small">' + mine.map(function (d) {
@@ -1233,6 +1307,11 @@
     if (ds.pdel !== undefined) { docPending.splice(Number(ds.pdel), 1); return render(); }
     if (b.id === "pendCancel") { docPending = []; return render(); }
     if (b.id === "pendSend") { var items = docPending.slice(); docPending = []; addDocs(items); return; }
+    if (ds.fig) { // figures de wake : — → en travail → fait → pour plus tard → —
+      var pfg = person(pilotSel);
+      if (pfg) { var fg = {}; Object.keys(pfg.figures || {}).forEach(function (k) { fg[k] = pfg.figures[k]; }); var order = FIG_ETATS.map(function (x) { return x[0]; }); fg[ds.fig] = order[(order.indexOf(fg[ds.fig] || "") + 1) % order.length]; if (!fg[ds.fig]) delete fg[ds.fig]; pfg.figures = fg; }
+      return render();
+    }
     if (ds.dipl) { var pdp = person(pilotSel); if (pdp) { var lst2 = (pdp.diplomes || []).slice(), ix = lst2.indexOf(ds.dipl); if (ix >= 0) lst2.splice(ix, 1); else lst2.push(ds.dipl); pdp.diplomes = lst2; } return render(); }
     if (ds.grade) { var pg = person(pilotSel); if (pg && canValidate()) { pg.grade = Number(ds.grade); pg.gradePar = person(CONF.moi).name; pg.gradeLe = todayFr(); toast(pg.name + " : " + GRADES[pg.grade - 1].label + " validé."); } return render(); }
     if (b.id === "gradeRetire") { var pr = person(pilotSel); if (pr && canValidate()) { pr.grade = 0; pr.gradePar = person(CONF.moi).name; pr.gradeLe = todayFr(); } return render(); }
@@ -1350,6 +1429,22 @@
     if (el.dataset.f && el.tagName === "INPUT") { save(1); return; }
     if (el.dataset.spec) { save(1); toast("Fiche technique mise à jour."); return; }
     if (el.dataset.pf) { var ppf = person(pilotSel); if (ppf) ppf[el.dataset.pf] = el.value.trim(); return render(); }
+    if (el.dataset.pfc) { var ppc = person(pilotSel); if (ppc) ppc[el.dataset.pfc] = el.checked; return render(); } // cases à cocher (permis)
+    if (el.dataset.pfo) { // performances : « slalom.bestV », « wake.corde »…
+      var ppo = person(pilotSel), kp = el.dataset.pfo.split(".");
+      if (ppo) { var grp = {}; Object.keys(ppo[kp[0]] || {}).forEach(function (k) { grp[k] = ppo[kp[0]][k]; }); grp[kp[1]] = el.value; ppo[kp[0]] = grp; }
+      return render();
+    }
+    if (el.id === "pfPhoto" && el.files && el.files[0]) {
+      var pph = person(pilotSel);
+      shrinkPhoto(el.files[0], 280, 0.72).then(function (ph) { if (pph) { pph.photo = ph; toast("Photo de " + pph.name + " enregistrée."); render(); } }).catch(function (er) { toast(er.message); });
+      return;
+    }
+    if (el.dataset.famphoto && el.files && el.files[0]) {
+      var ff = el.dataset.famphoto;
+      shrinkPhoto(el.files[0], 160, 0.75).then(function (ph) { var fp = {}; Object.keys(SPEC.famPhotos || {}).forEach(function (k) { fp[k] = SPEC.famPhotos[k]; }); fp[ff] = ph; SPEC.famPhotos = fp; toast("Photo de la " + FAM[ff].l + " enregistrée."); render(); }).catch(function (er) { toast(er.message); });
+      return;
+    }
     if (el.id === "cWho") { corrForm.who = el.value; return; }
     if (el.dataset.mnt) { maint[Number(el.dataset.mnt)][el.dataset.mnf] = el.value; save(1); return render(); }
     if (el.id === "pilDef") { sortie.pilote = el.value; sortie.tours.forEach(function (t) { if (t.state === "wait") t.pilote = el.value; }); save(1); return render(); }

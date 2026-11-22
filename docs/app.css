@@ -76,8 +76,14 @@ header.top p { margin: 8px 0 0; color: var(--muted); max-width: 74ch; }
 .img-ski { background-image: url("img/ski.jpg"); background-repeat: no-repeat; }
 .img-pump { background: #ffffff url("img/pompe.png") center / 82% no-repeat; }
 .img-boat, .card.img-boat { background-image: url("img/bateau.jpg"); background-repeat: no-repeat; }
-.screen { flex: 1; overflow-y: auto; padding: 14px 12px 18px; display: grid; gap: 12px; align-content: start; }
-.tabs { display: grid; grid-template-columns: repeat(6, 1fr); background: var(--surface); border-top: 1px solid var(--line); }
+.screen { flex: 1; overflow-y: auto; padding: 14px 12px 36px; display: grid; gap: 12px; align-content: start; }
+.tabs { display: grid; grid-template-columns: repeat(5, 1fr); background: var(--surface); border-top: 1px solid var(--line); position: relative; z-index: 2; }
+/* Accueil au centre : bouton rond plus gros, qui dépasse au-dessus de la barre */
+.tabs button.home { align-content: end; font-size: 11.5px; padding-top: 0; }
+.tabs .home .hb { width: 58px; height: 58px; margin-top: -24px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 4px var(--surface), 0 8px 16px -6px rgba(8, 30, 40, .45); transition: transform .15s; }
+.tabs .home .hb svg { width: 28px; height: 28px; stroke-width: 2; }
+.tabs .home[aria-selected="false"] .hb { background: var(--surface-2); color: var(--muted); box-shadow: 0 0 0 4px var(--surface), inset 0 0 0 1px var(--line), 0 8px 16px -8px rgba(8, 30, 40, .35); }
+.tabs .home:active .hb { transform: scale(.94); }
 .tabs button { border: 0; background: none; color: var(--muted); font: 600 10.5px var(--f-body); padding: 9px 1px 11px; display: grid; justify-items: center; gap: 3px; cursor: pointer; }
 .tabs button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tabs button[aria-selected="true"] { color: var(--accent); }
@@ -343,3 +349,52 @@ body.app-mode .screen { padding-left: max(12px, env(safe-area-inset-left, 0px));
 .ses-list tr.ses-gap td { background: var(--warn-soft); color: var(--ink); font-size: 11.5px; }
 .ses-list tr.ses-gap td:first-child { color: var(--warn); font-family: inherit; }
 .ses-list tr.ses-gap td:last-child { text-align: right; white-space: nowrap; }
+/* Bandeau Pilotes dans l'onglet Bateau (même couleur que l'en-tête des Pilotes) */
+.pilot-banner { background: #f6c445; color: #2b2100; border-color: #e0ad2c; justify-content: flex-start; }
+.pilot-banner > span:nth-child(2) { flex: 1; display: grid; gap: 2px; }
+.pilot-banner .small { color: #5a4708; }
+.pilot-banner .pb-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; background: #3b2a00; color: #f6c445; display: grid; place-items: center; }
+.pilot-banner .pb-ic .star { fill: currentColor; stroke: none; }
+.pilot-banner:hover { border-color: #3b2a00; }
+.pilot-banner .chev { color: #3b2a00; border-color: #3b2a00; background: transparent; }
+
+/* Photos : familles (onglet Session), pilotes (fiche et liste) */
+.fam-av { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; margin-right: 8px; flex: none; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--yc); }
+.fam-av.f-OC { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--oc); }
+.ext-ic { width: 18px; height: 18px; margin-right: 7px; flex: none; fill: none; stroke: var(--muted); stroke-width: 2; stroke-linecap: round; }
+.row-av { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; margin-right: 8px; vertical-align: middle; }
+.pilot-row > span:first-child { display: inline-flex; align-items: center; }
+.ph-empty { display: inline-grid; place-items: center; border-radius: 50%; background: var(--surface-2); color: var(--muted); font: 700 20px var(--f-display); }
+.pilot-hero { display: grid; justify-items: center; text-align: center; gap: 6px; padding-top: 16px; }
+.pilot-hero h3 { margin: 2px 0 0; font-size: 24px; }
+.ph-pick { display: grid; justify-items: center; gap: 4px; cursor: pointer; color: var(--accent); }
+.hero-av { width: 132px; height: 132px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 4px var(--surface), 0 0 0 6px #f6c445, 0 10px 24px -10px rgba(8, 30, 40, .5); }
+.hero-av.ph-empty { font-size: 52px; }
+.fam-photos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.fam-ph { display: grid; justify-items: center; gap: 3px; cursor: pointer; padding: 10px; border: 1px dashed var(--line); border-radius: 12px; text-align: center; }
+.fam-ph img, .fam-ph .ph-empty { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; }
+.fam-ph .ph-empty.f-YC { background: var(--yc-soft); color: var(--yc); }
+.fam-ph .ph-empty.f-OC { background: var(--oc-soft); color: var(--oc); }
+.fam-ph:hover { border-color: var(--accent); }
+.three { display: grid; grid-template-columns: 1.1fr 1.3fr .8fr; gap: 8px; }
+.card .flabel { margin-top: 6px; }
+.figs { margin: 6px 0 4px; }
+.chip.fig-fait { background: var(--ok-soft, #dcf3e3); border-color: var(--ok, #1f7a3d); color: var(--ok, #1f7a3d); }
+.chip.fig-travail { background: var(--warn-soft); border-color: var(--warn); color: var(--ink); }
+.chip.fig-plustard { background: var(--surface); border-style: dashed; color: var(--muted); }
+
+/* Fiche pilote : nom, naissance, étoiles et permis à gauche, photo à droite */
+.pilot-hero { grid-template-columns: minmax(0, 1fr) auto; justify-items: stretch; text-align: left; align-items: start; gap: 12px; padding-top: 14px; }
+.pilot-hero .ph-left { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.pilot-hero h3 { margin: 0; font-size: 26px; line-height: 1.05; }
+.pilot-hero .ph-pick { align-self: start; }
+.pilot-hero .hero-av { width: 112px; height: 112px; }
+.birth { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mini-date { font: 500 12px var(--f-body); padding: 3px 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); color: var(--ink); width: auto; min-width: 0; max-width: 140px; }
+.mini-date:disabled { opacity: .45; }
+.perms { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+.perm { display: grid; gap: 2px; }
+.perm .chk { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13.5px; cursor: pointer; }
+.perm .chk input { width: 17px; height: 17px; accent-color: var(--accent); margin: 0; }
+.tiny { font-size: 10.5px; color: var(--muted); }
+.sub-h { font: 700 15px var(--f-display); letter-spacing: .04em; text-transform: uppercase; color: var(--accent); margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }

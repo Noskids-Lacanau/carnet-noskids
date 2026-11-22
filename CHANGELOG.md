@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 1.5.0 — 2026-11-23
+
+- Barre de menu : Session et Essence à gauche, Accueil au centre en bouton rond plus gros, Activité et Bateau à droite ; nouvelles icônes (bidon, inboard avec tour de wake).
+- Pilotes devient un sous-menu de Bateau, ouvert par un bandeau jaune.
+- Fiche pilote : prénom, date de naissance (âge calculé), étoiles et permis côtier / fluvial avec date d'obtention, photo à droite.
+- Fiche pilote : paramètres de pratique (ski : vitesse de démarrage, niveau actuel et meilleure performance avec vitesse, corde et bouées ; wake : vitesse et nœud), statistiques, figures de wake avec leur état, diplômes (dont Premiers secours et Radio CRR).
+- Photos des pilotes et des familles, réduites dans l'app et gardées dans la base partagée ; photo de la famille devant son nom dans Session.
+- Textes d'aide allégés (Session, Documents).
+
 ## 1.4.0 — 2026-11-22
 
 - Activité : carte repliable « Temps et sessions par personne » et liste repliable des sessions par année (numéro, mois, Yann / Olivier / les deux, temps moteur).
