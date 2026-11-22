@@ -63,7 +63,7 @@
   function famDot(f) { return '<span class="dot f-' + f + '"></span>'; }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.0.0", SCHEMA = 1;
+  var APP_VERSION = "1.1.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -91,7 +91,8 @@
   var maint = ENTR.map(function (e, i) { return { id: "m" + i, i: i, date: "", h: "" }; });
   var DOC_CATS = ["Titre de navigation / carte grise", "Assurance", "Permis bateau", "Factures", "Adhésions et licences", "Taxe / corps mort lac", "Notice et fiche technique", "Photos du bateau", "Autres"];
   var docs = {}; DOC_CATS.forEach(function (c) { docs[c] = []; });
-  var view = { essence: null, dep: false };
+  var view = { essence: null, dep: false, cancelAsk: false, purge: null };
+  var finView = "dep", pilotSel = "";
   var achatForm = { verse: true, plein: true, f: "YC", b: 2, step: null, L: 0, P: 0, tfOpen: false, tf: "YC", tn: 1 }, miseForm = { plein: true, f: "YC", n: 1 };
   var bilanYear = "", bilanWho = "";
 
@@ -372,7 +373,13 @@
     h += boardHtml();
     h += '<button class="btn big" id="goClose"' + (r ? " disabled" : "") + ">Clôturer la session</button>";
     if (r) h += '<p class="small muted m0" style="text-align:center">Terminez le tour en cours pour clôturer.</p>';
-    return h;
+    return h + cancelHtml();
+  }
+  /* Annuler une session : rien n'est enregistré, après confirmation. */
+  function cancelHtml() {
+    if (!view.cancelAsk) return '<button class="btn link" id="cancelAsk" style="justify-self:center">Annuler la session sans l’enregistrer</button>';
+    return '<div class="alert bad"><b>Annuler cette session ?</b>Les tours, les temps et les participants seront effacés. Rien ne sera enregistré ni partagé.' +
+      '<div class="actions"><button class="btn ghost sm" id="cancelNo">Non, continuer</button><button class="btn stop sm" id="cancelYes">Oui, annuler la session</button></div></div>';
   }
   function renderStart() {
     var h = '<div class="card"><h3>Nouvelle session</h3><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
@@ -447,7 +454,7 @@
     });
     h += "</div></div>";
     h += '<div class="card" id="recapCard">' + recapHtml(now) + "</div>";
-    return h + '<div class="actions"><button class="btn ghost" id="backClose">Retour</button><button class="btn" id="saveSortie">Enregistrer la session</button></div>';
+    return h + '<div class="actions"><button class="btn ghost" id="backClose">Retour</button><button class="btn" id="saveSortie">Enregistrer la session</button></div>' + cancelHtml();
   }
   function recapHtml(now) {
     var R = computeRecap(now), h = "<h3>Répartition du temps moteur</h3>";
@@ -749,8 +756,58 @@
     }).catch(function (e) { toast(e.message); });
   }
   /* ---------- Import de l'historique (fichier produit par outils/Export-Historique.ps1) ---------- */
+  /* ---------- Sauvegarde, effacement et restauration ---------- */
+  function backupData() {
+    var out = { format: "carnet-noskids-sauvegarde", version: APP_VERSION, date: nowIso(), par: CONF.moi || "" };
+    COLS.forEach(function (c) { out[c] = vals(c); });
+    return out;
+  }
+  function downloadBackup() {
+    var blob = new Blob([JSON.stringify(backupData(), null, 1)], { type: "application/json" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "carnet-noskids-sauvegarde-" + todayIso() + "-" + new Date().toTimeString().slice(0, 5).replace(":", "h") + ".json";
+    document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    toast("Sauvegarde téléchargée sur cet appareil.");
+  }
+  var PURGES = {
+    depenses: { label: "Les dépenses", done: "Dépenses effacées.", cols: ["depenses"] },
+    historique: { label: "Sessions, essence et dépenses", done: "Historique effacé (sessions, essence, dépenses).", cols: ["sessions", "mouvements", "bidons", "dettes", "depenses"] }
+  };
+  function purgeHtml() {
+    var P = view.purge, def = PURGES[P.scope];
+    var n = def.cols.reduce(function (a, c) { return a + vals(c).length; }, 0);
+    return '<div class="card"><h3>Effacer des données</h3>' +
+      '<div class="field"><span class="flabel">Que faut-il effacer ?</span>' + segHtml("", "data-pscope", [["depenses", "Les dépenses"], ["historique", "Tout l’historique"]], P.scope) + "</div>" +
+      '<div class="alert bad"><b>' + esc(def.label) + " : " + n + " lignes seront effacées, sur tous les téléphones.</b>" +
+      "Avant d’effacer, l’app télécharge une sauvegarde sur cet appareil" + (CONF.url ? " et fait une copie du Google Sheet dans votre Drive (dossier « Carnet Noskids – sauvegardes »)" : "") + ". Pour revenir en arrière, il suffit d’importer le fichier de sauvegarde.</div>" +
+      '<div class="field"><label for="purgeWord">Tapez EFFACER pour confirmer</label><input id="purgeWord" autocomplete="off" autocapitalize="characters"></div>' +
+      '<div class="actions"><button class="btn ghost" id="purgeCancel">Annuler</button><button class="btn stop" id="purgeGo">Sauvegarder puis effacer</button></div></div>';
+  }
+  function doPurge() {
+    var w = (document.getElementById("purgeWord").value || "").trim().toUpperCase();
+    if (w !== "EFFACER") return toast("Tapez EFFACER pour confirmer.");
+    var def = PURGES[view.purge.scope];
+    downloadBackup();
+    var serverCopy = CONF.url && CONF.code && navigator.onLine ? Sync.call({ action: "backup" }).then(function (res) { if (!res.ok) throw new Error(res.error); return res.url; }) : Promise.resolve(null);
+    serverCopy.then(function (url) {
+      def.cols.forEach(function (c) {
+        if (c === "sessions") sessionsArr = []; if (c === "mouvements") moves = []; if (c === "bidons") bidons = [];
+        if (c === "dettes") dettes = []; if (c === "depenses") depenses = [];
+      });
+      if (view.purge.scope === "historique") ETAT.importHistorique = "";
+      view.purge = null;
+      toast(def.done + (url ? " Copie du Google Sheet faite dans Drive." : ""));
+      render();
+    }).catch(function (e) { toast("Rien n’a été effacé : la copie sur le serveur a échoué (" + e.message + ")."); });
+  }
   function importHistorique(json) {
-    if (!json || json.format !== "carnet-noskids-import") throw new Error("Ce fichier n’est pas un import du Carnet.");
+    if (json && json.format === "carnet-noskids-sauvegarde") {
+      var nb = 0;
+      COLS.forEach(function (c) { (json[c] || []).forEach(function (r) { if (!r || !r.id) return; var copy = JSON.parse(JSON.stringify(r)); delete copy.updatedAt; delete copy.serverAt; upsertLocal(c, copy); nb++; }); });
+      dbSave(); loadArrays(); Sync.soon();
+      return nb;
+    }
+    if (!json || json.format !== "carnet-noskids-import") throw new Error("Ce fichier n’est ni un import ni une sauvegarde du Carnet.");
     var n = 0;
     [["sessions", "sessions"], ["mouvements", "mouvements"], ["depenses", "depenses"]].forEach(function (p) {
       (json[p[0]] || []).forEach(function (r) { if (!r.id) return; var copy = JSON.parse(JSON.stringify(r)); upsertLocal(p[1], copy); n++; });
@@ -853,8 +910,10 @@
         '<div class="field"><label for="cfMoi">Je suis</label><select id="cfMoi"><option value="">—</option>' + PEOPLE.filter(function (p) { return p.c !== "EXT"; }).map(function (p) { return '<option value="' + p.id + '"' + (p.id === CONF.moi ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div>" +
         '<div class="actions"><button class="btn" id="cfSave">Enregistrer et synchroniser</button>' + (conf ? '<button class="btn ghost" id="cfSync">Synchroniser</button>' : "") + "</div>" +
         '<div class="small muted">L’adresse et le code vous sont donnés par Yann. Ils restent sur ce téléphone.</div>';
-      h += '<div class="field"><label for="impFile">Importer l’historique (fichier historique.json)</label><input id="impFile" class="file-in" type="file" accept=".json,application/json"></div>' +
-        '<div class="small muted">' + (ETAT.importHistorique ? "Historique importé le " + esc(ETAT.importHistorique) + ". Un nouvel import remplace les mêmes lignes, sans doublon." : "À faire une seule fois, par Yann : sessions 2024-2025, achats d’essence et dépenses du fichier « Suvi Bateau Malibu ».") + "</div>";
+      h += '<div class="field"><label for="impFile">Importer un historique ou restaurer une sauvegarde (fichier .json)</label><input id="impFile" class="file-in" type="file" accept=".json,application/json"></div>' +
+        '<div class="small muted">' + (ETAT.importHistorique ? "Historique importé le " + esc(ETAT.importHistorique) + ". Un nouvel import remplace les mêmes lignes, sans doublon." : "Historique 2023-2025 : fichier historique.json. Restauration : fichier carnet-noskids-sauvegarde-….json.") + "</div>" +
+        '<div class="actions"><button class="btn ghost sm" id="bkDownload">Télécharger une sauvegarde</button><button class="btn ghost sm" id="purgeOpen" style="color:var(--bad)">Effacer des données…</button></div>';
+      if (view.purge) h += purgeHtml();
     }
     h += '<div class="actions"><button class="btn ghost sm" id="xlsExport">Exporter en Excel</button><button class="btn ghost sm" id="updCheck">Rechercher une mise à jour</button></div>' +
       '<div class="small muted">Carnet ' + esc(SPEC.devise) + " · version " + APP_VERSION + " · " + sessionsArr.length + " sessions · " + depenses.length + " dépenses" + (QUEUE.length ? " · " + QUEUE.length + " en attente d’envoi" : "") + "</div>";
@@ -911,21 +970,95 @@
   var screen = document.getElementById("screen");
   function render() {
     computeYears();
-    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, depenses: renderDepenses, bilan: renderBilan, bateau: renderBateau };
+    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, finances: renderFinances, pilotes: renderPilotes, bateau: renderBateau };
     screen.innerHTML = map[tab]();
     setTimeout(function () { persistAll(); updateNet(); }, 0);
     document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
-    if (tab === "depenses") depPreview();
+    if (tab === "finances" && finView === "dep") depPreview();
     if (tab === "essence" && view.essence === "achat") achatPreview();
     renderHead();
+  }
+  /* ---------- Pilotes : fiche, heures, grade ---------- */
+  var GRADES = [
+    { label: "Pilote 1 étoile", detail: "Pêcheur : navigation au ralenti, mouillage, pêche" },
+    { label: "Pilote 2 étoiles", detail: "Transport et manœuvres : ponton, mise à l’eau, déplacements" },
+    { label: "Pilote 3 étoiles", detail: "Tracter en wake et en bi-ski" },
+    { label: "Pilote 4 étoiles", detail: "Tracter en slalom" }
+  ];
+  var ACT_PREF = ["", "Slalom", "Wake", "Bi-ski", "Ski libre", "Bouée", "Balade", "Pêche", "Pilotage"];
+  function starSvg(on, size) {
+    return '<svg class="star' + (on ? " on" : "") + '" width="' + (size || 18) + '" height="' + (size || 18) + '" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 6 6.5.7-4.9 4.4 1.4 6.4L12 17l-5.8 3.3 1.4-6.4-4.9-4.4 6.5-.7z"/></svg>';
+  }
+  function starsHtml(n, size) { var s = '<span class="stars" role="img" aria-label="' + (n ? n + " étoile" + (n > 1 ? "s" : "") : "aucun grade") + '">'; for (var i = 1; i <= 4; i++) s += starSvg(i <= n, size); return s + "</span>"; }
+  function canValidate() { return CONF.moi === "yann" || CONF.moi === "olivier"; }
+  /* Heures calculées à partir des sessions : tours, rôle à bord, pilotage. */
+  function pilotStats(pid) {
+    var st = { ski: 0, wake: 0, pass: 0, pilot: 0, hist: 0, sessions: 0 };
+    sessionsArr.forEach(function (s) {
+      var here = false;
+      if (s.mode === "historique" || !s.tours) { var m = s.minutes && Number(s.minutes[pid]); if (m) { st.hist += m; here = true; } }
+      (s.tours || []).forEach(function (t) {
+        var m2 = Number(t.min) || 0;
+        if (t.pid === pid) { here = true; if (t.act === "wake") st.wake += m2; else if (t.act !== "balade" && t.act !== "meca") st.ski += m2; }
+        if (t.pilote === pid) st.pilot += m2;
+      });
+      if (s.pilote === pid) { st.pilot += Number(s.commun) || 0; here = true; }
+      (s.participants || []).forEach(function (p) { if (p.pid === pid) { here = true; if (p.role === "pass") st.pass += Number(s.engineMin) || 0; } });
+      if (here) st.sessions++;
+    });
+    return st;
+  }
+  function hm(min) { min = Math.round(min || 0); return min < 60 ? min + " min" : Math.floor(min / 60) + " h " + String(min % 60).padStart(2, "0"); }
+  function renderPilotes() {
+    var sel = pilotSel && person(pilotSel);
+    if (sel) return pilotDetailHtml(sel);
+    var h = '<div class="card"><h3>Les pilotes</h3><div class="small muted">Grades validés par Yann ou Olivier. Touchez une personne pour voir sa fiche.</div><div class="list">';
+    ["YF", "OF", "EXT"].forEach(function (c) {
+      PEOPLE.filter(function (p) { return p.c === c && !p.hidden; }).forEach(function (p) {
+        var s = pilotStats(p.id), f = c === "EXT" ? (p.host || "") : CATF[c];
+        h += '<button class="item pilot-row" data-pilot="' + p.id + '"><span>' + (f ? famDot(f) : "") + "<b>" + esc(p.name) + "</b>" + (p.actPref ? ' <span class="muted small">· ' + esc(p.actPref) + "</span>" : "") + "</span>" + starsHtml(p.grade || 0, 16) +
+          '<span class="d">' + (s.sessions ? s.sessions + " session(s) · ski " + hm(s.ski + s.hist) + " · wake " + hm(s.wake) + " · pilotage " + hm(s.pilot) : "Aucune session") + "</span></button>";
+      });
+    });
+    h += "</div></div>";
+    h += '<div class="card"><h3>Les grades</h3>' + GRADES.map(function (g, i) { return '<div class="row small" style="align-items:flex-start"><span>' + starsHtml(i + 1, 14) + "</span><span style=\"flex:1\"><b>" + g.label + "</b> · " + esc(g.detail) + "</span></div>"; }).join("") + "</div>";
+    return h;
+  }
+  function pilotDetailHtml(p) {
+    var s = pilotStats(p.id), g = p.grade || 0;
+    var h = '<button class="btn link" data-pilot="">← Tous les pilotes</button>';
+    h += '<div class="card"><div class="row"><h3>' + esc(p.name) + "</h3>" + starsHtml(g, 22) + "</div>" +
+      '<div class="small muted">' + (g ? esc(GRADES[g - 1].label) + " · validé par " + esc(p.gradePar || "?") + (p.gradeLe ? " le " + esc(p.gradeLe) : "") : "Pas encore de grade") + "</div>" +
+      '<div class="field"><label for="pfDesc">Présentation</label><input id="pfDesc" data-pf="desc" value="' + esc(p.desc || "") + '" placeholder="ex. 14 ans, skie depuis 2020"></div>' +
+      '<div class="two"><div class="field"><label for="pfAct">Activité préférée</label><select id="pfAct" data-pf="actPref">' + ACT_PREF.map(function (a) { return '<option value="' + a + '"' + (a === (p.actPref || "") ? " selected" : "") + ">" + (a || "—") + "</option>"; }).join("") + "</select></div>" +
+      '<div class="field"><label for="pfPermis">Permis bateau</label><input id="pfPermis" data-pf="permis" value="' + esc(p.permis || "") + '" placeholder="ex. côtier, 2019"></div></div></div>';
+    h += '<div class="kpis"><div class="kpi"><span class="label">Ski</span><span class="v">' + hm(s.ski) + '</span><span class="s">slalom, ski libre, formation</span></div>' +
+      '<div class="kpi"><span class="label">Wake</span><span class="v">' + hm(s.wake) + '</span><span class="s">depuis l’app</span></div>' +
+      '<div class="kpi"><span class="label">Passager</span><span class="v">' + hm(s.pass) + '</span><span class="s">sessions à bord sans skier</span></div>' +
+      '<div class="kpi"><span class="label">Pilotage</span><span class="v">' + hm(s.pilot) + '</span><span class="s">tours tractés et trajets</span></div></div>';
+    if (s.hist) h += '<div class="small muted">Historique 2024-2025 : ' + hm(s.hist) + " de tours, sans le détail ski ou wake. " + s.sessions + " session(s) au total.</div>";
+    h += '<div class="card"><h3>Grade</h3>';
+    GRADES.forEach(function (gr, i) {
+      var n = i + 1;
+      h += '<div class="grade-row' + (n <= g ? " got" : "") + '">' + starsHtml(n, 16) + '<span><b>' + gr.label + "</b><br><span class=\"small muted\">" + esc(gr.detail) + "</span></span>" +
+        (canValidate() && n !== g ? '<button class="btn sm ' + (n > g ? "" : "ghost") + '" data-grade="' + n + '">' + (n > g ? "Valider" : "Revenir ici") + "</button>" : "") + "</div>";
+    });
+    h += canValidate() ? (g ? '<button class="btn link" id="gradeRetire" style="color:var(--bad)">Retirer le grade</button>' : "") : '<div class="small muted">Seuls Yann et Olivier peuvent valider un grade (choix « Je suis » dans Bateau).</div>';
+    return h + "</div>";
+  }
+
+  /* Finances : dépenses et bilan dans le même menu */
+  function renderFinances() {
+    return '<div class="seg" style="margin-bottom:2px">' + [["dep", "Dépenses"], ["bilan", "Bilan"]].map(function (o) { return '<button data-fin="' + o[0] + '" aria-pressed="' + (finView === o[0]) + '">' + o[1] + "</button>"; }).join("") + "</div>" +
+      (finView === "dep" ? renderDepenses() : renderBilan());
   }
   /* Bandeau : nom de l'écran, visuel et couleur propres à chaque menu */
   var HEADS = {
     accueil: { t: "Accueil", v: '<span class="logo img-logo" role="img" aria-label="Malibu"></span>' },
     sortie: { t: "Session", th: '<span class="thumb img-ski" aria-hidden="true"></span>' },
     essence: { t: "Essence", v: '<span class="hv img-pump" aria-hidden="true"></span>' },
-    depenses: { t: "Dépenses", v: '<span class="hv" style="background:#14532d;color:#cfeed3;font:700 23px var(--f-body)" aria-hidden="true">€</span>' },
-    bilan: { t: "Bilan", v: '<span class="hv" style="background:#1f2a33;color:#d6dade" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg></span>' },
+    finances: { t: "Finances", v: '<span class="hv" style="background:#14532d;color:#cfeed3;font:700 23px var(--f-body)" aria-hidden="true">€</span>' },
+    pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + starSvg(true, 24) + "</span>" },
     bateau: { t: "Bateau", v: '<span class="thumb img-boat" style="background-position:45% 60%" aria-hidden="true"></span>' }
   };
   function renderHead() {
@@ -977,7 +1110,19 @@
       sortie.pleinF = famOf(participant(sortie.pilote)) || "YC";
       startList = []; picker = null; save(1); return render();
     }
-    if (b.id === "goClose") { sortie.closing = true; sortie.compteurFin = null; return render(); }
+    if (b.id === "goClose") { sortie.closing = true; sortie.compteurFin = null; view.cancelAsk = false; return render(); }
+    if (b.id === "cancelAsk") { view.cancelAsk = true; return render(); }
+    if (b.id === "cancelNo") { view.cancelAsk = false; return render(); }
+    if (b.id === "cancelYes") { view.cancelAsk = false; sortie = { active: false, compteurDeb: lastCompteur(), tours: [], participants: [] }; toast("Session annulée : rien n’a été enregistré."); return render(); }
+    if (ds.fin) { finView = ds.fin; return render(); }
+    if (ds.pilot !== undefined) { pilotSel = ds.pilot; screen.scrollTop = 0; return render(); }
+    if (ds.grade) { var pg = person(pilotSel); if (pg && canValidate()) { pg.grade = Number(ds.grade); pg.gradePar = person(CONF.moi).name; pg.gradeLe = todayFr(); toast(pg.name + " : " + GRADES[pg.grade - 1].label + " validé."); } return render(); }
+    if (b.id === "gradeRetire") { var pr = person(pilotSel); if (pr && canValidate()) { pr.grade = 0; pr.gradePar = person(CONF.moi).name; pr.gradeLe = todayFr(); } return render(); }
+    if (b.id === "bkDownload") { downloadBackup(); return; }
+    if (b.id === "purgeOpen") { view.purge = { scope: "depenses" }; return render(); }
+    if (b.id === "purgeCancel") { view.purge = null; return render(); }
+    if (ds.pscope) { view.purge.scope = ds.pscope; return render(); }
+    if (b.id === "purgeGo") { return doPurge(); }
     if (b.id === "backClose") { sortie.closing = false; return render(); }
     if (b.id === "tPlein") { sortie.plein = !sortie.plein; return render(); }
     if (ds.pleinf) { sortie.pleinF = ds.pleinf; return render(); }
@@ -1085,6 +1230,7 @@
     if (el.dataset.f && el.tagName === "SELECT") { var t = findTour(Number(el.dataset.id)); t[el.dataset.f] = el.value; if (el.dataset.f === "act") { t.speed = ""; t.passes = ""; } save(1); return render(); }
     if (el.dataset.f && el.tagName === "INPUT") { save(1); return; }
     if (el.dataset.spec) { save(1); toast("Fiche technique mise à jour."); return; }
+    if (el.dataset.pf) { var ppf = person(pilotSel); if (ppf) ppf[el.dataset.pf] = el.value.trim(); return render(); }
     if (el.id === "cWho") { corrForm.who = el.value; return; }
     if (el.dataset.mnt) { maint[Number(el.dataset.mnt)][el.dataset.mnf] = el.value; save(1); return render(); }
     if (el.id === "pilDef") { sortie.pilote = el.value; sortie.tours.forEach(function (t) { if (t.state === "wait") t.pilote = el.value; }); save(1); return render(); }
@@ -1110,7 +1256,7 @@
     }
     if (el.id === "impFile" && el.files && el.files[0]) {
       var rdr = new FileReader();
-      rdr.onload = function () { try { var n = importHistorique(JSON.parse(rdr.result)); toast(n + " lignes d’historique importées."); render(); } catch (er) { toast(er.message); } };
+      rdr.onload = function () { try { var js = JSON.parse(rdr.result), n = importHistorique(js); toast(n + (js.format === "carnet-noskids-sauvegarde" ? " lignes restaurées depuis la sauvegarde." : " lignes d’historique importées.")); render(); } catch (er) { toast(er.message); } };
       rdr.readAsText(el.files[0]); return;
     }
   });

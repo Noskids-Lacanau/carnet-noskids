@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 1.1.0 — 2026-11-22
+
+- Menu Pilotes : fiche (présentation, activité préférée, permis), heures de ski, wake, passager et pilotage calculées à partir des sessions, grades de 1 à 4 étoiles validés par Yann ou Olivier.
+- Menu Finances : regroupe Dépenses et Bilan.
+- Annuler une session en cours sans l'enregistrer, après confirmation.
+- Sauvegarde : téléchargement d'un fichier de sauvegarde, restauration par import.
+- Effacer des données (dépenses ou tout l'historique) : confirmation par le mot EFFACER, sauvegarde automatique sur l'appareil et copie du Google Sheet dans Drive avant effacement.
+- Serveur 1.1.0 : action de sauvegarde du Google Sheet (à redéployer dans Apps Script).
+
 ## 1.0.0 — 2026-11-22
 
 Première version en production, reprise de la maquette validée (version 8).

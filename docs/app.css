@@ -309,3 +309,18 @@ body.app-mode .screen { padding-left: max(12px, env(safe-area-inset-left, 0px));
 .upd .btn { background: #fff; color: var(--accent); }
 .doc a { color: var(--accent); }
 [hidden] { display: none !important; }
+
+/* ---------- Version 1.1 : Finances, Pilotes ---------- */
+.app-head.h-finances { background: #cfeed3; color: #14532d; }
+.app-head.h-finances .net { background: rgba(255, 255, 255, .75); }
+.app-head.h-pilotes { background: #f6c445; color: #3b2a00; }
+.app-head.h-pilotes .net { background: rgba(255, 255, 255, .8); }
+.stars { display: inline-flex; gap: 2px; flex: none; }
+.star path { fill: none; stroke: var(--muted); stroke-width: 1.6; stroke-linejoin: round; }
+.star.on path { fill: #f2b705; stroke: #c48f00; }
+.hv .star path { stroke: currentColor; } .hv .star.on path { fill: currentColor; stroke: currentColor; }
+.pilot-row { width: 100%; background: none; border: 0; border-top: 1px solid var(--line); color: inherit; font: inherit; text-align: left; cursor: pointer; align-items: center; }
+.list .pilot-row:first-child { border-top: 0; }
+.pilot-row:hover { background: var(--surface-2); }
+.grade-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+.grade-row.got { background: linear-gradient(90deg, rgba(242, 183, 5, .14), transparent); }

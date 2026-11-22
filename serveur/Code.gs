@@ -5,7 +5,7 @@
  *
  * Installation (une seule fois) : voir README.md, partie « Mise en production ».
  */
-var VERSION_SERVEUR = '1.0.0';
+var VERSION_SERVEUR = '1.1.0';
 var TABLES = ['personnes', 'sessions', 'bidons', 'dettes', 'mouvements', 'depenses', 'documents', 'entretien', 'parametres', 'etat'];
 var COLONNES_FIXES = ['id', 'modifie_le', 'recu_le', 'supprime', 'par', 'json'];
 var DOSSIER_DOCUMENTS = 'Carnet Noskids – documents';
@@ -59,6 +59,7 @@ function traiter_(p) {
     if (p.action === 'pull') return pull_(p.since || '');
     if (p.action === 'push') return push_(p.records || []);
     if (p.action === 'upload') return upload_(p);
+    if (p.action === 'backup') return sauvegarder_();
     return { ok: false, error: 'Action inconnue : ' + p.action };
   } catch (err) {
     return { ok: false, error: String(err && err.message || err) };
@@ -146,6 +147,17 @@ function pull_(since) {
     });
   });
   return { ok: true, records: out, serverTime: now };
+}
+
+/* Copie complète du Google Sheet dans le dossier « Carnet Noskids – sauvegardes » (avant un effacement). */
+var DOSSIER_SAUVEGARDES = 'Carnet Noskids – sauvegardes';
+function sauvegarder_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dossiers = DriveApp.getFoldersByName(DOSSIER_SAUVEGARDES);
+  var dossier = dossiers.hasNext() ? dossiers.next() : DriveApp.createFolder(DOSSIER_SAUVEGARDES);
+  var nom = ss.getName() + ' – sauvegarde ' + Utilities.formatDate(new Date(), 'Europe/Paris', 'yyyy-MM-dd HH:mm');
+  var copie = DriveApp.getFileById(ss.getId()).makeCopy(nom, dossier);
+  return { ok: true, url: copie.getUrl(), name: nom };
 }
 
 /* Range un document (photo, PDF) dans le dossier Drive et renvoie son lien. */
