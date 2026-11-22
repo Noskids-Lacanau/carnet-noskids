@@ -63,7 +63,7 @@
   function famDot(f) { return '<span class="dot f-' + f + '"></span>'; }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.1.0", SCHEMA = 1;
+  var APP_VERSION = "1.2.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -92,7 +92,7 @@
   var DOC_CATS = ["Titre de navigation / carte grise", "Assurance", "Permis bateau", "Factures", "Adhésions et licences", "Taxe / corps mort lac", "Notice et fiche technique", "Photos du bateau", "Autres"];
   var docs = {}; DOC_CATS.forEach(function (c) { docs[c] = []; });
   var view = { essence: null, dep: false, cancelAsk: false, purge: null };
-  var finView = "dep", pilotSel = "";
+  var finView = "bilan", pilotSel = "";
   var achatForm = { verse: true, plein: true, f: "YC", b: 2, step: null, L: 0, P: 0, tfOpen: false, tf: "YC", tn: 1 }, miseForm = { plein: true, f: "YC", n: 1 };
   var bilanYear = "", bilanWho = "";
 
@@ -970,21 +970,22 @@
   var screen = document.getElementById("screen");
   function render() {
     computeYears();
-    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, finances: renderFinances, pilotes: renderPilotes, bateau: renderBateau };
+    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, bateau: renderBateau };
     screen.innerHTML = map[tab]();
     setTimeout(function () { persistAll(); updateNet(); }, 0);
     document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === tab)); });
-    if (tab === "finances" && finView === "dep") depPreview();
+    if (tab === "activite" && finView === "dep") depPreview();
     if (tab === "essence" && view.essence === "achat") achatPreview();
     renderHead();
   }
   /* ---------- Pilotes : fiche, heures, grade ---------- */
   var GRADES = [
-    { label: "Pilote 1 étoile", detail: "Pêcheur : navigation au ralenti, mouillage, pêche" },
-    { label: "Pilote 2 étoiles", detail: "Transport et manœuvres : ponton, mise à l’eau, déplacements" },
-    { label: "Pilote 3 étoiles", detail: "Tracter en wake et en bi-ski" },
-    { label: "Pilote 4 étoiles", detail: "Tracter en slalom" }
+    { label: "Pilote 1 étoile", detail: "Conduite du bateau sur le lac, dans le respect de la réglementation, accompagné d’une personne qui connaît le bateau." },
+    { label: "Pilote 2 étoiles", detail: "Peut transporter des passagers pour une balade. Sait débâcher et rebâcher le bateau à son corps mort." },
+    { label: "Pilote 3 étoiles", detail: "Habilité à tracter en bi-ski, wake et kneeboard. Manœuvres au ponton. Connaît les risques liés." },
+    { label: "Pilote 4 étoiles", detail: "Passages de slalom à haute vitesse, tout sport tracté autorisé. Autonome sur le bateau : vérifications moteur, petit dépannage." }
   ];
+  var DIPLOMES = ["Initiateur baby-ski", "Initiateur wake", "Initiateur slalom", "Initiateur bi-ski", "Initiateur barefoot", "Monitorat fédéral", "CQP", "BPJEPS"];
   var ACT_PREF = ["", "Slalom", "Wake", "Bi-ski", "Ski libre", "Bouée", "Balade", "Pêche", "Pilotage"];
   function starSvg(on, size) {
     return '<svg class="star' + (on ? " on" : "") + '" width="' + (size || 18) + '" height="' + (size || 18) + '" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 6 6.5.7-4.9 4.4 1.4 6.4L12 17l-5.8 3.3 1.4-6.4-4.9-4.4 6.5-.7z"/></svg>';
@@ -1017,11 +1018,11 @@
       PEOPLE.filter(function (p) { return p.c === c && !p.hidden; }).forEach(function (p) {
         var s = pilotStats(p.id), f = c === "EXT" ? (p.host || "") : CATF[c];
         h += '<button class="item pilot-row" data-pilot="' + p.id + '"><span>' + (f ? famDot(f) : "") + "<b>" + esc(p.name) + "</b>" + (p.actPref ? ' <span class="muted small">· ' + esc(p.actPref) + "</span>" : "") + "</span>" + starsHtml(p.grade || 0, 16) +
-          '<span class="d">' + (s.sessions ? s.sessions + " session(s) · ski " + hm(s.ski + s.hist) + " · wake " + hm(s.wake) + " · pilotage " + hm(s.pilot) : "Aucune session") + "</span></button>";
+          '<span class="d">' + (p.diplomes && p.diplomes.length ? "🎓 " + esc(p.diplomes.join(", ")) + " · " : "") + (s.sessions ? s.sessions + " session(s) · ski " + hm(s.ski + s.hist) + " · wake " + hm(s.wake) + " · pilotage " + hm(s.pilot) : "Aucune session") + "</span></button>";
       });
     });
     h += "</div></div>";
-    h += '<div class="card"><h3>Les grades</h3>' + GRADES.map(function (g, i) { return '<div class="row small" style="align-items:flex-start"><span>' + starsHtml(i + 1, 14) + "</span><span style=\"flex:1\"><b>" + g.label + "</b> · " + esc(g.detail) + "</span></div>"; }).join("") + "</div>";
+    h += '<div class="card"><h3>Prérogatives selon le grade</h3><div class="small muted">Chaque grade inclut les prérogatives des grades précédents.</div>' + GRADES.map(function (g, i) { return '<div class="grade-row">' + starsHtml(i + 1, 14) + "<span><b>" + g.label + '</b><br><span class="small">' + esc(g.detail) + "</span></span><span></span></div>"; }).join("") + "</div>";
     return h;
   }
   function pilotDetailHtml(p) {
@@ -1031,7 +1032,10 @@
       '<div class="small muted">' + (g ? esc(GRADES[g - 1].label) + " · validé par " + esc(p.gradePar || "?") + (p.gradeLe ? " le " + esc(p.gradeLe) : "") : "Pas encore de grade") + "</div>" +
       '<div class="field"><label for="pfDesc">Présentation</label><input id="pfDesc" data-pf="desc" value="' + esc(p.desc || "") + '" placeholder="ex. 14 ans, skie depuis 2020"></div>' +
       '<div class="two"><div class="field"><label for="pfAct">Activité préférée</label><select id="pfAct" data-pf="actPref">' + ACT_PREF.map(function (a) { return '<option value="' + a + '"' + (a === (p.actPref || "") ? " selected" : "") + ">" + (a || "—") + "</option>"; }).join("") + "</select></div>" +
-      '<div class="field"><label for="pfPermis">Permis bateau</label><input id="pfPermis" data-pf="permis" value="' + esc(p.permis || "") + '" placeholder="ex. côtier, 2019"></div></div></div>';
+      '<div class="field"><label for="pfPermis">Permis bateau</label><input id="pfPermis" data-pf="permis" value="' + esc(p.permis || "") + '" placeholder="ex. côtier, 2019"></div></div>' +
+      '<div class="field"><span class="flabel">Diplômes et qualifications fédérales</span><div class="chips">' +
+      DIPLOMES.map(function (d) { var on = (p.diplomes || []).indexOf(d) >= 0; return '<button class="chip" data-dipl="' + esc(d) + '" aria-pressed="' + on + '">' + (on ? "✓ " : "") + esc(d) + "</button>"; }).join("") + "</div></div>" +
+      '<div class="field"><label for="pfAutres">Autres qualifications</label><input id="pfAutres" data-pf="diplAutres" value="' + esc(p.diplAutres || "") + '" placeholder="ex. juge fédéral, secourisme PSC1"></div></div>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Ski</span><span class="v">' + hm(s.ski) + '</span><span class="s">slalom, ski libre, formation</span></div>' +
       '<div class="kpi"><span class="label">Wake</span><span class="v">' + hm(s.wake) + '</span><span class="s">depuis l’app</span></div>' +
       '<div class="kpi"><span class="label">Passager</span><span class="v">' + hm(s.pass) + '</span><span class="s">sessions à bord sans skier</span></div>' +
@@ -1047,23 +1051,26 @@
     return h + "</div>";
   }
 
-  /* Finances : dépenses et bilan dans le même menu */
-  function renderFinances() {
-    return '<div class="seg" style="margin-bottom:2px">' + [["dep", "Dépenses"], ["bilan", "Bilan"]].map(function (o) { return '<button data-fin="' + o[0] + '" aria-pressed="' + (finView === o[0]) + '">' + o[1] + "</button>"; }).join("") + "</div>" +
-      (finView === "dep" ? renderDepenses() : renderBilan());
+  /* Activité : le bilan en premier ; les dépenses s'ouvrent par un lien en bas de page. */
+  function renderActivite() {
+    if (finView === "dep") return '<button class="btn link" data-fin="bilan">← Retour à l’activité</button>' + renderDepenses();
+    var B = balance();
+    return renderBilan() +
+      '<button class="card link-card" data-fin="dep"><span><b>Dépenses et balance</b><span class="small muted">' + depenses.length + " dépenses · " + esc(balanceText(B)) + '</span></span><span class="chev" aria-hidden="true">›</span></button>';
   }
   /* Bandeau : nom de l'écran, visuel et couleur propres à chaque menu */
   var HEADS = {
     accueil: { t: "Accueil", v: '<span class="logo img-logo" role="img" aria-label="Malibu"></span>' },
     sortie: { t: "Session", th: '<span class="thumb img-ski" aria-hidden="true"></span>' },
     essence: { t: "Essence", v: '<span class="hv img-pump" aria-hidden="true"></span>' },
-    finances: { t: "Finances", v: '<span class="hv" style="background:#14532d;color:#cfeed3;font:700 23px var(--f-body)" aria-hidden="true">€</span>' },
+    activite: { t: "Activité", v: '<span class="hv" style="background:#1f2a33;color:#d6dade" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg></span>' },
+    depenses: { t: "Dépenses", v: '<span class="hv" style="background:#14532d;color:#cfeed3;font:700 23px var(--f-body)" aria-hidden="true">€</span>' },
     pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + starSvg(true, 24) + "</span>" },
     bateau: { t: "Bateau", v: '<span class="thumb img-boat" style="background-position:45% 60%" aria-hidden="true"></span>' }
   };
   function renderHead() {
-    var H = HEADS[tab];
-    document.getElementById("appHead").className = "app-head h-" + tab;
+    var key = tab === "activite" ? (finView === "dep" ? "depenses" : "activite") : tab, H = HEADS[key];
+    document.getElementById("appHead").className = "app-head h-" + (key === "activite" ? "bilan" : key);
     document.getElementById("hVis").innerHTML = H.v || "";
     document.getElementById("hTitle").textContent = H.t;
     document.getElementById("hThumb").innerHTML = H.th || "";
@@ -1114,8 +1121,9 @@
     if (b.id === "cancelAsk") { view.cancelAsk = true; return render(); }
     if (b.id === "cancelNo") { view.cancelAsk = false; return render(); }
     if (b.id === "cancelYes") { view.cancelAsk = false; sortie = { active: false, compteurDeb: lastCompteur(), tours: [], participants: [] }; toast("Session annulée : rien n’a été enregistré."); return render(); }
-    if (ds.fin) { finView = ds.fin; return render(); }
+    if (ds.fin) { finView = ds.fin; screen.scrollTop = 0; return render(); }
     if (ds.pilot !== undefined) { pilotSel = ds.pilot; screen.scrollTop = 0; return render(); }
+    if (ds.dipl) { var pdp = person(pilotSel); if (pdp) { var lst2 = (pdp.diplomes || []).slice(), ix = lst2.indexOf(ds.dipl); if (ix >= 0) lst2.splice(ix, 1); else lst2.push(ds.dipl); pdp.diplomes = lst2; } return render(); }
     if (ds.grade) { var pg = person(pilotSel); if (pg && canValidate()) { pg.grade = Number(ds.grade); pg.gradePar = person(CONF.moi).name; pg.gradeLe = todayFr(); toast(pg.name + " : " + GRADES[pg.grade - 1].label + " validé."); } return render(); }
     if (b.id === "gradeRetire") { var pr = person(pilotSel); if (pr && canValidate()) { pr.grade = 0; pr.gradePar = person(CONF.moi).name; pr.gradeLe = todayFr(); } return render(); }
     if (b.id === "bkDownload") { downloadBackup(); return; }

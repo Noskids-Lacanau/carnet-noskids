@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.2.0 — 2026-11-22
+
+- Menu Activité (bilan de l'année : coût par minute, temps par famille et par personne) en premier ; les dépenses et la balance s'ouvrent par un lien en bas de page.
+- Pilotes : prérogatives de chaque grade (1 à 4 étoiles) affichées en bas de page, textes validés par Yann.
+- Fiche pilote : diplômes et qualifications fédérales (initiateur baby-ski, wake, slalom, bi-ski, barefoot, monitorat fédéral, CQP, BPJEPS) et autres qualifications.
+
 ## 1.1.0 — 2026-11-22
 
 - Menu Pilotes : fiche (présentation, activité préférée, permis), heures de ski, wake, passager et pilotage calculées à partir des sessions, grades de 1 à 4 étoiles validés par Yann ou Olivier.
