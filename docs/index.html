@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Carnet Noskids</title>
+  <meta name="description" content="Suivi du bateau Noskids : sessions, essence, dépenses et bilans par famille.">
+  <meta name="theme-color" content="#0f2a36">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Noskids">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body class="app-mode">
+  <div class="phone">
+    <div class="app-head h-accueil" id="appHead">
+      <span id="hVis"></span>
+      <span class="ht" id="hTitle">Accueil</span>
+      <span id="hThumb"></span>
+      <div class="net" id="net">● Local</div>
+    </div>
+    <div class="upd" id="updBar" hidden>Nouvelle version disponible <button class="btn sm" id="updBtn">Mettre à jour</button></div>
+    <main class="screen" id="screen"></main>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <nav class="tabs" role="tablist" aria-label="Écrans de l'application">
+      <button role="tab" data-tab="accueil" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Accueil</button>
+      <button role="tab" data-tab="sortie" aria-selected="false"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg>Session</button>
+      <button role="tab" data-tab="essence" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M6 4h8l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M9 11l6 6M15 11l-6 6"/></svg>Essence</button>
+      <button role="tab" data-tab="depenses" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M17 6.5a7 7 0 1 0 0 11M4 10h10M4 14h10"/></svg>Dépenses</button>
+      <button role="tab" data-tab="bilan" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M5 20V11M11 20V5M17 20v-6M3 20h18"/></svg>Bilan</button>
+      <button role="tab" data-tab="bateau" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M3 15h18l-2.5 5h-13z"/><path d="M12 3v12M12 4l6 8h-6"/></svg>Bateau</button>
+    </nav>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

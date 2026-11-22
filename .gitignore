@@ -1,0 +1,6 @@
+# Données de la famille : ne jamais publier
+import/
+*.xlsx
+*.ods
+# Fichiers de test
+docs/test-*
