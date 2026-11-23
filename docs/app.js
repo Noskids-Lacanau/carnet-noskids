@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.6.2", SCHEMA = 1;
+  var APP_VERSION = "1.6.3", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -559,6 +559,8 @@
   function renderAccueil() {
     var now = Date.now(), h = "";
     h += quickHtml(now);
+    var todo = sessionsArr.filter(function (s) { return s.aCompleter; });
+    if (todo.length) h += '<div class="alert"><b>' + todo.map(function (s) { return "Saison " + yearOf(s) + " : " + hm(s.engineMin) + " de moteur à détailler"; }).join(" · ") + '</b>Essence achetée et versée, temps par personne. La saison a été saisie en un bloc (compteur ' + todo.map(function (s) { return dec1.format(Number(s.compteurDeb)) + " → " + dec1.format(Number(s.compteurFin)) + " h"; }).join(", ") + ').</div>';
     h += '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + half(Math.round(stockN() * 2) / 2) + " sur 5 · " + int0.format(stockL()) + " L</span></div>" + cansHtml() + "</div>";
     dettes.forEach(function (d) { h += detteHtml(d); });
     if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Bateau pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
@@ -1024,6 +1026,7 @@
       (pil ? "<span>Pilote <b>" + esc(pil) + "</b></span>" : "") +
       (ppl.length ? "<span>À bord <b>" + esc(ppl.join(", ")) + "</b></span>" : "") +
       (s.bateau ? '<span class="muted">' + esc(s.bateau) + "</span>" : "") + "</div>";
+    if (s.note) h += '<div class="small" style="margin-bottom:6px">' + esc(s.note) + '</div>';
     return h + (photoSrc(s.photoCompteur) ? '<img class="cpt-photo" src="' + photoSrc(s.photoCompteur) + '" alt="Photo du compteur de la session">' : '<div class="small muted">Pas de photo du compteur pour cette session.</div>');
   }
   function sessionListHtml(sel) {
@@ -1041,7 +1044,7 @@
         list.slice().reverse().forEach(function (s, i) {
           var d = dkey(s), m = Number(d.slice(5, 7));
           var op = ui.sesOpen === s.id;
-          h += '<tr data-ses="' + esc(s.id) + '" class="ses-click' + (op ? " open" : "") + '"><td>' + (list.length - i) + "</td><td>" + (m ? MOIS[m - 1] : "—") + '<span class="sub">' + isoToFr(d).slice(0, 5) + (s.mode === "rattrapage" ? " · rattrapage" : "") + "</span></td><td>" + sessionWho(s) + "</td><td>" + hm(s.engineMin) + "</td></tr>";
+          h += '<tr data-ses="' + esc(s.id) + '" class="ses-click' + (op ? " open" : "") + '"><td>' + (list.length - i) + "</td><td>" + (m ? MOIS[m - 1] : "—") + '<span class="sub">' + isoToFr(d).slice(0, 5) + (s.mode === "rattrapage" ? " · rattrapage" : "") + (s.aCompleter ? ' · <b class="todo">à compléter</b>' : "") + "</span></td><td>" + sessionWho(s) + "</td><td>" + hm(s.engineMin) + "</td></tr>";
           if (op) h += '<tr class="ses-det"><td colspan="4">' + sessionDetailHtml(s) + "</td></tr>";
           var g = gapBefore[s.id];
           if (g) h += '<tr class="ses-gap"><td>⚠</td><td colspan="2">Trou de compteur<span class="sub">fin ' + dec1.format(sessionEnd(g.from)) + " h le " + isoToFr(dkey(g.from)).slice(0, 5) + " → début " + dec1.format(Number(g.to.compteurDeb)) + " h</span></td><td>" + hm(g.h * 60) + "</td></tr>";

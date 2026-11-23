@@ -622,3 +622,4 @@ body.app-mode .screen { padding-left: max(12px, env(safe-area-inset-left, 0px));
 :root[data-theme="dark"] .quick .qa-dot { box-shadow: 0 0 0 2px #0a171d; }
 :root[data-theme="dark"] .ess-acts .ess-btn:disabled { opacity: .45; }
 :root[data-theme="dark"] .app-head.h-depenses { color: #14532d; }
+.ses-list .todo { color: var(--warn); font-weight: 700; }

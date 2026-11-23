@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.6.3 — 2026-11-23
+
+- Saison 2026 saisie en un bloc (import saison-2026.json) : rappel sur l'accueil, mention « à compléter » dans la liste des sessions et note dans le détail
+- Nouveau script outils/Publier.ps1 : une commande pour publier une version (garde-fous sur les fichiers privés)
+- README : procédure de mise à jour, imports ponctuels et prochaines étapes (Tricount, détail de la saison 2026)
+
 ## 1.6.2 — 2026-11-23
 
 - Nouvelle icône de l'app : la photo du skieur avec le logo Malibu doré (version adaptable pour Android avec le logo dans la zone visible).
