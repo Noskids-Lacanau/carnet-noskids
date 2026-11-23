@@ -712,3 +712,16 @@ a.sheet-link { text-decoration: none; color: inherit; display: flex; justify-con
 .boat-hero .cap b { font-size: 18px; letter-spacing: .05em; }
 /* Synthèse : unité « / min » à côté du montant */
 .kpi .v small { font-size: .52em; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+/* Détail du coût : une ligne touchée déplie la liste des dépenses du poste */
+tr.det-click { cursor: pointer; }
+tr.det-click td:first-child { position: relative; padding-left: 26px; }
+tr.det-click .tri { position: absolute; left: 0; top: 6px; width: 22px; height: 22px; }
+tr.det-click .tri svg { width: 13px; height: 13px; }
+tr.det-click.open .tri svg { transform: rotate(180deg); }
+tr.det-click:hover td, tr.det-click.open td { background: var(--surface-2); }
+tr.det-row td { padding: 4px 6px 10px 26px; background: var(--surface-2); }
+.det-list { display: grid; gap: 6px; }
+.det-it { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 5px 0; border-top: 1px dashed var(--line); }
+.det-it:first-child { border-top: 0; }
+.det-it .sub { display: block; }
+.det-it b { white-space: nowrap; font-weight: 600; }

@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.8.2 — 2026-11-23
+
+- Détail du coût : toucher un poste affiche les dépenses qu'il contient (ou le calcul : essence estimée, usure, amortissement, achat moins revente)
+- Effacer des données, importer ou restaurer, valider la balance et noter un virement : réservés à Yann et Olivier
+- Accueil : bouton Achat essence sans la ligne du stock
+
 ## 1.8.1 — 2026-11-23
 
 - Accueil : « GO pour session » avec l'icône centrée en turquoise ; achat essence et remplissage de même hauteur

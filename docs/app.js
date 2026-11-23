@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.1", SCHEMA = 1;
+  var APP_VERSION = "1.8.2", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -615,7 +615,7 @@
     if (sortie.active) h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Session en cours</span><span class="qa-s">moteur ' + (sortie.engine === "on" ? "en route" : "arrêté") + ' · <b data-timer="engine">' + fmtClock(engineMs(now)) + "</b> · ouvrir</span></button>";
     else h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">GO pour session</span><span class="qa-s">chrono par skieur</span></button>';
     // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
-    h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat essence", int0.format(stockL()) + " L en bidons") +
+    h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat essence") +
       qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Remplissage bateau") +
       // 2e ligne : dépense et balance ; 3e ligne : quatre petits boutons
       qa("qa-dep qa-wide", 'data-depnew="1"', QI.euro, "Saisir une dépense") +
@@ -896,7 +896,7 @@
       '<tr class="tot"><td>Écart</td><td>' + eur.format(R.paid.YC - R.due.YC) + "</td><td>" + eur.format(R.paid.OC - R.due.OC) + "</td></tr></tbody></table>" +
       '<div class="alert ok"><b>' + esc(balResultText(R)) + "</b>Calcul : pour chaque période de plein à plein, coût de l’essence versée × part du temps moteur de la famille, moins ce qu’elle a payé." + (R.init ? " Plein de départ : moitié de sa valeur pour chaque famille." : "") + "</div>";
     if (R.pendingS.length || R.pendingP.length) h += '<div class="small muted">Après le dernier plein : ' + R.pendingS.length + " session(s) et " + R.pendingP.length + " versement(s), comptés à la prochaine balance.</div>";
-    h += '<div class="actions"><button class="btn" id="balValider"' + (R.ready ? "" : " disabled") + ">Valider la balance</button></div></div>";
+    h += '<div class="actions"><button class="btn" id="balValider"' + (R.ready && canValidate() ? "" : " disabled") + ">Valider la balance</button></div>" + (canValidate() ? "" : RESERVE_TXT) + "</div>";
     return h + balHistHtml();
   }
   function balHistHtml() {
@@ -905,7 +905,7 @@
     if (!list.length) h += '<div class="small muted">Aucune pour l’instant.</div>';
     list.forEach(function (d) {
       h += '<div class="bal-row"><span><b>' + (Number(d.eur) >= 0.5 ? FAM[d.from].s + " doit " + eur.format(d.eur) + " à " + FAM[d.to].s : "Équilibrée") + '</b><span class="small muted"> · ' + esc(d.note || "") + " · validée le " + esc(d.d || "") + "</span></span>" +
-        (Number(d.eur) >= 0.5 ? (d.regle ? '<span class="pill okp">réglée</span>' : '<button class="btn sm" data-balregle="' + esc(d.id) + '">Virement fait : le noter</button>') : "") + "</div>";
+        (Number(d.eur) >= 0.5 ? (d.regle ? '<span class="pill okp">réglée</span>' : canValidate() ? '<button class="btn sm" data-balregle="' + esc(d.id) + '">Virement fait : le noter</button>' : '<span class="pill">à régler</span>') : "") + "</div>";
     });
     return h + '<div class="small muted">Balance générale (toutes dépenses) : ' + esc(balanceText(balance())) + "</div></div>";
   }
@@ -1111,19 +1111,19 @@
   }
   function bilanData(bk, year) {
     var all = boatYears(bk), ys = year === "Toutes" ? all : [year];
-    var D = { bk: bk, ys: ys, years: ys.length, min: 0, tour: 0, nSes: 0, fam: { YC: 0, OC: 0 }, commun: 0, meca: 0, people: [], curve: [], fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, autres: 0, recettes: 0 };
+    var D = { bk: bk, ys: ys, years: ys.length, min: 0, tour: 0, nSes: 0, fam: { YC: 0, OC: 0 }, commun: 0, meca: 0, people: [], curve: [], fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, autres: 0, recettes: 0, it: { fixes: [], essence: [], autres: [], recettes: [], achat: [] } };
     ys.forEach(function (y) { var a = YEARS[y]; if (!a) return; D.min += a.min; D.fam.YC += a.fam.YC; D.fam.OC += a.fam.OC; D.commun += a.commun; D.meca += a.meca; D.people = mergePeople(D.people, a.people || []); if (ys.length === 1) D.curve = a.curve; });
     sessionsArr.forEach(function (s) { if (ys.indexOf(yearOf(s)) < 0) return; D.nSes++; Object.keys(s.minutes || {}).forEach(function (p) { D.tour += Number(s.minutes[p]) || 0; }); });
     var achatTot = 0;
     depenses.forEach(function (d) {
       var y = depYear(d); if (!y || depBoat(d) !== bk || d.cat === REGL) return;
       var m = Number(d.m) || 0;
-      if (isAchatBateau(d)) { achatTot += m; return; }
+      if (isAchatBateau(d)) { achatTot += m; D.it.achat.push(d); return; }
       if (ys.indexOf(y) < 0) return;
-      if (d.cat === "Essence") D.essence += m;
-      else if (FIXED_CATS[d.cat]) { D.fixes += m; D.fx[FIXED_CATS[d.cat]] += m; }
-      else if (d.cat === "Recette invités") D.recettes += m;
-      else D.autres += m;
+      if (d.cat === "Essence") { D.essence += m; D.it.essence.push(d); }
+      else if (FIXED_CATS[d.cat]) { D.fixes += m; D.fx[FIXED_CATS[d.cat]] += m; D.it.fixes.push(d); }
+      else if (d.cat === "Recette invités") { D.recettes += m; D.it.recettes.push(d); }
+      else { D.autres += m; D.it.autres.push(d); }
     });
     moves.forEach(function (mv) { if (mv.type === "achat" && ys.indexOf(yearOf(mv)) >= 0) D.litres += Number(mv.litres) || 0; });
     if (bk === "new" && D.essence <= 0 && D.min > 0) { D.estime = true; D.litres = D.min / 60 * SPEC.conso; D.essence = D.litres * refPrixL(); }
@@ -1138,6 +1138,28 @@
     D.total = D.fixes + D.essence + D.autres + D.recettes + D.bateau + D.usure;
     D.fixedYear = (D.fixes + D.autres + D.recettes + D.bateau) / Math.max(1, ys.length); // part fixe d'une saison (pour la courbe)
     return D;
+  }
+  /* Détail d'un poste du coût (ligne touchée) : les dépenses qu'il contient, ou le calcul quand il n'y a pas de dépense */
+  function detItemsHtml(D, k) {
+    var row = function (lib, sub, m) { return '<div class="det-it"><span>' + lib + (sub ? '<span class="sub">' + sub + "</span>" : "") + '</span><b>' + eur.format(m) + "</b></div>"; };
+    var depRow = function (d) {
+      var moved = d.bateau && boatOf(yearOf(d)) !== d.bateau ? (d.bateau === "new" ? " · repris du Response 1993" : " · affecté au Response 1993") : "";
+      return row(esc(d.lib), esc(d.d || isoToFr(d.date)) + " · " + esc(d.cat) + " · payé par " + (FAM[d.payeur] ? FAM[d.payeur].s : "?") + moved, Number(d.m) || 0);
+    };
+    var list = function (a) { return a.slice().sort(function (x, y) { return dkey(x) < dkey(y) ? 1 : -1; }); }, h = "";
+    if (k === "essence" && D.estime) h = '<div class="small">Aucun achat d’essence saisi pour cette période : ' + int0.format(D.min) + " min moteur × " + SPEC.conso + " L/h = " + int0.format(D.litres) + " L, au prix moyen des achats déjà notés (" + dec2.format(refPrixL()) + " €/L).</div>";
+    else if (k === "usure") h = '<div class="small">' + eur0.format(SPEC.valMoteur) + " répartis sur les " + int0.format(SPEC.hVie - SPEC.hAchat) + " heures restantes du moteur, soit " + dec2.format(usureMin()) + " € par minute moteur × " + int0.format(D.min) + " min.</div>";
+    else if (k === "bateau" && D.bk === "new") {
+      h = '<div class="small">' + eur0.format(SPEC.prix) + " amortis sur " + SPEC.ans + " ans = " + eur0.format(amortAn()) + " par saison × " + D.years + " saison" + (D.years > 1 ? "s" : "") + ". Le moteur (" + eur0.format(SPEC.valMoteur) + ") est compté à part, en usure.</div>";
+      if (D.it.achat.length) h += '<div class="small muted">Paiements de l’achat notés dans les dépenses (déjà compris dans l’amortissement, non ajoutés) :</div>' + list(D.it.achat).map(depRow).join("");
+    } else if (k === "bateau") {
+      h = list(D.it.achat).map(depRow).join("") + row("Revente du bateau", "fiche technique (onglet Bateau)", -D.vente);
+      if (D.years < boatYears("old").length) h += '<div class="small muted">Achat moins revente réparti sur ' + boatYears("old").length + " saisons : " + eur.format(D.bateau) + " pour " + esc(D.ys.join(", ")) + ".</div>";
+    } else {
+      var a = list(D.it[k] || []);
+      h = a.length ? a.map(depRow).join("") : '<div class="small muted">Aucune dépense dans ce poste.</div>';
+    }
+    return '<div class="det-list">' + h + "</div>";
   }
   function perMin(v, min) { return min > 0 ? dec2.format(v / min) + " €" : "—"; }
   function renderBilan() {
@@ -1159,18 +1181,18 @@
       '<div class="kpi"><span class="label">Coût fixe</span><span class="v">' + perMin(D.total - D.essence - D.usure, D.min) + (D.min ? '<small> / min</small>' : "") + '</span><span class="s">assurance, taxes, entretien, ' + (bilanBoat === "old" ? "achat − revente" : "amortissement") + "</span></div>" +
       '<div class="kpi"><span class="label">Coût variable</span><span class="v">' + perMin(D.essence + D.usure, D.min) + (D.min ? '<small> / min</small>' : "") + '</span><span class="s">essence' + (D.estime ? " estimée" : "") + (D.usure ? " + usure moteur" : "") + "</span></div></div>") + "</div>";
     var lines = [
-      ["Coûts fixes", "assurance " + eur0.format(D.fx.assurance) + ", adhésions " + eur0.format(D.fx.adhesions) + ", taxes et corps mort " + eur0.format(D.fx.taxes), D.fixes],
-      ["Essence" + (D.estime ? " (estimée)" : ""), D.estime ? int0.format(D.litres) + " L à " + SPEC.conso + " L/h × " + dec2.format(refPrixL()) + " €/L" : int0.format(D.litres) + " L achetés", D.essence],
-      ["Entretien, réparations, matériel", "toutes les autres dépenses (hors achat du bateau)", D.autres]
+      ["Coûts fixes", "assurance " + eur0.format(D.fx.assurance) + ", adhésions " + eur0.format(D.fx.adhesions) + ", taxes et corps mort " + eur0.format(D.fx.taxes), D.fixes, "fixes"],
+      ["Essence" + (D.estime ? " (estimée)" : ""), D.estime ? int0.format(D.litres) + " L à " + SPEC.conso + " L/h × " + dec2.format(refPrixL()) + " €/L" : int0.format(D.litres) + " L achetés", D.essence, "essence"],
+      ["Entretien, réparations, matériel", "toutes les autres dépenses (hors achat du bateau)", D.autres, "autres"]
     ];
-    if (D.recettes) lines.push(["Recettes invités", "minutes facturées aux invités", D.recettes]);
-    if (bilanBoat === "old") lines.push(["Achat moins revente", "achat " + eur0.format(D.achat) + " − revente " + eur0.format(D.vente) + (bilanYear === "Toutes" ? "" : ", réparti sur " + boatYears("old").length + " saisons"), D.bateau]);
+    if (D.recettes) lines.push(["Recettes invités", "minutes facturées aux invités", D.recettes, "recettes"]);
+    if (bilanBoat === "old") lines.push(["Achat moins revente", "achat " + eur0.format(D.achat) + " − revente " + eur0.format(D.vente) + (bilanYear === "Toutes" ? "" : ", réparti sur " + boatYears("old").length + " saisons"), D.bateau, "bateau"]);
     else {
-      lines.push(["Amortissement bateau", eur0.format(SPEC.prix) + " sur " + SPEC.ans + " ans = " + eur0.format(amortAn()) + " par an", D.bateau]);
-      lines.push(["Usure moteur", eur0.format(SPEC.valMoteur) + " sur " + int0.format(SPEC.hVie - SPEC.hAchat) + " h (" + int0.format(SPEC.hAchat) + " → " + int0.format(SPEC.hVie) + " h)", D.usure]);
+      lines.push(["Amortissement bateau", eur0.format(SPEC.prix) + " sur " + SPEC.ans + " ans = " + eur0.format(amortAn()) + " par an", D.bateau, "bateau"]);
+      lines.push(["Usure moteur", eur0.format(SPEC.valMoteur) + " sur " + int0.format(SPEC.hVie - SPEC.hAchat) + " h (" + int0.format(SPEC.hAchat) + " → " + int0.format(SPEC.hVie) + " h)", D.usure, "usure"]);
     }
     h += '<div class="card">' + collHead("coutDet", "Détail du coût", "par poste, " + per) + (!ui.coutDet ? "" : '<table class="rtable"><thead><tr><th>Poste</th><th>Montant</th><th>€/min</th></tr></thead><tbody>' +
-      lines.map(function (l) { return "<tr><td>" + l[0] + '<span class="sub">' + l[1] + "</span></td><td>" + eur0.format(l[2]) + "</td><td>" + (D.min ? dec2.format(l[2] / D.min) : "—") + "</td></tr>"; }).join("") +
+      lines.map(function (l) { var op = ui.detK === l[3]; return '<tr class="det-click' + (op ? " open" : "") + '" data-detk="' + l[3] + '" aria-expanded="' + op + '"><td>' + TRI + l[0] + '<span class="sub">' + l[1] + "</span></td><td>" + eur0.format(l[2]) + "</td><td>" + (D.min ? dec2.format(l[2] / D.min) : "—") + "</td></tr>" + (op ? '<tr class="det-row"><td colspan="3">' + detItemsHtml(D, l[3]) + "</td></tr>" : ""); }).join("") +
       '<tr class="tot"><td>Coût total</td><td>' + eur0.format(D.total) + "</td><td>" + (D.min ? dec2.format(D.total / D.min) : "—") + "</td></tr></tbody></table>" +
       '<div class="small muted">' + (bilanBoat === "old" ? "Ancien bateau : dépenses jusqu’à fin 2025. Revente à " + eur0.format(D.vente) + " (modifiable dans la fiche technique, onglet Bateau)." : "Nouveau bateau : dépenses depuis 2026 ; amortissement et usure d’après la fiche technique (achat " + eur0.format(D.achat) + ").") + "</div>") + "</div>";
     if (bilanYear !== "Toutes" && D.curve.length) h += chartHtml(D, D.fixedYear, essM + usM);
@@ -1341,9 +1363,9 @@
         '<div class="field"><label for="cfMoi">Je suis</label><select id="cfMoi"><option value="">—</option>' + PEOPLE.filter(function (p) { return p.c !== "EXT"; }).map(function (p) { return '<option value="' + p.id + '"' + (p.id === CONF.moi ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div>" +
         '<div class="actions"><button class="btn" id="cfSave">Enregistrer et synchroniser</button>' + (conf ? '<button class="btn ghost" id="cfSync">Synchroniser</button>' : "") + "</div>" +
         '<div class="small muted">L’adresse et le code vous sont donnés par Yann. Ils restent sur ce téléphone.</div>';
-      h += '<div class="field"><label for="impFile">Importer un historique ou restaurer une sauvegarde (fichier .json)</label><input id="impFile" class="file-in" type="file" accept=".json,application/json"></div>' +
+      h += '<div class="field"><label for="impFile">Importer un historique ou restaurer une sauvegarde (fichier .json)</label><input id="impFile" class="file-in" type="file" accept=".json,application/json"' + (canValidate() ? "" : " disabled") + "></div>" + (canValidate() ? "" : RESERVE_TXT) +
         '<div class="small muted">' + (ETAT.importHistorique ? "Historique importé le " + esc(ETAT.importHistorique) + ". Un nouvel import remplace les mêmes lignes, sans doublon." : "Historique 2023-2025 : fichier historique.json. Restauration : fichier carnet-noskids-sauvegarde-….json.") + "</div>" +
-        '<div class="actions"><button class="btn ghost sm" id="bkDownload">Télécharger une sauvegarde</button><button class="btn ghost sm" id="purgeOpen" style="color:var(--bad)">Effacer des données…</button></div>';
+        '<div class="actions"><button class="btn ghost sm" id="bkDownload">Télécharger une sauvegarde</button>' + (canValidate() ? '<button class="btn ghost sm" id="purgeOpen" style="color:var(--bad)">Effacer des données…</button>' : "") + "</div>";
       if (view.purge) h += purgeHtml();
     }
     h += '<div class="actions"><button class="btn ghost sm" id="xlsExport">Exporter en Excel</button><button class="btn ghost sm" id="updCheck">Rechercher une mise à jour</button></div>' +
@@ -1513,6 +1535,9 @@
   }
   function starsHtml(n, size) { var s = '<span class="stars" role="img" aria-label="' + (n ? n + " étoile" + (n > 1 ? "s" : "") : "aucun grade") + '">'; for (var i = 1; i <= 4; i++) s += starSvg(i <= n, size); return s + "</span>"; }
   function canValidate() { return CONF.moi === "yann" || CONF.moi === "olivier"; }
+  /* Actions réservées à Yann et Olivier (choix « Je suis ») : effacer, importer ou restaurer, valider la balance, noter un virement */
+  var RESERVE_TXT = '<div class="small muted reserve">Réservé à Yann et Olivier (choix « Je suis » dans Bateau, Connexion et partage).</div>';
+  function reserveOk() { if (canValidate()) return true; toast("Réservé à Yann et Olivier."); return false; }
   /* Fiche pilote : modifiable par la personne elle-même (choix « Je suis »), Yann et Olivier modifient tout */
   function canEdit(p) { return canValidate() || (!!CONF.moi && !!p && CONF.moi === p.id); }
   /* Heures calculées à partir des sessions : tours, rôle à bord, pilotage. */
@@ -1760,6 +1785,8 @@
   document.querySelector(".tabs").addEventListener("click", function (e) { var b = e.target.closest("button[data-tab]"); if (b) goTab(b.dataset.tab); });
 
   screen.addEventListener("click", function (e) {
+    var trd = e.target.closest("tr[data-detk]");
+    if (trd) { ui.detK = ui.detK === trd.dataset.detk ? "" : trd.dataset.detk; return render(); } // détail du coût : ouvrir / fermer un poste
     var tr = e.target.closest("tr[data-ses]");
     if (tr) { ui.sesOpen = ui.sesOpen === tr.dataset.ses ? "" : tr.dataset.ses; return render(); } // liste des sessions : ouvrir / fermer le détail
     var b = e.target.closest("button"); if (!b || b.disabled || b.matches(":disabled")) return;
@@ -1869,10 +1896,10 @@
     if (ds.grade) { var pg = person(pilotSel); if (pg && canValidate()) { pg.grade = Number(ds.grade); pg.gradePar = person(CONF.moi).name; pg.gradeLe = todayFr(); toast(pg.name + " : " + GRADES[pg.grade - 1].label + " validé."); } return render(); }
     if (b.id === "gradeRetire") { var pr = person(pilotSel); if (pr && canValidate()) { pr.grade = 0; pr.gradePar = person(CONF.moi).name; pr.gradeLe = todayFr(); } return render(); }
     if (b.id === "bkDownload") { downloadBackup(); return; }
-    if (b.id === "purgeOpen") { view.purge = { scope: "depenses" }; return render(); }
+    if (b.id === "purgeOpen") { if (!reserveOk()) return; view.purge = { scope: "depenses" }; return render(); }
     if (b.id === "purgeCancel") { view.purge = null; return render(); }
     if (ds.pscope) { view.purge.scope = ds.pscope; return render(); }
-    if (b.id === "purgeGo") { return doPurge(); }
+    if (b.id === "purgeGo") { if (!reserveOk()) return; return doPurge(); }
     if (b.id === "backClose") { sortie.closing = false; return render(); }
     if (b.id === "tPlein") { sortie.plein = !sortie.plein; return render(); }
     if (ds.pleinf) { sortie.pleinF = ds.pleinf; return render(); }
@@ -1946,6 +1973,7 @@
     if (b.id === "dNew") { view.dep = true; return render(); }
     if (ds.bip) { balForm = balForm || {}; balForm.payeur = ds.bip; return render(); }
     if (b.id === "balValider") {
+      if (!reserveOk()) return;
       var RB = computeBalEss(); if (!RB.ready) return;
       var nS = RB.segs.reduce(function (a, g) { return a + g.sessions.length; }, 0);
       dettes.push({ id: uid(), kind: "essence", from: RB.from, to: RB.to, eur: RB.amount >= 0.5 ? RB.amount : 0, d: todayFr(), date: todayIso(), debut: RB.start, fin: RB.end, regle: RB.amount < 0.5,
@@ -1954,6 +1982,7 @@
       balForm = null; save(1); toast(savedMsg("Balance validée : " + balResultText(RB))); return render();
     }
     if (ds.balregle) {
+      if (!reserveOk()) return;
       var dr = dettes.filter(function (x) { return x.id === ds.balregle; })[0]; if (!dr) return;
       depenses.unshift({ id: uid(), d: todayFr(), lib: "Virement balance essence (" + FAM[dr.from].s + " → " + FAM[dr.to].s + ")", cat: REGL, m: Number(dr.eur), payeur: dr.from, regle: "regl", isNew: true });
       dr.regle = true; save(1); toast(savedMsg("Virement noté dans les dépenses.")); return render();
@@ -2058,6 +2087,7 @@
       return;
     }
     if (el.id === "impFile" && el.files && el.files[0]) {
+      if (!reserveOk()) { el.value = ""; return; }
       var rdr = new FileReader();
       rdr.onload = function () { try { var js = JSON.parse(rdr.result), n = importHistorique(js); toast(n + (js.annuaire && !js.sessions ? " contacts ajoutés à l’annuaire urgence." : js.format === "carnet-noskids-sauvegarde" ? " lignes restaurées depuis la sauvegarde." : " lignes d’historique importées.")); render(); } catch (er) { toast(er.message); } };
       rdr.readAsText(el.files[0]); return;
