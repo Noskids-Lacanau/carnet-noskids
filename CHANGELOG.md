@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.8.5 — 2026-11-23
+
+- Accueil : couleurs par nature (essence en orange, finances en violet léger, journal en post-it jaune), lisibles en mode jour et nuit
+- « Plein bateau » remplace « Remplissage bateau »
+
 ## 1.8.4 — 2026-11-23
 
 - Fiches pilotes : temps de tours 2024-2025 réparti entre wake et ski (Elsa 95 % wake, Baptiste 80 % wake, Yann 90 % slalom), réglable dans Pratique

@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.4", SCHEMA = 1;
+  var APP_VERSION = "1.8.5", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -617,7 +617,7 @@
     else h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">GO pour session</span><span class="qa-s">chrono par skieur</span></button>';
     // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
     h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat essence") +
-      qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Remplissage bateau") +
+      qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Plein bateau") +
       // 2e ligne : dépense et balance ; 3e ligne : quatre petits boutons
       qa("qa-dep qa-wide", 'data-depnew="1"', QI.euro, "Saisir une dépense") +
       qa("qa-bal qa-wide", 'data-fin="balance"', QI.balance, "Faire la balance", balanceText(balance()).replace(/\.$/, "")) +

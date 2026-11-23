@@ -725,3 +725,25 @@ tr.det-row td { padding: 4px 6px 10px 26px; background: var(--surface-2); }
 .det-it:first-child { border-top: 0; }
 .det-it .sub { display: block; }
 .det-it b { white-space: nowrap; font-weight: 600; }
+/* Accueil : couleurs homogènes par nature.
+   Essence (achat, remplissage) en orange, icône de la pompe sur jaune foncé ; finances (dépense, balance) dans le ton de la balance, € en vert ;
+   journal : icône jaune façon post-it. Les variantes nuit gardent les textes lisibles. */
+.qa-mise { background: #fff2e4; border-color: #f7d6b1; }
+.qa-mise .qa-ic { background: #d9a514; color: #2b2000; }
+.qa-dep { background: #eef0fb; border-color: #cfd5f1; }
+.qa-journal .qa-ic { background: #ffd84d; color: #4a3800; border-radius: 3px 3px 12px 3px; transform: rotate(-4deg); box-shadow: 2px 3px 0 rgba(120, 90, 0, .25); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .quick .qa-mise { background: linear-gradient(180deg, #4d2c12, #3a200b); border-color: #8f5626; --edge: #1f1005; color: #ffe8d2; }
+  :root:not([data-theme="light"]) .quick .qa-mise .qa-ic { background: #d9a514; color: #2b2000; }
+  :root:not([data-theme="light"]) .quick .qa-dep { background: linear-gradient(180deg, #252c52, #1a203d); border-color: #4b5698; --edge: #0b0e1e; color: #e3e7fb; }
+  :root:not([data-theme="light"]) .quick .qa-journal .qa-ic { background: #ffd84d; color: #4a3800; }
+}
+:root[data-theme="dark"] .quick .qa-mise { background: linear-gradient(180deg, #4d2c12, #3a200b); border-color: #8f5626; --edge: #1f1005; color: #ffe8d2; }
+:root[data-theme="dark"] .quick .qa-mise .qa-ic { background: #d9a514; color: #2b2000; }
+:root[data-theme="dark"] .quick .qa-dep { background: linear-gradient(180deg, #252c52, #1a203d); border-color: #4b5698; --edge: #0b0e1e; color: #e3e7fb; }
+:root[data-theme="dark"] .quick .qa-journal .qa-ic { background: #ffd84d; color: #4a3800; }.qa-achat .qa-ic { background: #dd6a0e; } /* orange un peu plus soutenu : icône blanche lisible (contraste > 3) */
+.relief .qa-mise { background: linear-gradient(180deg, #fff8f0, #ffe2c2); border-color: #e3a35f; --edge: #cf8740; } /* même orange que l'achat d'essence (boutons en relief) */
+/* Ligne 2 (finances) en mode jour : violet léger, plus soutenu, sur les deux boutons */
+.qa-dep, .qa-bal { background: #ece6ff; border-color: #b9aaf0; }
+.relief .qa-dep, .relief .qa-bal { background: linear-gradient(180deg, #f5f1ff, #ddd3fb); border-color: #a493e6; --edge: #8571d6; }
+.qa-bal .qa-s { color: #4b4378; } /* sous-titre lisible sur le violet (mode jour) */
