@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.6.3", SCHEMA = 1;
+  var APP_VERSION = "1.6.4", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -1377,7 +1377,10 @@
     notes.forEach(function (n) {
       var isNew = (n.date || "") > seen && n.auteur !== CONF.moi;
       h += '<div class="note-row"><div class="note-h"><span class="note-tag ' + (NOTE_SEV[n.cat] || "") + '">' + esc(n.cat) + "</span>" + (isNew ? '<span class="note-new">nouvelle</span>' : "") + '<span class="small muted">' + fmtDateTime(n.date) + " · " + esc(n.auteurNom || "?") + "</span></div>" +
-        (n.txt ? '<div class="note-txt">' + esc(n.txt).replace(/\n/g, "<br>") + "</div>" : "") + "</div>";
+        (n.txt ? '<div class="note-txt">' + esc(n.txt).replace(/\n/g, "<br>") + "</div>" : "") +
+        (ui.noteDel === n.id
+          ? '<div class="alert bad note-del"><b>Effacer cette note ?</b>Elle disparaîtra aussi des autres téléphones.<div class="actions"><button class="btn ghost sm" data-notedel="">Non</button><button class="btn stop sm" data-notedelok="' + esc(n.id) + '">Oui, effacer</button></div></div>'
+          : '<button class="btn link note-x" data-notedel="' + esc(n.id) + '">Effacer</button>') + "</div>";
     });
     LS.set("notesVues", nowIso()); // ouvertes : la pastille de l'accueil disparaît
     return h + "</div>";
@@ -1543,6 +1546,8 @@
     if (ds.pdel !== undefined) { docPending.splice(Number(ds.pdel), 1); return render(); }
     if (b.id === "pendCancel") { docPending = []; return render(); }
     if (b.id === "pendSend") { var items = docPending.slice(); docPending = []; addDocs(items); return; }
+    if (ds.notedel !== undefined) { ui.noteDel = ds.notedel; return render(); }
+    if (ds.notedelok) { notes = notes.filter(function (n) { return n.id !== ds.notedelok; }); ui.noteDel = ""; toast("Note effacée."); return render(); }
     if (b.id === "noteSave") {
       var nt = document.getElementById("nTxt").value.trim(), au = person(noteForm.auteur);
       if (!au) { toast("Indiquez qui écrit la note."); return; }

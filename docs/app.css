@@ -623,3 +623,6 @@ body.app-mode .screen { padding-left: max(12px, env(safe-area-inset-left, 0px));
 :root[data-theme="dark"] .ess-acts .ess-btn:disabled { opacity: .45; }
 :root[data-theme="dark"] .app-head.h-depenses { color: #14532d; }
 .ses-list .todo { color: var(--warn); font-weight: 700; }
+.note-x { justify-self: start; padding: 0; font-size: 12.5px; color: var(--muted); }
+.note-x:hover { color: var(--bad); }
+.note-del { margin-top: 4px; }

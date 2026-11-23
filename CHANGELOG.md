@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.6.4 — 2026-11-23
+
+- Journal - Notes : effacer une note, après confirmation (l'effacement se propage aux autres téléphones)
+- Serveur 1.2.0 (à recoller et redéployer dans Apps Script) : un e-mail aux destinataires à chaque nouvelle note ; adresses réglées par le menu Carnet Noskids > Destinataires des notes
+
 ## 1.6.3 — 2026-11-23
 
 - Saison 2026 saisie en un bloc (import saison-2026.json) : rappel sur l'accueil, mention « à compléter » dans la liste des sessions et note dans le détail

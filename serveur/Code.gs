@@ -5,7 +5,7 @@
  *
  * Installation (une seule fois) : voir README.md, partie « Mise en production ».
  */
-var VERSION_SERVEUR = '1.1.0';
+var VERSION_SERVEUR = '1.2.0';
 var TABLES = ['personnes', 'sessions', 'bidons', 'dettes', 'mouvements', 'depenses', 'documents', 'entretien', 'parametres', 'etat'];
 var COLONNES_FIXES = ['id', 'modifie_le', 'recu_le', 'supprime', 'par', 'json'];
 var DOSSIER_DOCUMENTS = 'Carnet Noskids – documents';
@@ -15,6 +15,8 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('Carnet Noskids')
     .addItem('Installer les feuilles', 'installer')
     .addItem('Définir le code famille', 'definirCodeFamille')
+    .addItem('Destinataires des notes (e-mail)', 'definirDestinatairesNotes')
+    .addItem('Tester l’envoi d’une note par e-mail', 'testerEnvoiNote')
     .addToUi();
 }
 
@@ -98,7 +100,7 @@ function push_(records) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet(), recu = maintenant_(), parTable = {}, acceptes = 0;
+    var ss = SpreadsheetApp.getActiveSpreadsheet(), recu = maintenant_(), parTable = {}, acceptes = 0, nouvellesNotes = [];
     records.forEach(function (r) { if (TABLES.indexOf(r.table) >= 0 && r.id) (parTable[r.table] = parTable[r.table] || []).push(r); });
     Object.keys(parTable).forEach(function (t) {
       var sh = feuille_(ss, t), head = entetes_(sh);
@@ -122,6 +124,7 @@ function push_(records) {
           if (h === 'json') return JSON.stringify(rec);
           return lisible_(rec[h]);
         });
+        if (t === 'etat' && rec.kind === 'note' && !rec.deleted && i === undefined) nouvellesNotes.push(rec); // nouvelle note du journal : e-mail après l'enregistrement
         if (i !== undefined) data[i] = row; else { index[rec.id] = data.length; data.push(row); }
         acceptes++;
       });
@@ -129,6 +132,7 @@ function push_(records) {
       sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold');
       if (data.length) sh.getRange(2, 1, data.length, head.length).setValues(data);
     });
+    if (nouvellesNotes.length) { try { envoyerNotes_(nouvellesNotes); } catch (err) { console.error('E-mail des notes : ' + err); } } // un échec d'envoi ne bloque jamais la synchronisation
     return { ok: true, accepted: acceptes, serverTime: recu };
   } finally {
     lock.releaseLock();
@@ -169,4 +173,34 @@ function upload_(p) {
   var f = dossier.createFile(blob);
   if (p.cat) f.setDescription(p.cat + (p.y ? ' · ' + p.y : ''));
   return { ok: true, url: f.getUrl(), fileId: f.getId() };
+}
+
+/* ---------- Journal : un e-mail aux destinataires à chaque nouvelle note ----------
+   Les adresses sont gardées dans les propriétés du script (menu Carnet Noskids > Destinataires des notes),
+   jamais dans ce code, qui est public sur GitHub. */
+var ADRESSE_APP = 'https://noskids-lacanau.github.io/carnet-noskids/';
+function definirDestinatairesNotes() {
+  var ui = SpreadsheetApp.getUi(), actuel = PropertiesService.getScriptProperties().getProperty('NOTES_EMAILS') || '';
+  var r = ui.prompt('Destinataires des notes', 'Adresses e-mail séparées par des virgules (actuellement : ' + (actuel || 'aucune') + ').', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var liste = r.getResponseText().split(/[,;\s]+/).filter(function (a) { return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(a); });
+  PropertiesService.getScriptProperties().setProperty('NOTES_EMAILS', liste.join(','));
+  ui.alert(liste.length ? 'Les notes seront envoyées à : ' + liste.join(', ') : 'Aucune adresse valide : aucun e-mail ne sera envoyé.');
+}
+function envoyerNotes_(notes) {
+  var dest = PropertiesService.getScriptProperties().getProperty('NOTES_EMAILS');
+  if (!dest) return;
+  notes.forEach(function (n) {
+    var quand = n.date ? Utilities.formatDate(new Date(n.date), 'Europe/Paris', "dd/MM/yyyy 'à' HH:mm") : '';
+    var sujet = 'Carnet Noskids – ' + (n.cat || 'Note') + (n.auteurNom ? ' (' + n.auteurNom + ')' : '');
+    var corps = (n.cat || 'Note') + '\n' + 'Par ' + (n.auteurNom || '?') + (quand ? ', le ' + quand : '') + '\n\n' + (n.txt || '(sans texte)') + '\n\n' + 'Journal - Notes : ' + ADRESSE_APP;
+    MailApp.sendEmail({ to: dest, subject: sujet, body: corps, name: 'Carnet Noskids' });
+  });
+}
+/* À lancer une fois depuis l'éditeur ou le menu : autorise l'envoi d'e-mails et envoie une note d'essai. */
+function testerEnvoiNote() {
+  var dest = PropertiesService.getScriptProperties().getProperty('NOTES_EMAILS');
+  if (!dest) { SpreadsheetApp.getUi().alert('Définissez d’abord les destinataires (menu Carnet Noskids > Destinataires des notes).'); return; }
+  envoyerNotes_([{ cat: 'Essai', auteurNom: 'Carnet Noskids', date: maintenant_(), txt: 'Ceci est un e-mail d’essai : les nouvelles notes du journal arriveront ainsi.' }]);
+  SpreadsheetApp.getUi().alert('E-mail d’essai envoyé à : ' + dest);
 }
