@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.0", SCHEMA = 1;
+  var APP_VERSION = "1.8.1", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -613,7 +613,7 @@
   function quickHtml(now) {
     var unread = unreadNotes(), h = '<div class="quick' + (RELIEF ? " relief" : "") + '">';
     if (sortie.active) h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Session en cours</span><span class="qa-s">moteur ' + (sortie.engine === "on" ? "en route" : "arrêté") + ' · <b data-timer="engine">' + fmtClock(engineMs(now)) + "</b> · ouvrir</span></button>";
-    else h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Démarrer une session</span><span class="qa-s">chrono par skieur</span></button>';
+    else h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">GO pour session</span><span class="qa-s">chrono par skieur</span></button>';
     // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
     h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat essence", int0.format(stockL()) + " L en bidons") +
       qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Remplissage bateau") +
@@ -1155,7 +1155,9 @@
       '<div class="kpi"><span class="label">Minutes de tours</span><span class="v">' + int0.format(D.tour) + ' min</span><span class="s">' + (D.tour ? perMin(D.total, D.tour) + " par minute de tour" : "skieurs, wake, bouée") + "</span></div>" +
       '<div class="kpi"><span class="label">' + (D.estime ? "Litres estimés" : "Litres achetés") + '</span><span class="v">' + int0.format(D.litres) + ' L</span><span class="s">' + (D.estime ? SPEC.conso + " L/h tant que l’essence n’est pas renseignée" : D.min ? dec1.format(D.litres / (D.min / 60)) + " L/h constatés" : "") + "</span></div>" +
       '<div class="kpi"><span class="label">Coût fixe annuel</span><span class="v">' + eur0.format(D.fixes / Math.max(1, D.years)) + '</span><span class="s">assurance, adhésions, taxes</span></div>' +
-      '<div class="kpi"><span class="label">Coût variable</span><span class="v">' + perMin(D.essence, D.min) + '</span><span class="s">essence par minute moteur' + (D.estime ? " (estimée)" : "") + "</span></div></div>") + "</div>";
+      // coût par minute moteur, en deux parts : fixe (ne dépend pas du temps passé sur l'eau) et variable (essence, usure moteur) ; fixe + variable = coût total par minute
+      '<div class="kpi"><span class="label">Coût fixe</span><span class="v">' + perMin(D.total - D.essence - D.usure, D.min) + (D.min ? '<small> / min</small>' : "") + '</span><span class="s">assurance, taxes, entretien, ' + (bilanBoat === "old" ? "achat − revente" : "amortissement") + "</span></div>" +
+      '<div class="kpi"><span class="label">Coût variable</span><span class="v">' + perMin(D.essence + D.usure, D.min) + (D.min ? '<small> / min</small>' : "") + '</span><span class="s">essence' + (D.estime ? " estimée" : "") + (D.usure ? " + usure moteur" : "") + "</span></div></div>") + "</div>";
     var lines = [
       ["Coûts fixes", "assurance " + eur0.format(D.fx.assurance) + ", adhésions " + eur0.format(D.fx.adhesions) + ", taxes et corps mort " + eur0.format(D.fx.taxes), D.fixes],
       ["Essence" + (D.estime ? " (estimée)" : ""), D.estime ? int0.format(D.litres) + " L à " + SPEC.conso + " L/h × " + dec2.format(refPrixL()) + " €/L" : int0.format(D.litres) + " L achetés", D.essence],
@@ -1349,7 +1351,7 @@
     return h + "</div>";
   }
   function renderBateau() {
-    var h = '<div class="card boat-hero img-boat" role="img" aria-label="Photo du bateau"><div class="cap"><b>' + esc(SPEC.devise) + "</b>" + esc(SPEC.modele) + " " + SPEC.annee + " · " + esc(SPEC.moteur.split(",")[0]) + "</div></div>";
+    var h = '<div class="card boat-hero img-boat" role="img" aria-label="Photo du bateau"><div class="cap"><b>' + esc(SPEC.devise) + "</b>" + esc(SPEC.modele) + " " + SPEC.annee + " · " + esc(SPEC.moteur.split(",")[0].replace(/\s*\([^)]*\)/g, "")) + "</div></div>";
     var pils = PEOPLE.filter(function (p) { return !p.hidden; }), graded = pils.filter(function (p) { return p.grade; }).length;
     h += '<div class="boat-links' + (RELIEF ? " relief" : "") + '"><button class="card link-card pilot-banner" data-go="pilotes"><span class="pb-ic" aria-hidden="true">' + WHEEL_ICON + '</span><span><b>Pilotes</b><span class="small">' + pils.length + " personnes · " + graded + " grade" + (graded > 1 ? "s" : "") + "</span></span>" + '<span class="chev" aria-hidden="true">›</span></button>';
     var nAnn = (SPEC.annuaire || []).length;

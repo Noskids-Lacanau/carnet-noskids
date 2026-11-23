@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.8.1 — 2026-11-23
+
+- Accueil : « GO pour session » avec l'icône centrée en turquoise ; achat essence et remplissage de même hauteur
+- Synthèse : coût fixe et coût variable par minute côte à côte, avec « / min »
+- Photo du bateau : nom en haut à droite, sans la puissance en kW
+
 ## 1.8.0 — 2026-11-23
 
 - Activité : synthèse par bateau (Noskids / Response 1993), coût total, litres, minutes, coût par minute, coût fixe annuel

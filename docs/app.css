@@ -703,3 +703,12 @@ fieldset.pf-lock:disabled .chip, fieldset.pf-lock:disabled select, fieldset.pf-l
 a.sheet-link { text-decoration: none; color: inherit; display: flex; justify-content: space-between; align-items: center; }
 /* Accueil : achat essence et remplissage un peu moins hauts, alignés en bas sur « Démarrer une session » */
 .qa-mid { min-height: 104px; align-self: end; }
+/* Accueil : achat essence et remplissage de même hauteur ; « GO pour session » avec l'icône centrée, turquoise */
+.qa-mid { height: 108px; min-height: 0; overflow: hidden; }
+.qa-mid .qa-t { line-height: 1.1; }
+.qa-session .qa-ic { justify-self: center; background: #14b5c8; color: #fff; box-shadow: 0 4px 12px -4px rgba(0, 0, 0, .45); }
+/* Photo du bateau : nom et modèle en petit, en haut à droite, pour mieux voir le bateau */
+.boat-hero .cap { left: auto; right: 10px; top: 10px; bottom: auto; padding: 6px 10px; text-align: right; font-size: 11.5px; line-height: 1.3; border-radius: 10px; background: rgba(8, 20, 28, .55); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.boat-hero .cap b { font-size: 18px; letter-spacing: .05em; }
+/* Synthèse : unité « / min » à côté du montant */
+.kpi .v small { font-size: .52em; font-weight: 600; color: var(--muted); letter-spacing: 0; }
