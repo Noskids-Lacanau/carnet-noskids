@@ -398,3 +398,189 @@ body.app-mode .screen { padding-left: max(12px, env(safe-area-inset-left, 0px));
 .perm .chk input { width: 17px; height: 17px; accent-color: var(--accent); margin: 0; }
 .tiny { font-size: 10.5px; color: var(--muted); }
 .sub-h { font: 700 15px var(--f-display); letter-spacing: .04em; text-transform: uppercase; color: var(--accent); margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+
+/* Téléphone (fiche pilote) et annuaire urgence */
+.tel-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mini-tel { font: 500 12.5px var(--f-body); padding: 4px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-2); color: var(--ink); width: 150px; max-width: 100%; }
+.call { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 99px; background: var(--ok-soft); color: var(--ok); font: 600 12.5px var(--f-body); text-decoration: none; white-space: nowrap; }
+.call:hover { background: var(--ok); color: #fff; }
+.ph-ic { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.urg-banner { background: #c62828; color: #fff; border-color: #a51f1f; justify-content: flex-start; }
+.urg-banner > span:nth-child(2) { flex: 1; display: grid; gap: 2px; }
+.urg-banner .small { color: #ffd9d6; }
+.urg-banner .chev { color: #fff; border-color: #fff; background: transparent; }
+.urg-banner:hover { border-color: #fff; }
+.urg-ic { flex: none; width: 42px; height: 42px; border-radius: 12px; background: #fff; color: #c62828; display: grid; place-items: center; }
+.urg-ic svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.app-head.h-annuaire { background: #c62828; color: #fff; }
+.app-head.h-annuaire .hv.urg-ic { width: 38px; height: 38px; border-radius: 10px; }
+.urg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.urg-big { display: grid; gap: 1px; padding: 10px 12px; border-radius: 12px; background: var(--bad-soft); color: var(--bad); text-decoration: none; border: 1px solid transparent; }
+.urg-big b { font: 700 26px var(--f-display); line-height: 1; }
+.urg-big span { font-size: 12px; color: var(--ink); }
+.urg-big:hover { border-color: var(--bad); }
+.ann-g { font: 700 13px var(--f-display); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-top: 12px; padding-bottom: 2px; border-bottom: 1px solid var(--line); }
+.ann-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ann-row:last-child { border-bottom: 0; }
+.ann-row > span:first-child { min-width: 0; }
+.ann-edit { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ann-edit input:nth-child(1) { grid-column: 1 / 3; }
+.ann-edit .x { grid-row: 1; grid-column: 3; }
+
+/* Bandeau de l'accueil : sport de glisse */
+.app-head { position: relative; overflow: hidden; }
+.app-head.h-accueil { background: linear-gradient(115deg, #0a4f7a 0%, #0f86b8 48%, #22b3c6 78%, #f2a65a 118%); color: #fff; border-bottom: 0; }
+.app-head.h-accueil .net { background: rgba(255, 255, 255, .88); }
+.app-head.h-accueil .logo { filter: brightness(0) invert(1); }
+.head-deco { position: absolute; inset: 0; pointer-events: none; }
+.head-deco .hd-waves { position: absolute; inset: 0; width: 100%; height: 100%; }
+.head-deco .hd-fig { position: absolute; right: 80px; top: 2px; bottom: 0; height: calc(100% - 2px); width: auto; }
+#hTitle, #hThumb, .app-head .net, .app-head .logo, .app-head .hv { position: relative; z-index: 1; }
+
+/* Accueil : boutons d'accès direct, deux par ligne */
+.quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.qa { position: relative; display: grid; align-content: start; justify-items: start; gap: 2px; padding: 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-align: left; font: inherit; cursor: pointer; min-height: 96px; box-shadow: 0 8px 18px -14px rgba(8, 30, 40, .55); transition: transform .12s; }
+.qa:active { transform: scale(.97); }
+.qa-ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 6px; }
+.qa-ic svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.qa-t { font: 700 17px var(--f-display); letter-spacing: .02em; line-height: 1.1; }
+.qa-s { font-size: 11.5px; color: var(--muted); }
+.qa-session { grid-column: 1 / -1; min-height: 120px; background: #1c2b36 url("img/ski.jpg") no-repeat; background-size: cover; background-position: 30% 40%; color: #fff; border: 0; overflow: hidden; align-content: end; }
+.qa-session::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8, 20, 28, .78) 0%, rgba(8, 20, 28, .25) 70%, rgba(8, 20, 28, 0) 100%); }
+.qa-session > * { position: relative; }
+.qa-session .qa-ic { background: var(--run); color: #fff; }
+.qa-session .qa-ic svg { fill: currentColor; stroke: none; }
+.qa-session .qa-t { font-size: 22px; }
+.qa-session .qa-s { color: #ffe2c4; }
+.qa-achat { background: #fdecea; border-color: #f6c9c4; } .qa-achat .qa-ic { background: #c62828; color: #fff; }
+.qa-mise { background: #e3f3fa; border-color: #bfe2f1; } .qa-mise .qa-ic { background: #0f86b8; color: #fff; }
+.qa-urg { background: #c62828; border-color: #a51f1f; color: #fff; } .qa-urg .qa-ic { background: #fff; color: #c62828; } .qa-urg .qa-s { color: #ffd9d6; }
+.qa-hist { background: #eef1f5; border-color: #d6dde5; } .qa-hist .qa-ic { background: #5c7286; color: #fff; }
+.qa-stats { background: #ecefe9; border-color: #d4dacd; } .qa-stats .qa-ic { background: #1f2a33; color: #d6dade; }
+.qa-journal { background: #e8f0f6; border-color: #c9dbe8; } .qa-journal .qa-ic { background: #1e4d6b; color: #fff; }
+.qa-dot { position: absolute; top: 10px; right: 10px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 99px; background: #e53935; color: #fff; font: 700 12px var(--f-body); display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface); }
+.btn.center-btn { justify-self: center; width: auto; padding-left: 30px; padding-right: 30px; }
+
+/* Journal - Notes */
+.app-head.h-journal { background: #1e4d6b; color: #fff; }
+.app-head.h-journal .net { background: rgba(255, 255, 255, .88); }
+#nTxt { width: 100%; font: 15px var(--f-body); padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); resize: vertical; }
+.note-row { padding: 10px 0; border-top: 1px solid var(--line); display: grid; gap: 5px; }
+.note-row:first-of-type { border-top: 0; }
+.note-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.note-tag { font: 600 11.5px var(--f-body); padding: 3px 9px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); }
+.note-tag.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.note-tag.warn { background: var(--warn-soft); color: var(--ink); border-color: transparent; }
+.note-new { font: 700 10.5px var(--f-body); color: #fff; background: #e53935; padding: 2px 7px; border-radius: 99px; text-transform: uppercase; letter-spacing: .04em; }
+.note-txt { font-size: 14px; }
+
+/* Icône volant (Pilotes) */
+.pb-ic svg.wheel { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+
+/* Accueil v2 : ligne de 3 (session double largeur), puis ligne de 4 petits boutons */
+.quick { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.qa-session { grid-column: span 2; min-height: 128px; padding: 12px; }
+.qa-session .qa-t { font-size: 20px; }
+.qa-mid, .qa-sm { justify-items: center; align-content: center; text-align: center; padding: 10px 6px; }
+.qa-mid { min-height: 128px; }
+.qa-mid .qa-t { font-size: 15px; }
+.qa-mid .qa-s { font-size: 10.5px; }
+.qa-sm { min-height: 84px; gap: 0; border-radius: 14px; }
+.qa-sm .qa-ic { width: 34px; height: 34px; border-radius: 10px; margin-bottom: 5px; }
+.qa-sm .qa-ic svg { width: 19px; height: 19px; }
+.qa-sm .qa-t { font-size: 12.5px; line-height: 1.15; }
+.qa-sm .qa-dot { top: 5px; right: 5px; min-width: 19px; height: 19px; font-size: 11px; }
+/* Couleurs : essence en orange, urgence inversée (téléphone rouge sur fond clair) */
+.qa-achat { background: #fff2e4; border-color: #f7d6b1; } .qa-achat .qa-ic { background: #ef7d22; color: #fff; }
+.qa-urg { background: #fdeceb; border-color: #f4c3bf; color: #8e1b1b; } .qa-urg .qa-ic { background: #fff; color: #c62828; box-shadow: inset 0 0 0 1.5px #f4c3bf; } .qa-urg .qa-s { color: #b4534d; }
+/* Logo Malibu doré clair, d'une seule couleur (celle du « l ») sur le bandeau de l'accueil : le PNG sert de masque */
+.app-head.h-accueil .logo { filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .45)); background: url("img/logo-malibu-or.png") left center / contain no-repeat; -webkit-mask: none; mask: none; width: 132px; height: 36px; }
+.qa-mid .qa-t, .qa-sm .qa-t { overflow-wrap: anywhere; hyphens: auto; }
+@media (max-width: 420px) { .qa-mid { padding: 10px 4px; } .qa-mid .qa-t { font-size: 12.5px; } .qa-sm { padding: 8px 3px; } .qa-sm .qa-t { font-size: 11.5px; } .qa-session .qa-t { font-size: 18px; } }
+
+/* Session : étapes numérotées, vérifications, bouton de démarrage, jauge réduite de 20 % */
+.step { display: flex; align-items: flex-start; gap: 8px; font-weight: 600; font-size: 14px; margin: 4px 0 8px; }
+.step b { flex: none; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; font: 700 13px var(--f-body); }
+.checks { display: grid; gap: 8px; margin-top: 2px; }
+.checks .chk { display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); }
+.checks .chk input { width: 20px; height: 20px; accent-color: var(--accent); margin: 0; }
+.btn.go-start { display: flex; align-items: center; justify-content: center; gap: 12px; text-align: left; }
+.go-start .gs-n { width: 30px; height: 30px; border-radius: 50%; background: rgba(255, 255, 255, .25); display: grid; place-items: center; font: 700 16px var(--f-body); flex: none; }
+.go-start small { display: block; font: 500 12px var(--f-body); opacity: .85; margin-top: 1px; }
+.gauge-sm .gauge svg, .screen .gauge svg:not([data-ro]) { max-width: 184px; }
+/* Essence : gros boutons avec les icônes de l'accueil, totaux, mouvements repliables */
+.ess-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ess-btn { display: flex; align-items: center; gap: 10px; padding: 14px 12px; border-radius: 14px; border: 1px solid var(--line); font: 700 16px var(--f-display); letter-spacing: .02em; cursor: pointer; text-align: left; min-height: 70px; color: var(--ink); }
+.ess-btn .qa-ic { margin: 0; flex: none; }
+.ess-btn:disabled { opacity: .5; cursor: default; }
+.ess-achat { background: #fff2e4; border-color: #f7d6b1; } .ess-achat .qa-ic { background: #ef7d22; color: #fff; }
+.ess-mise { background: #e3f3fa; border-color: #bfe2f1; } .ess-mise .qa-ic { background: #0f86b8; color: #fff; }
+.small-chips .chip { padding: 5px 10px; font-size: 12.5px; }
+.kpis-in { margin-top: 10px; }
+/* Photo du compteur (fin de session, détail d'une session) */
+.meter-card { display: grid; gap: 8px; }
+.cpt-photo { width: 100%; max-width: 340px; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.photo-btn { justify-self: start; cursor: pointer; }
+.ses-list tr.ses-click { cursor: pointer; }
+.ses-list tr.ses-click:hover td, .ses-list tr.ses-click.open td { background: var(--surface-2); }
+.ses-list tr.ses-det td { text-align: left; background: var(--surface-2); padding: 8px 10px 12px; font-family: var(--f-body); color: var(--ink); width: auto; }
+.ses-info { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; margin-bottom: 8px; }
+
+/* Jauge : lecture sur la ligne du titre */
+.g-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.g-head .g-read { font: 500 13px var(--f-body); color: var(--muted); margin: 0; }
+.g-head .g-read b { color: var(--ink); }
+/* J'ai versé des bidons : bleu franc, texte blanc (moins ton sur ton) */
+.ess-mise { background: #0f86b8; border-color: #0b6f99; color: #fff; }
+.ess-mise .qa-ic { background: #fff; color: #0f86b8; }
+.ess-btn { box-shadow: 0 8px 18px -14px rgba(8, 30, 40, .6); }
+/* Annuaire : personnes en retrait sous leur groupe, formulaire d'ajout */
+.ann-row.ind { padding-left: 14px; }
+.ann-new { margin-top: 10px; display: grid; gap: 2px; }
+/* Bandeau Essence : couleur douce (pêche), la pompe reste rouge */
+.app-head.h-essence { background: #fde4cc; color: #6b2e0e; }
+.app-head.h-essence .net { background: rgba(255, 255, 255, .85); }
+
+/* Boutons Essence en relief : bords épais, dégradé, tranche colorée dessous, enfoncement au toucher */
+.ess-btn { border-width: 2px; border-style: solid; box-shadow: 0 4px 0 var(--edge, #b9c4cc), 0 12px 18px -10px rgba(8, 30, 40, .5), inset 0 1px 0 rgba(255, 255, 255, .75); transition: transform .08s, box-shadow .08s; margin-bottom: 4px; }
+.ess-btn:not(:disabled):active { transform: translateY(3px); box-shadow: 0 1px 0 var(--edge, #b9c4cc), 0 6px 10px -8px rgba(8, 30, 40, .5), inset 0 1px 0 rgba(255, 255, 255, .6); }
+.ess-btn .qa-ic { box-shadow: 0 2px 4px rgba(0, 0, 0, .18); }
+.ess-achat { background: linear-gradient(180deg, #fff8f0 0%, #ffe2c2 100%); border-color: #e3a35f; --edge: #cf8740; }
+.ess-mise { background: linear-gradient(180deg, #23a6d8 0%, #0b72a0 100%); border-color: #075d83; --edge: #054c6b; box-shadow: 0 4px 0 var(--edge), 0 12px 18px -10px rgba(8, 30, 40, .55), inset 0 1px 0 rgba(255, 255, 255, .35); }
+.ess-btn:disabled { box-shadow: 0 2px 0 var(--edge, #b9c4cc); }
+/* Bandeau Session : bleu profond sous les rubans de lumière */
+.app-head.h-sortie { background: linear-gradient(100deg, #0a2f4a 0%, #0d5683 45%, #117aa6 75%, #0f8f8a 100%); color: #fff; border-bottom: 0; }
+.app-head.h-sortie .net { background: rgba(255, 255, 255, .88); }
+.app-head .thumb { position: relative; z-index: 1; }
+
+/* Bandeaux Essence (orangé) et Activité (violet) sous les rubans de lumière */
+.app-head.h-essence { background: linear-gradient(100deg, #5a1c0c 0%, #9c3418 42%, #cf5a26 72%, #e8933a 100%); color: #fff; border-bottom: 0; }
+.app-head.h-essence .net { background: rgba(255, 255, 255, .88); }
+.app-head.h-bilan { background: linear-gradient(100deg, #24103f 0%, #45207a 42%, #6e2f9a 72%, #a8327a 100%); color: #fff; border-bottom: 0; }
+.app-head.h-bilan .net { background: rgba(255, 255, 255, .88); }
+.app-head.h-bilan .hv { background: rgba(255, 255, 255, .92) !important; color: #45207a !important; }
+
+/* Relief des boutons (accueil, bandeaux Pilotes et Urgence) : réversible avec RELIEF = false dans app.js */
+.relief .qa, .relief .link-card { border-width: 2px; border-style: solid; box-shadow: 0 4px 0 var(--edge, #b9c4cc), 0 12px 18px -10px rgba(8, 30, 40, .5), inset 0 1px 0 rgba(255, 255, 255, .7); transition: transform .08s, box-shadow .08s; margin-bottom: 4px; }
+.relief .qa:active, .relief .link-card:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--edge, #b9c4cc), 0 6px 10px -8px rgba(8, 30, 40, .5), inset 0 1px 0 rgba(255, 255, 255, .6); }
+.relief .qa .qa-ic, .relief .link-card .pb-ic { box-shadow: 0 2px 4px rgba(0, 0, 0, .18); }
+.relief .qa-session { border-color: #0d1b24; --edge: #05121a; box-shadow: 0 4px 0 var(--edge), 0 12px 18px -10px rgba(8, 30, 40, .6), inset 0 1px 0 rgba(255, 255, 255, .25); }
+.relief .qa-achat { background: linear-gradient(180deg, #fff8f0, #ffe2c2); border-color: #e3a35f; --edge: #cf8740; }
+.relief .qa-mise { background: linear-gradient(180deg, #f1fafe, #d3ecf7); border-color: #8cc7e0; --edge: #5fa9c9; }
+.relief .qa-stats { background: linear-gradient(180deg, #f6f7f4, #e3e7de); border-color: #b9c1ae; --edge: #9aa38e; }
+.relief .qa-hist { background: linear-gradient(180deg, #f6f8fa, #e1e7ee); border-color: #b4c0cd; --edge: #93a2b2; }
+.relief .qa-journal { background: linear-gradient(180deg, #f3f8fb, #dbe8f1); border-color: #a6c3d8; --edge: #7fa4bf; }
+.relief .qa-urg { background: linear-gradient(180deg, #fff6f5, #fbdcd9); border-color: #eba7a1; --edge: #d9827b; }
+/* Bateau : Pilotes et Urgence côte à côte, plus courts */
+.boat-links { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.boat-links .link-card { padding: 10px; gap: 8px; min-height: 64px; }
+.boat-links .link-card b { font-size: 16.5px; }
+.boat-links .link-card .small { font-size: 11px; line-height: 1.25; }
+.boat-links .pb-ic { width: 36px; height: 36px; border-radius: 10px; }
+.boat-links .pb-ic svg { width: 22px; height: 22px; }
+.boat-links .chev { display: none; }
+.relief .pilot-banner { background: linear-gradient(180deg, #ffd765, #f2b92e); border-color: #c99412; --edge: #a87a0a; }
+.relief .urg-banner { background: linear-gradient(180deg, #e04040, #b71f1f); border-color: #8f1818; --edge: #6e1010; box-shadow: 0 4px 0 var(--edge), 0 12px 18px -10px rgba(8, 30, 40, .55), inset 0 1px 0 rgba(255, 255, 255, .3); }
+/* Bandeau de l'accueil : bleu nuit sous les voiles colorés */
+.app-head.h-accueil { background: linear-gradient(100deg, #081428 0%, #101c3c 50%, #1a1636 100%); }
+.app-head.h-accueil .ht:empty { visibility: hidden; }

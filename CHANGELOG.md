@@ -1,5 +1,17 @@
 # Journal des versions
 
+## 1.6.0 — 2026-11-23
+
+- Accueil : boutons d'accès direct en relief (session, achat essence, remplissage, statistiques, historique, journal, contact urgence) ; bandeau redessiné et logo Malibu doré.
+- Journal - Notes : date et auteur automatiques, nature au choix, historique, pastille rouge pour les nouvelles notes.
+- Urgence - Dépannage (sous Bateau) : 112, SAMU, pompiers, police, Sport Service Pitrot, police du lac, association SNLG, VLG ; appel direct, ajout de numéros par section.
+- Session : étapes 1 à 4 (compteur et jauge, personnes à bord, vérifications huile / pompe de cale / aération, démarrage) ; photo du compteur demandée en terminant, consultable dans le détail de la session.
+- Compteur moteur : la liste des sessions s'ouvre ligne par ligne (compteur, jauge, pilote, à bord, photo).
+- Activité : s'ouvre sur la dernière année avec des sessions ; indicateurs financiers et détail du coût repliables ; bouton Saisir une dépense en haut.
+- Essence : gros boutons en relief, total des achats par famille et par année, mouvements repliables ; les achats enregistrent leurs litres.
+- Fiche pilote : téléphone avec appel direct ; correction de la saisie des dates.
+- Bateau : Pilotes et Urgence côte à côte, Documents repliable ; bandeaux Session, Essence et Activité en rubans de lumière.
+
 ## 1.5.0 — 2026-11-23
 
 - Barre de menu : Session et Essence à gauche, Accueil au centre en bouton rond plus gros, Activité et Bateau à droite ; nouvelles icônes (bidon, inboard avec tour de wake).

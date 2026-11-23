@@ -20,7 +20,17 @@
     moteur: "PCM 5.7 L 350 ch (246 kW), essence", nMoteur: "750683", dims: "6,09 × 2,28 m · tirant d’eau 0,69 m", categorie: "D · 8 personnes maximum",
     equip: "Tour Monster Tower + bimini, Zero Off, extinction automatique, crépine, kit de rinçage", achat: "35 000 € TTC · facture R01349 du 10/07/2026 · Sports Service (Lacanau)",
     gardiennage: "Offert les hivers 2026-2027 et 2027-2028 (facture)",
-    reservoir: 125, conso: 13, hAchat: 1950, hVie: 4000, valMoteur: 13000, prix: 22000, ans: 15, bidon: 20, tarif: 1 };
+    reservoir: 125, conso: 13, hAchat: 1950, hVie: 4000, valMoteur: 13000, prix: 22000, ans: 15, bidon: 20, tarif: 1,
+    /* Annuaire urgence - dépannage : numéros publics (société, police du lac, association), modifiables dans l'app */
+    annuaire: [
+      { id: "ann-ss-roland", g: "Sport Service Pitrot", n: "Roland Jamin", r: "", t: "06 41 76 79 43" },
+      { id: "ann-ss-hugo", g: "Sport Service Pitrot", n: "Hugo", r: "", t: "06 27 11 53 40" },
+      { id: "ann-police-lac", g: "Police du lac", n: "Police du lac", r: "", t: "06 85 92 05 58" },
+      { id: "ann-snlg-president", g: "Association SNLG", n: "Marc Sourty", r: "président", t: "06 87 61 62 55" },
+      { id: "ann-snlg-moniteur", g: "Association SNLG", n: "Yvan", r: "moniteur", t: "06 44 31 68 28" },
+      { id: "ann-snlg-secretariat", g: "Association SNLG", n: "Véronique", r: "secrétariat", t: "06 60 46 14 23" },
+      { id: "ann-vlg", g: "VLG", n: "VLG", r: "", t: "" }
+    ] };
   function person(id) { for (var i = 0; i < PEOPLE.length; i++) if (PEOPLE[i].id === id) return PEOPLE[i]; return null; }
 
   /* ---------- Bilans par année : recalculés à partir des sessions, des dépenses et des achats ---------- */
@@ -62,8 +72,29 @@
   function segHtml(cls, attr, opts, cur) { return '<div class="seg ' + cls + '">' + opts.map(function (o) { return "<button " + attr + '="' + o[0] + '" data-v="' + o[0] + '" aria-pressed="' + (o[0] === cur) + '">' + esc(o[1]) + "</button>"; }).join("") + "</div>"; }
   function famDot(f) { return '<span class="dot f-' + f + '"></span>'; }
   /* Photos (familles, pilotes) : petites images JPEG gardées dans la base partagée, sous la forme { d: "data:…" } */
+  /* Photo du compteur : côté le plus long à 560 px, qualité réduite jusqu'à tenir dans une cellule du Google Sheet (< 40 000 caractères) */
+  function shrinkMeter(file) {
+    return new Promise(function (ok, ko) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var k = Math.min(1, 560 / Math.max(img.naturalWidth, img.naturalHeight)), cv = document.createElement("canvas");
+        cv.width = Math.round(img.naturalWidth * k); cv.height = Math.round(img.naturalHeight * k);
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url);
+        var q = 0.62, d = cv.toDataURL("image/jpeg", q);
+        while (d.length > 38000 && q > 0.3) { q -= 0.06; d = cv.toDataURL("image/jpeg", q); }
+        ok({ d: d });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); ko(new Error("Photo illisible.")); };
+      img.src = url;
+    });
+  }
   function photoSrc(ph) { return ph && ph.d ? ph.d : ""; }
   function famAvatar(f) { var s = photoSrc((SPEC.famPhotos || {})[f]); return s ? '<img class="fam-av f-' + f + '" src="' + s + '" alt="">' : famDot(f); }
+  /* Téléphones : lien d'appel direct (tel:) */
+  function telHref(t) { return String(t || "").replace(/[^\d+]/g, ""); }
+  var PHONE_ICON = '<svg class="ph-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5l2.6.4 1.3 4-2 1.6a12 12 0 0 0 6 6l1.6-2 4 1.3.4 2.6a2 2 0 0 1-2 2.1A17 17 0 0 1 4.5 5.5a2 2 0 0 1 2.1-2z"/></svg>';
+  var URG_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5l2.6.4 1.3 4-2 1.6a12 12 0 0 0 6 6l1.6-2 4 1.3.4 2.6a2 2 0 0 1-2 2.1A17 17 0 0 1 4.5 5.5a2 2 0 0 1 2.1-2z"/></svg>';
+  var WHEEL_ICON = '<svg class="wheel" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.6"/><path d="M3.4 10.6h6M14.6 10.6h6M12 14.6v6.3M12 3v2.2"/></svg>';
   var EXT_ICON = '<svg class="ext-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7.5" r="3.5"/><path d="M5 20.5c.6-4 3.4-6.5 7-6.5s6.4 2.5 7 6.5"/></svg>';
   /* Réduit une photo choisie en carré (recadrage au centre) pour qu'elle tienne dans la base partagée. */
   function shrinkPhoto(file, size, q) {
@@ -80,14 +111,15 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.5.0", SCHEMA = 1;
+  var APP_VERSION = "1.6.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
   var sessionsArr = [], bidons = [], dettes = [], moves = [], depenses = [];
+  var notes = []; // journal : rangé dans la table « etat » (kind = "note"), sans changement côté serveur
   var lastPlein = "", lastLevel = 16, lastLevelDate = "";
   var ETAT = { id: "etat", gapsRecherche: [] };
-  var docYear = "Toutes", ui = { spec: false, maint: false, conn: false, perso: false };
+  var docYear = "Toutes", ui = { spec: false, maint: false, conn: false, perso: false, indic: true, coutDet: false, mvts: false, docs: false };
   /* Pièces à renouveler sur un inboard Malibu (moteur Indmar) : intervalles indicatifs, à confirmer dans le manuel du bateau. */
   var ENTR = [
     ["Pompe à eau (turbine / impeller)", 100, 2, "inspection à chaque hivernage"],
@@ -112,7 +144,7 @@
   var view = { essence: null, dep: false, cancelAsk: false, purge: null };
   var finView = "bilan", pilotSel = "";
   var achatForm = { verse: true, plein: true, f: "YC", b: 2, step: null, L: 0, P: 0, tfOpen: false, tf: "YC", tn: 1 }, miseForm = { plein: true, f: "YC", n: 1 };
-  var bilanYear = "", bilanWho = "";
+  var bilanYear = "", bilanWho = "", bilanYearUser = false;
 
   /* ---------- Dates ---------- */
   function todayFr() { var d = new Date(); return String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear(); }
@@ -144,7 +176,7 @@
   function currentCollections() {
     SPEC.id = "spec";
     ETAT.lastPlein = lastPlein; ETAT.lastLevel = lastLevel; ETAT.lastLevelDate = lastLevelDate;
-    return { personnes: PEOPLE, sessions: sessionsArr, bidons: bidons, dettes: dettes, mouvements: moves, depenses: depenses, documents: flatDocs(), entretien: maint, parametres: [SPEC], etat: [ETAT] };
+    return { personnes: PEOPLE, sessions: sessionsArr, bidons: bidons, dettes: dettes, mouvements: moves, depenses: depenses, documents: flatDocs(), entretien: maint, parametres: [SPEC], etat: [ETAT].concat(notes) };
   }
   function snapshotAll() { SNAP = {}; var cur = currentCollections(); COLS.forEach(function (c) { cur[c].forEach(function (r) { if (!r.id) r.id = uid(); SNAP[c + ":" + r.id] = strip(r); }); }); }
   /* Compare l'état affiché à la dernière version connue : ce qui a changé part dans la file d'envoi. */
@@ -170,6 +202,7 @@
     sessionsArr = vals("sessions").sort(function (a, b) { return dkey(a) < dkey(b) ? -1 : 1; });
     bidons = vals("bidons").sort(function (a, b) { var x = dkey(a), y = dkey(b); return x < y ? -1 : x > y ? 1 : ((a.updatedAt || "") < (b.updatedAt || "") ? -1 : 1); });
     dettes = vals("dettes"); moves = vals("mouvements").sort(byDateDesc); depenses = vals("depenses").sort(byDateDesc);
+    notes = vals("etat").filter(function (r) { return r.kind === "note"; }).sort(function (a, b) { return (a.date || "") < (b.date || "") ? 1 : -1; });
     DOC_CATS.forEach(function (c) { docs[c] = []; });
     vals("documents").forEach(function (d) { (docs[d.cat] || docs["Autres"]).push(d); });
     vals("entretien").forEach(function (m) { if (maint[m.i]) maint[m.i] = m; });
@@ -242,6 +275,7 @@
   function fracLabel(v) { if (v <= 0) return "Vide"; if (v >= 16) return "Plein"; var n = v, d = 16; while (n % 2 === 0) { n /= 2; d /= 2; } return n + "/" + d; }
   function gPt(v, r) { var a = (G0 - v / 16 * GSWEEP) * Math.PI / 180; return [GC.x + r * Math.cos(a), GC.y - r * Math.sin(a)]; }
   function gaugeRead(v) { return "<b>" + fracLabel(v) + "</b> · ≈ " + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir; }
+  function gHead(label, key, v) { return '<div class="g-head"><span class="flabel">' + label + '</span><span class="g-read" data-gread="' + key + '">' + gaugeRead(v) + '</span></div>'; }
   function gaugeHtml(key, v, ro) {
     var s = '<div class="gauge"><svg viewBox="0 0 240 236" data-gauge="' + key + '"' + (ro ? ' data-ro="1" role="img" aria-label="Niveau théorique : ' + fracLabel(v) + '"' : ' role="slider" tabindex="0" aria-label="Jauge d’essence"') + ' aria-valuemin="0" aria-valuemax="16" aria-valuenow="' + v + '" aria-valuetext="' + fracLabel(v) + '">';
     s += '<circle class="g-bezel" cx="120" cy="118" r="116"/><circle class="g-face" cx="120" cy="118" r="108"/>';
@@ -256,7 +290,7 @@
     var n = gPt(v, 90);
     s += '<line class="g-needle" data-needle="1" x1="120" y1="118" x2="' + n[0].toFixed(1) + '" y2="' + n[1].toFixed(1) + '"/><circle class="g-hub" cx="120" cy="118" r="10"/></svg>';
     if (ro) return s + "</div>";
-    return s + '<div class="g-read" data-gread="' + key + '">' + gaugeRead(v) + '</div><div class="small muted">Faites glisser l’aiguille (ou flèches du clavier)</div></div>';
+    return s + '</div>'; // la lecture (7/8 · ≈ 109 L sur 125) s'affiche sur la ligne du titre de la jauge (gHead)
   }
 
   /* ---------- Bidons ---------- */
@@ -412,18 +446,20 @@
   }
   function renderStart() {
     if (!sortie.debEdited) sortie.compteurDeb = lastCompteur(); // suit les sessions arrivées par synchronisation
-    var h = '<div class="card"><h3>Nouvelle session</h3><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
+    var h = '<div class="card"><h3>Nouvelle session</h3><div class="step"><b>1</b>Saisissez le compteur constaté au bateau et positionnez la jauge.</div><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
       '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div>" +
-      '<div class="field"><span class="flabel">Jauge au départ</span>' + gaugeHtml("start", startJauge) + "</div>" +
-      '<p class="small muted m0">Ajustez le niveau tel que constaté et saisissez les heures moteur au départ de la session.</p></div>';
-    h += boardHtml();
+      '<div class="field gauge-sm">' + gHead("Jauge au départ", "start", startJauge) + gaugeHtml("start", startJauge) + "</div>" +
+      '</div>';
+    h += boardHtml("Indiquez les personnes à bord.");
     if (startList.length) h += '<div class="card"><div class="field"><label for="pilStart">Pilote</label><select id="pilStart">' + startList.map(function (p) { return '<option value="' + p.pid + '"' + (p.pid === startPilote ? " selected" : "") + ">" + esc(person(p.pid).name) + "</option>"; }).join("") + "</select></div></div>";
-    return h + '<button class="btn big run" id="goStart">Démarrer la session</button>';
+    h += '<div class="card"><div class="step"><b>3</b>Vérifiez avant de partir :</div><div class="checks">' + [["huile", "Niveau d’huile"], ["cale", "Pompe de cale"], ["aera", "Aération moteur"]].map(function (c) { return '<label class="chk"><input type="checkbox" data-startchk="' + c[0] + '"' + (startChecks[c[0]] ? " checked" : "") + '> ' + c[1] + "</label>"; }).join("") + "</div></div>";
+    return h + '<div class="card"><div class="step"><b>4</b>Démarrez la session au démarrage du moteur.</div><button class="btn big run" id="goStart">Démarrer la session</button></div>';
   }
   function curList() { return sortie.active ? sortie.participants : startList; }
   function inList(pid) { return curList().some(function (p) { return p.pid === pid; }); }
-  function boardHtml() {
-    var list = curList(), h = '<div class="card"><div class="row"><h3>À bord</h3><span class="small muted">' + list.length + " personne" + (list.length > 1 ? "s" : "") + "</span></div>";
+  var startChecks = {}; // vérifications avant départ (huile, pompe de cale, aération) : aide-mémoire, ne bloque rien
+  function boardHtml(step) {
+    var list = curList(), h = '<div class="card"><div class="row"><h3>À bord</h3><span class="small muted">' + list.length + " personne" + (list.length > 1 ? "s" : "") + "</span></div>" + (step ? '<div class="step"><b>2</b>' + step + "</div>" : "");
     ["YF", "OF", "EXT"].forEach(function (c) {
       var rows = list.filter(function (p) { return person(p.pid).c === c; }), open = picker === c;
       h += '<div class="group"><div class="group-head"><span class="gt">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + CAT[c] + (rows.length ? ' <span class="muted small">&nbsp;· ' + rows.length + "</span>" : "") + "</span>" +
@@ -466,8 +502,12 @@
   }
   function renderClosing(now) {
     if (sortie.compteurFin == null) sortie.compteurFin = Math.round((sortie.compteurDeb + engineMs(now) / 3600000) * 10) / 10;
-    var h = '<div class="card"><h3>Clôture</h3><div class="field"><label for="cFin">Compteur moteur (h)</label><input id="cFin" inputmode="decimal" value="' + dec1.format(sortie.compteurFin) + '"></div>' +
-      '<div class="field"><span class="flabel">Jauge à l’arrivée, avant le plein</span>' + gaugeHtml("fin", sortie.jaugeFin) + "</div>" +
+    var hasPh = !!photoSrc(sortie.photoCompteur);
+    var h = '<div class="card meter-card"><h3>Photo du compteur</h3>' +
+      (hasPh ? '<img class="cpt-photo" src="' + photoSrc(sortie.photoCompteur) + '" alt="Photo du compteur moteur">' : '<div class="small muted">Photographiez le compteur moteur : la photo est jointe à la session et consultable dans l’historique.</div>') +
+      '<label class="btn ' + (hasPh ? "ghost " : "") + 'sm photo-btn">' + (hasPh ? "Reprendre la photo" : "Prendre la photo du compteur") + '<input type="file" accept="image/*" capture="environment" id="cPhoto" hidden></label></div>';
+    h += '<div class="card"><h3>Clôture</h3><div class="field"><label for="cFin">Compteur moteur (h)</label><input id="cFin" inputmode="decimal" value="' + dec1.format(sortie.compteurFin) + '"></div>' +
+      '<div class="field gauge-sm">' + gHead("Jauge à l’arrivée, avant le plein", "fin", sortie.jaugeFin) + gaugeHtml("fin", sortie.jaugeFin) + "</div>" +
       '<div class="small" id="consoEst">' + consoEstHtml() + "</div>" +
       '<div class="toggle"><span>Plein refait avec les bidons en partant</span><button id="tPlein" aria-pressed="' + sortie.plein + '" aria-label="Plein refait"></button></div>';
     if (sortie.plein) {
@@ -518,9 +558,8 @@
   }
   function renderAccueil() {
     var now = Date.now(), h = "";
-    if (sortie.active) h += '<div class="card" style="border-color:var(--run)"><div class="row"><div><div class="label">Session en cours · moteur ' + (sortie.engine === "on" ? "en route" : "arrêté") + '</div><div class="num" style="font-size:22px;font-weight:600" data-timer="engine">' + fmtClock(engineMs(now)) + '</div></div><button class="btn run" data-go="sortie">Ouvrir</button></div></div>';
-    else h += '<button class="btn big run" data-go="sortie">Démarrer une session</button>';
-    h += '<div class="card"><div class="row"><h3>Bidons</h3><span class="small muted">' + half(Math.round(stockN() * 2) / 2) + " sur 5 · " + int0.format(stockL()) + " L</span></div>" + cansHtml() + "</div>";
+    h += quickHtml(now);
+    h += '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + half(Math.round(stockN() * 2) / 2) + " sur 5 · " + int0.format(stockL()) + " L</span></div>" + cansHtml() + "</div>";
     dettes.forEach(function (d) { h += detteHtml(d); });
     if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Bateau pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Compteur moteur</span><span class="v">' + dec1.format(lastCompteur()) + ' h</span><span class="s">fin de la dernière session</span></div>' +
@@ -546,9 +585,35 @@
     }
     var T = theo();
     h += '<div class="card spray-card"><div class="spray-bg img-ski" aria-hidden="true"></div><span class="brandlogo img-logo" aria-hidden="true"></span><div class="spray-in">' +
-      '<div class="glass"><div class="label">Essence estimée</div><div class="num" id="theoL" style="font-size:18px;font-weight:600">≈ ' + Math.round(T.L) + " L · " + fracLabel(T.v) + '</div><div id="theoTxt">' + T.txt + "</div></div>" +
+      '<div class="glass"><div class="label">Stock d’essence estimé bateau</div><div class="num" id="theoL" style="font-size:18px;font-weight:600">≈ ' + Math.round(T.L) + " L · " + fracLabel(T.v) + '</div><div id="theoTxt">' + T.txt + "</div></div>" +
       '<div class="gwrap">' + gaugeHtml("theo", T.v, true) + "</div></div></div>";
     return h;
+  }
+  var RELIEF = true; // boutons en relief (accueil, Bateau) : mettre false pour revenir aux boutons plats
+  /* Accueil : boutons d'accès direct, deux par ligne (la session occupe toute la première ligne) */
+  var QI = {
+    achat: '<svg viewBox="0 0 24 24"><path d="M5.5 9L9 5.5h9a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1z"/><path d="M12 5.5V3h5v2.5"/><path d="M7.2 7.3L4.5 4.6 6 3.1l2.7 2.7"/><path d="M9.5 11.5l5.5 6M15 11.5l-5.5 6"/></svg>',
+    mise: '<svg viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M2.5 21h13"/><rect x="6.5" y="6" width="5" height="4" rx=".6"/><path d="M14 11h1.5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 0 3 0V8.5L17.5 6"/></svg>',
+    hist: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/><path d="M3.5 12H2M22 12h-1.5"/></svg>',
+    stats: '<svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg>',
+    journal: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v4h4M8.5 11h7M8.5 14.5h7M8.5 18h4"/></svg>',
+    play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>'
+  };
+  function qa(cls, attr, icon, title, sub, extra) {
+    return '<button class="qa ' + cls + '" ' + attr + '><span class="qa-ic" aria-hidden="true">' + icon + "</span>" + (extra || "") + '<span class="qa-t">' + title + "</span>" + (sub ? '<span class="qa-s">' + sub + "</span>" : "") + "</button>";
+  }
+  function quickHtml(now) {
+    var unread = unreadNotes(), h = '<div class="quick' + (RELIEF ? " relief" : "") + '">';
+    if (sortie.active) h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Session en cours</span><span class="qa-s">moteur ' + (sortie.engine === "on" ? "en route" : "arrêté") + ' · <b data-timer="engine">' + fmtClock(engineMs(now)) + "</b> · ouvrir</span></button>";
+    else h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Démarrer une session</span><span class="qa-s">chrono par skieur</span></button>';
+    // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
+    h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat essence", int0.format(stockL()) + " L en bidons") +
+      qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Remplissage bateau") +
+      qa("qa-stats qa-sm", 'data-qa="stats"', QI.stats, "Statistiques") +
+      qa("qa-hist qa-sm", 'data-qa="hist"', QI.hist, "Historique sessions") +
+      qa("qa-journal qa-sm", 'data-go="journal"', QI.journal, "Journal - Notes", "", unread ? '<span class="qa-dot" aria-label="' + unread + ' nouvelle(s) note(s)">' + unread + "</span>" : "") +
+      qa("qa-urg qa-sm", 'data-go="annuaire"', URG_ICON, "Contact urgence");
+    return h + "</div>";
   }
   function theo() {
     var cap = SPEC.reservoir;
@@ -569,7 +634,8 @@
 
   /* ---------- Essence ---------- */
   function renderEssence() {
-    var h = '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + int0.format(stockL()) + " L · " + eur.format(stockEur()) + "</span></div>" + cansHtml() +
+    var h = !view.essence ? '<div class="ess-acts"><button class="ess-btn ess-achat" data-ev="achat"><span class="qa-ic" aria-hidden="true">' + QI.achat + '</span><span>J’ai acheté</span></button><button class="ess-btn ess-mise" data-ev="mise"' + (bidons.length ? "" : " disabled") + '><span class="qa-ic" aria-hidden="true">' + QI.mise + '</span><span>J’ai versé des bidons</span></button></div>' : "";
+    h += '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + int0.format(stockL()) + " L · " + eur.format(stockEur()) + "</span></div>" + cansHtml() +
       '<div class="legend"><span>' + famDot("YC") + "payé par la famille Yann</span><span>" + famDot("OC") + "payé par la famille Olivier</span></div>" +
       (bidons.length && view.essence !== "corr" ? '<button class="btn ghost sm" id="corrOpen">Corriger le stock (vol, perte, autre usage)</button>' : "") + "</div>";
     dettes.forEach(function (d) { h += detteHtml(d); });
@@ -594,13 +660,30 @@
         '<div class="alert ok">' + esc(planText(plan, miseForm.f)) + "</div>" +
         '<div class="toggle"><span>Le réservoir est plein</span><button data-mtog="plein" aria-pressed="' + miseForm.plein + '" aria-label="Réservoir plein"></button></div>' +
         '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="saveMise">Enregistrer</button></div></div>';
-    } else {
-      h += '<div class="actions"><button class="btn" data-ev="achat">J’ai acheté</button><button class="btn run" data-ev="mise"' + (bidons.length ? "" : " disabled") + ">J’ai versé des bidons</button></div>";
     }
     h += '<div class="card"><h3>De plein à plein</h3><div class="small">Dernier plein : <b>' + esc(lastPlein) + "</b></div></div>";
-    h += '<div class="card"><h3>Mouvements</h3><div class="list small">';
-    moves.slice(0, 6).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
-    return h + "</div></div>";
+    h += achatsTotHtml();
+    h += '<div class="card">' + collHead("mvts", "Mouvements", moves.length + " mouvement" + (moves.length > 1 ? "s" : "") + (moves[0] ? " · dernier le " + esc(moves[0].d) : ""));
+    if (ui.mvts) {
+      h += '<div class="list small" style="margin-top:8px">';
+      moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
+      h += "</div>" + (moves.length > 30 ? '<div class="small muted">Les 30 plus récents sont affichés.</div>' : "");
+    }
+    return h + "</div>";
+  }
+  /* Total des achats d'essence (litres et montant) par famille, par année */
+  var essYear = "";
+  function achatsTotHtml() {
+    var ach = moves.filter(function (m) { return m.type === "achat" && (Number(m.litres) || Number(m.prix)); });
+    if (!ach.length) return "";
+    var yrs = []; ach.forEach(function (m) { var y = yearOf(m); if (y && yrs.indexOf(y) < 0) yrs.push(y); }); yrs.sort(); yrs.push("Toutes");
+    if (!essYear || yrs.indexOf(essYear) < 0) essYear = yrs.length > 1 ? yrs[yrs.length - 2] : "Toutes";
+    var T = { YC: { l: 0, e: 0, n: 0 }, OC: { l: 0, e: 0, n: 0 } };
+    ach.forEach(function (m) { if (essYear !== "Toutes" && yearOf(m) !== essYear) return; var t = T[m.f] || T.YC; t.l += Number(m.litres) || 0; t.e += Number(m.prix) || 0; t.n++; });
+    var row = function (f) { var t = T[f]; return "<tr><td>" + famDot(f) + FAM[f].n + '<span class="sub">' + t.n + " achat" + (t.n > 1 ? "s" : "") + (t.l ? " · " + dec2.format(t.e / t.l) + " €/L" : "") + "</span></td><td>" + int0.format(t.l) + " L</td><td>" + eur.format(t.e) + "</td></tr>"; };
+    return '<div class="card"><h3>Total des achats</h3><div class="chips small-chips">' + yrs.map(function (y) { return '<button class="chip" data-essyear="' + y + '" aria-pressed="' + (y === essYear) + '">' + y + "</button>"; }).join("") + "</div>" +
+      '<table class="rtable" style="margin-top:8px"><thead><tr><th>Famille</th><th>Volume</th><th>Montant</th></tr></thead><tbody>' + row("YC") + row("OC") +
+      '<tr class="tot"><td>Total</td><td>' + int0.format(T.YC.l + T.OC.l) + " L</td><td>" + eur.format(T.YC.e + T.OC.e) + "</td></tr></tbody></table></div>";
   }
 
   /* Contrôle avant d'enregistrer un achat quand des bidons pleins sont encore notés en stock. */
@@ -662,8 +745,9 @@
   }
   function commitAchat() {
     var A = achatForm, f = A.f, B = A.b, Lt = A.L, P = A.P;
-    if (A.verse) { moves.unshift({ d: todayFr(), t: "Achat versé tout de suite", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n + (A.plein ? " · plein" : "") }); if (A.plein) { lastPlein = todayFr(); lastLevel = 16; lastLevelDate = todayFr(); } }
-    else { for (var bi = 0; bi < B; bi++) bidons.push({ id: uid(), f: f, litres: Lt / B, prix: P / Lt, d: todayFr() }); moves.unshift({ d: todayFr(), t: "Achat mis en stock", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n }); }
+    var base = { type: "achat", date: todayIso(), d: todayFr(), f: f, litres: Lt, prix: P, bidons: B }; // type, famille, litres et prix : servent aux totaux d'achat
+    if (A.verse) { moves.unshift(Object.assign({}, base, { t: "Achat versé tout de suite", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n + (A.plein ? " · plein" : "") })); if (A.plein) { lastPlein = todayFr(); lastLevel = 16; lastLevelDate = todayFr(); } }
+    else { for (var bi = 0; bi < B; bi++) bidons.push({ id: uid(), f: f, litres: Lt / B, prix: P / Lt, d: todayFr() }); moves.unshift(Object.assign({}, base, { t: "Achat mis en stock", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n })); }
     depenses.unshift({ d: todayFr(), lib: "Essence " + int0.format(Lt) + " L", cat: "Essence", m: P, payeur: f, regle: "conso", isNew: true });
     A.step = null; A.tfOpen = false; A.L = 0; A.P = 0; view.essence = null; save(2); toast(savedMsg("Achat enregistré, dépense créée.")); render();
   }
@@ -709,11 +793,17 @@
     return v > 0 ? "Olivier doit " + eur.format(v) + " à Yann." : "Yann doit " + eur.format(-v) + " à Olivier.";
   }
   function renderDepenses() {
-    var B = balance();
-    var h = '<div class="banner"><div><span class="label">Total</span><span class="v">' + eur0.format(B.tot.total) + '</span></div><div class="yc"><span class="label">Part Yann</span><span class="v">' + eur0.format(B.tot.YC) + '</span></div><div class="oc"><span class="label">Part Olivier</span><span class="v">' + eur0.format(B.tot.OC) + "</span></div></div>" +
+    var B = balance(), h = "";
+    if (view.dep) h += depFormHtml();
+    else h += '<button class="btn big center-btn" id="dNew">Saisir une dépense</button>';
+    h += '<div class="banner"><div><span class="label">Total</span><span class="v">' + eur0.format(B.tot.total) + '</span></div><div class="yc"><span class="label">Part Yann</span><span class="v">' + eur0.format(B.tot.YC) + '</span></div><div class="oc"><span class="label">Part Olivier</span><span class="v">' + eur0.format(B.tot.OC) + "</span></div></div>" +
       '<div class="alert ok"><b>Balance : ' + balanceText(B) + "</b>Dépenses payées moins la part de chacun, dettes de bidons comprises. Un virement entre familles se note dans la catégorie « " + REGL + " ».</div>" +
       '<button class="btn ghost" id="xlsExport">Exporter la synthèse en Excel</button>';
-    if (view.dep) {
+    return h + depListHtml();
+  }
+  function depFormHtml() {
+    var h = "";
+    {
       h += '<div class="card"><h3>Nouvelle dépense</h3><div class="two"><div class="field"><label for="dM">Montant (€)</label><input id="dM" inputmode="decimal" value="120"></div><div class="field"><label for="dCat">Catégorie</label><select id="dCat">' + CATS.map(function (c) { return "<option" + (c[0] === depForm.cat ? " selected" : "") + ">" + esc(c[0]) + "</option>"; }).join("") + "</select></div></div>" +
         '<div class="field"><label for="dLib">Détail</label><input id="dLib" value="Gilet de sauvetage"></div>' +
         '<div class="field"><span class="flabel">Payé par</span>' + segHtml("fam", "data-dpay", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], depForm.payeur) + "</div>";
@@ -722,8 +812,11 @@
       else h += '<div class="field"><span class="flabel">Partage (pré-rempli selon la catégorie)</span>' + segHtml("", "data-r", [["5050", "Y+O"], ["YC", "Yann"], ["OC", "Olivier"], ["pct", "%"]], depForm.regle === "payeur" ? depForm.payeur : depForm.regle) + "</div>" +
         (depForm.regle === "pct" ? '<div class="field"><label for="dPct">Part Olivier (%)</label><input id="dPct" inputmode="numeric" value="' + depForm.pct + '"></div>' : "") + '<div id="dPrev"></div>';
       h += '<div class="actions"><button class="btn ghost" id="dCancel">Annuler</button><button class="btn" id="dSave">Enregistrer</button></div></div>';
-    } else h += '<button class="btn big" id="dNew">Ajouter une dépense</button>';
-    h += '<div class="card"><h3>Dépenses</h3><table class="rtable"><thead><tr><th>Dépense</th><th>Total</th><th>Yann</th><th>Olivier</th></tr></thead><tbody>';
+    }
+    return h;
+  }
+  function depListHtml() {
+    var h = '<div class="card"><h3>Dépenses</h3><table class="rtable"><thead><tr><th>Dépense</th><th>Total</th><th>Yann</th><th>Olivier</th></tr></thead><tbody>';
     if (!depenses.length) h += '<tr><td colspan="4" class="muted">Aucune dépense. Importez l’historique (onglet Bateau) ou ajoutez la première.</td></tr>';
     depenses.forEach(function (d) {
       var s = sharesOf(d), pay = FAM[d.payeur] ? FAM[d.payeur].s : "?";
@@ -842,12 +935,18 @@
       return nb;
     }
     if (!json || json.format !== "carnet-noskids-import") throw new Error("Ce fichier n’est ni un import ni une sauvegarde du Carnet.");
+    if (Array.isArray(json.annuaire)) { // annuaire urgence : remplace la liste des contacts du lac
+      SPEC.annuaire = json.annuaire.map(function (c) { return { id: c.id || uid(), g: c.g || "", n: c.n || "", r: c.r || "", t: c.t || "" }; });
+      if (!json.sessions && !json.mouvements && !json.depenses) return SPEC.annuaire.length;
+    }
     var n = 0;
     [["sessions", "sessions"], ["mouvements", "mouvements"], ["depenses", "depenses"]].forEach(function (p) {
       (json[p[0]] || []).forEach(function (r) { if (!r.id) return; var copy = JSON.parse(JSON.stringify(r)); upsertLocal(p[1], copy); n++; });
     });
     ETAT.importHistorique = todayFr();
+    var ann = SPEC.annuaire;
     dbSave(); loadArrays(); Sync.soon();
+    if (Array.isArray(json.annuaire)) SPEC.annuaire = ann;
     return n;
   }
 
@@ -867,23 +966,23 @@
   function renderBilan() {
     var cy = String(new Date().getFullYear()), yrs = Object.keys(YEARS).filter(function (k) { return k; });
     if (yrs.indexOf(cy) < 0) yrs.push(cy); yrs.sort(); yrs.push("Toutes");
-    if (!bilanYear) bilanYear = latestYear() || cy;
+    if (!bilanYearUser || !bilanYear) bilanYear = latestYear() || cy; // suit les données tant que personne n'a choisi d'année
     var h = '<div class="card"><div class="label">Année</div><div class="chips">' + yrs.map(function (y) { return '<button class="chip" data-year="' + y + '" aria-pressed="' + (y === bilanYear) + '">' + y + "</button>"; }).join("") + "</div></div>";
     var D = yearData(bilanYear);
     if (!D) return h + '<div class="alert"><b>Aucune session enregistrée pour ' + esc(bilanYear) + ".</b>Les ratios apparaîtront dès les premières sessions. L’historique 2024-2025 s’importe depuis l’onglet Bateau.</div>";
     var fixM = D.fixes / D.min, essM = D.essence / D.min, usM = usureMin(), amM = amortAn() * D.years / D.min, total = fixM + essM + usM + amM, lh = D.litres / (D.min / 60);
-    h += '<div class="kpis"><div class="kpi hero"><span class="label">Coût complet par minute moteur</span><span class="v">' + dec2.format(total) + ' €</span><span class="s">soit ' + eur0.format(total * 60) + " de l’heure · invités facturés " + SPEC.tarif + " €/min</span></div>" +
+    h += '<div class="card">' + collHead("indic", "Indicateurs financiers", dec2.format(total) + " € par minute moteur · " + dec1.format(D.min / 60) + " h moteur") + (!ui.indic ? "" : '<div class="kpis kpis-in"><div class="kpi hero"><span class="label">Coût complet par minute moteur</span><span class="v">' + dec2.format(total) + ' €</span><span class="s">soit ' + eur0.format(total * 60) + " de l’heure · invités facturés " + SPEC.tarif + " €/min</span></div>" +
       '<div class="kpi"><span class="label">Temps moteur</span><span class="v">' + dec1.format(D.min / 60) + ' h</span><span class="s">' + int0.format(D.min) + " min</span></div>" +
       '<div class="kpi"><span class="label">Litres achetés</span><span class="v">' + int0.format(D.litres) + ' L</span><span class="s">' + esc(D.lnote) + "</span></div>" +
       '<div class="kpi"><span class="label">Consommation constatée</span><span class="v">' + dec1.format(lh) + ' L/h</span><span class="s">référence ' + SPEC.conso + " L/h (nouveau bateau)</span></div>" +
-      '<div class="kpi"><span class="label">Coût variable</span><span class="v">' + dec2.format(essM) + ' €</span><span class="s">essence par minute moteur</span></div></div>';
-    h += '<div class="card"><h3>Coût par minute moteur</h3><table class="rtable"><thead><tr><th>Poste</th><th>Montant</th><th>€/min</th></tr></thead><tbody>' +
+      '<div class="kpi"><span class="label">Coût variable</span><span class="v">' + dec2.format(essM) + ' €</span><span class="s">essence par minute moteur</span></div></div>') + "</div>";
+    h += '<div class="card">' + collHead("coutDet", "Détail du coût par minute moteur", "coûts fixes, essence, usure, amortissement") + (!ui.coutDet ? "" : '<table class="rtable"><thead><tr><th>Poste</th><th>Montant</th><th>€/min</th></tr></thead><tbody>' +
       "<tr><td>Coûts fixes<span class=\"sub\">assurance " + eur0.format(D.fx.assurance) + ", adhésions " + eur0.format(D.fx.adhesions) + ", taxes et corps mort " + eur0.format(D.fx.taxes) + "</span></td><td>" + eur0.format(D.fixes) + "</td><td>" + dec2.format(fixM) + "</td></tr>" +
       "<tr><td>Essence (variable)</td><td>" + eur0.format(D.essence) + "</td><td>" + dec2.format(essM) + "</td></tr>" +
       "<tr><td>Usure moteur<span class=\"sub\">" + eur0.format(SPEC.valMoteur) + " sur " + int0.format(SPEC.hVie - SPEC.hAchat) + " h restantes (" + int0.format(SPEC.hAchat) + " → " + int0.format(SPEC.hVie) + " h)</span></td><td>" + eur0.format(usM * D.min) + "</td><td>" + dec2.format(usM) + "</td></tr>" +
       "<tr><td>Amortissement bateau<span class=\"sub\">" + eur0.format(SPEC.prix) + " sur " + SPEC.ans + " ans = " + eur0.format(amortAn()) + " par an</span></td><td>" + eur0.format(amortAn() * D.years) + "</td><td>" + dec2.format(amM) + "</td></tr>" +
       '<tr class="tot"><td>Coût complet</td><td>' + eur0.format(total * D.min) + "</td><td>" + dec2.format(total) + "</td></tr></tbody></table>" +
-      '<div class="small muted">Usure et amortissement utilisent la fiche technique du nouveau bateau (onglet Bateau), appliquée ici à l’historique pour illustrer.</div></div>';
+      '<div class="small muted">Usure et amortissement utilisent la fiche technique du nouveau bateau (onglet Bateau), appliquée ici à l’historique pour illustrer.</div>') + "</div>";
     if (bilanYear !== "Toutes") h += chartHtml(D, fixM, essM, usM);
     else h += '<div class="small muted">Choisissez une année pour voir l’évolution du coût au fil de la saison.</div>';
     var t = D.fam.YC + D.fam.OC;
@@ -914,6 +1013,19 @@
     var f = s.famMin || {}, y = Number(f.YC) > 0, o = Number(f.OC) > 0;
     return y && o ? famDot("YC") + famDot("OC") + "Yann et Olivier" : y ? famDot("YC") + "Yann" : o ? famDot("OC") + "Olivier" : '<span class="muted">—</span>';
   }
+  /* Détail d'une session (touchée dans la liste) : compteur, jauge, pilote, personnes à bord, photo du compteur */
+  function sessionDetailHtml(s) {
+    var ppl = (s.participants || []).map(function (p) { var q = person(p.pid); return q ? q.name : p.pid; });
+    if (!ppl.length) ppl = Object.keys(s.minutes || {}).map(function (pid) { var q = person(pid); return q ? q.name : pid; });
+    var pil = s.pilote && person(s.pilote) ? person(s.pilote).name : "";
+    var h = '<div class="ses-info">' +
+      (hasNum(s.compteurDeb) ? "<span>Compteur <b>" + dec1.format(Number(s.compteurDeb)) + " → " + (hasNum(s.compteurFin) ? dec1.format(Number(s.compteurFin)) : "?") + " h</b></span>" : "") +
+      (s.jaugeDeb != null ? "<span>Jauge <b>" + fracLabel(s.jaugeDeb) + " → " + fracLabel(s.jaugeFin) + "</b></span>" : "") +
+      (pil ? "<span>Pilote <b>" + esc(pil) + "</b></span>" : "") +
+      (ppl.length ? "<span>À bord <b>" + esc(ppl.join(", ")) + "</b></span>" : "") +
+      (s.bateau ? '<span class="muted">' + esc(s.bateau) + "</span>" : "") + "</div>";
+    return h + (photoSrc(s.photoCompteur) ? '<img class="cpt-photo" src="' + photoSrc(s.photoCompteur) + '" alt="Photo du compteur de la session">' : '<div class="small muted">Pas de photo du compteur pour cette session.</div>');
+  }
   function sessionListHtml(sel) {
     var by = {};
     sessionsArr.forEach(function (s) { var y = yearOf(s); if (y) (by[y] = by[y] || []).push(s); });
@@ -928,7 +1040,9 @@
         h += '<table class="rtable ses-list" style="margin-top:10px"><thead><tr><th>N°</th><th>Mois</th><th>Qui</th><th>Temps</th></tr></thead><tbody>';
         list.slice().reverse().forEach(function (s, i) {
           var d = dkey(s), m = Number(d.slice(5, 7));
-          h += "<tr><td>" + (list.length - i) + "</td><td>" + (m ? MOIS[m - 1] : "—") + '<span class="sub">' + isoToFr(d).slice(0, 5) + (s.mode === "rattrapage" ? " · rattrapage" : "") + "</span></td><td>" + sessionWho(s) + "</td><td>" + hm(s.engineMin) + "</td></tr>";
+          var op = ui.sesOpen === s.id;
+          h += '<tr data-ses="' + esc(s.id) + '" class="ses-click' + (op ? " open" : "") + '"><td>' + (list.length - i) + "</td><td>" + (m ? MOIS[m - 1] : "—") + '<span class="sub">' + isoToFr(d).slice(0, 5) + (s.mode === "rattrapage" ? " · rattrapage" : "") + "</span></td><td>" + sessionWho(s) + "</td><td>" + hm(s.engineMin) + "</td></tr>";
+          if (op) h += '<tr class="ses-det"><td colspan="4">' + sessionDetailHtml(s) + "</td></tr>";
           var g = gapBefore[s.id];
           if (g) h += '<tr class="ses-gap"><td>⚠</td><td colspan="2">Trou de compteur<span class="sub">fin ' + dec1.format(sessionEnd(g.from)) + " h le " + isoToFr(dkey(g.from)).slice(0, 5) + " → début " + dec1.format(Number(g.to.compteurDeb)) + " h</span></td><td>" + hm(g.h * 60) + "</td></tr>";
         });
@@ -1039,7 +1153,9 @@
   function renderBateau() {
     var h = '<div class="card boat-hero img-boat" role="img" aria-label="Photo du bateau"><div class="cap"><b>' + esc(SPEC.devise) + "</b>" + esc(SPEC.modele) + " " + SPEC.annee + " · " + esc(SPEC.moteur.split(",")[0]) + "</div></div>";
     var pils = PEOPLE.filter(function (p) { return !p.hidden; }), graded = pils.filter(function (p) { return p.grade; }).length;
-    h += '<button class="card link-card pilot-banner" data-go="pilotes"><span class="pb-ic" aria-hidden="true">' + starSvg(true, 24) + '</span><span><b>Pilotes</b><span class="small">' + pils.length + " personnes · " + graded + " avec un grade · fiches, heures, diplômes</span></span>" + '<span class="chev" aria-hidden="true">›</span></button>';
+    h += '<div class="boat-links' + (RELIEF ? " relief" : "") + '"><button class="card link-card pilot-banner" data-go="pilotes"><span class="pb-ic" aria-hidden="true">' + WHEEL_ICON + '</span><span><b>Pilotes</b><span class="small">' + pils.length + " personnes · " + graded + " grade" + (graded > 1 ? "s" : "") + "</span></span>" + '<span class="chev" aria-hidden="true">›</span></button>';
+    var nAnn = (SPEC.annuaire || []).length;
+    h += '<button class="card link-card urg-banner" data-go="annuaire"><span class="pb-ic urg-ic" aria-hidden="true">' + URG_ICON + '</span><span><b>Urgence - Dépannage</b><span class="small">' + (nAnn ? nAnn + " contacts · " : "") + "appel direct</span></span>" + '<span class="chev" aria-hidden="true">›</span></button></div>';
     h += connHtml();
     h += '<div class="card">' + collHead("spec", "Fiche technique", esc(SPEC.devise) + " · " + esc(SPEC.modele) + " " + SPEC.annee + " · " + SPEC.reservoir + " L · " + dec1.format(SPEC.conso) + " L/h");
     if (ui.spec) {
@@ -1061,7 +1177,10 @@
     }
     h += "</div>";
     var years = ["2023", "2024", "2025", "2026", "2027"];
-    h += '<div class="card"><h3>Documents</h3><div class="field"><label for="docFile">Ajouter des documents (un ou plusieurs fichiers, ou une photo)</label><input id="docFile" class="file-in" type="file" multiple accept="image/*,application/pdf,.tif,.tiff"></div>' +
+    var nDocs = flatDocs().length; if (docPending.length) ui.docs = true;
+    h += '<div class="card">' + collHead("docs", "Documents", nDocs + " document" + (nDocs > 1 ? "s" : "") + " · factures, titres, permis, notices");
+    if (ui.docs) {
+    h += '<div class="field" style="margin-top:10px"><label for="docFile">Ajouter des documents (un ou plusieurs fichiers, ou une photo)</label><input id="docFile" class="file-in" type="file" multiple accept="image/*,application/pdf,.tif,.tiff"></div>' +
       pendingHtml() +
       '<div class="chips">' + ["Toutes"].concat(years.slice(0, 4)).map(function (y) { return '<button class="chip" data-docyear="' + y + '" aria-pressed="' + (y === docYear) + '">' + y + "</button>"; }).join("") + "</div>";
     Object.keys(docs).forEach(function (k) {
@@ -1071,6 +1190,7 @@
       list.forEach(function (d) { h += '<div class="doc"><span>' + (d.url ? '<a href="' + esc(d.url) + '" target="_blank" rel="noopener">' + esc(d.n) + "</a>" : esc(d.n)) + ' <span class="tag">' + esc(d.y) + "</span>" + (d.pid && person(d.pid) ? ' <span class="tag">' + esc(person(d.pid).name) + "</span>" : "") + '</span><span class="muted small">' + esc(d.s) + (d.url ? "" : " · non envoyé") + "</span></div>"; });
       h += "</div>";
     });
+    }
     return h + "</div>";
   }
 
@@ -1088,10 +1208,10 @@
   var screen = document.getElementById("screen");
   function render() {
     computeYears();
-    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, bateau: renderBateau };
+    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau };
     screen.innerHTML = map[tab]();
     setTimeout(function () { persistAll(); updateNet(); }, 0);
-    var navTab = tab === "pilotes" ? "bateau" : tab; // Pilotes est un sous-menu de Bateau
+    var navTab = tab === "pilotes" || tab === "annuaire" ? "bateau" : tab === "journal" ? "accueil" : tab; // Pilotes et Annuaire sont des sous-menus de Bateau
     document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === navTab)); });
     if (tab === "activite" && finView === "dep") depPreview();
     if (tab === "essence" && view.essence === "achat") achatPreview();
@@ -1199,7 +1319,8 @@
     var age = ageTxt(p.naissance);
     h += '<div class="card pilot-hero"><div class="ph-left">' +
       "<h3>" + esc(p.name) + "</h3>" +
-      '<div class="birth"><input type="date" class="mini-date" data-pf="naissance" value="' + esc(p.naissance || "") + '" aria-label="Date de naissance">' + (age ? '<span class="small muted">' + age + "</span>" : '<span class="small muted">date de naissance</span>') + "</div>" +
+      '<div class="birth"><input type="date" class="mini-date" data-pf="naissance" value="' + esc(p.naissance || "") + '" aria-label="Date de naissance">' + '<span class="small muted" id="ageTxt">' + (age || "date de naissance") + "</span>" + "</div>" +
+      '<div class="tel-line"><input type="tel" class="mini-tel" data-pf="tel" value="' + esc(p.tel || "") + '" placeholder="Téléphone" inputmode="tel" autocomplete="off" aria-label="Téléphone de ' + esc(p.name) + '">' + (p.tel ? '<a class="call" href="tel:' + telHref(p.tel) + '">' + PHONE_ICON + "Appeler</a>" : "") + "</div>" +
       starsHtml(g, 22) +
       '<div class="small muted">' + (g ? esc(GRADES[g - 1].label) + " · validé par " + esc(p.gradePar || "?") + (p.gradeLe ? " le " + esc(p.gradeLe) : "") : "Pas encore de grade") + "</div>" +
       '<div class="perms">' + permisHtml(p, "permisCotier", "Côtier") + permisHtml(p, "permisFluvial", "Fluvial") + "</div></div>" +
@@ -1232,21 +1353,115 @@
     return h + "</div>";
   }
 
+  /* Journal - Notes : date et auteur automatiques, nature au choix, historique ; pastille rouge sur l'accueil pour les notes pas encore vues */
+  var NOTE_CATS = ["Anomalie constatée", "Situation particulière", "Perte d’objet", "Chose à remplacer", "Déclaration d’un contrôle", "Alarme moteur", "Niveau d’huile faible", "Autres (à préciser)"];
+  var NOTE_SEV = { "Anomalie constatée": "bad", "Alarme moteur": "bad", "Niveau d’huile faible": "bad", "Chose à remplacer": "warn", "Perte d’objet": "warn", "Déclaration d’un contrôle": "warn" };
+  var noteForm = { cat: NOTE_CATS[0], auteur: "" };
+  function unreadNotes() { var seen = LS.get("notesVues", ""); return notes.filter(function (n) { return (n.date || "") > seen && n.auteur !== CONF.moi; }).length; }
+  function fmtDateTime(iso) { var d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("fr-FR") + " à " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); }
+  function renderJournal() {
+    if (!noteForm.auteur) noteForm.auteur = CONF.moi || "";
+    var ppl = PEOPLE.filter(function (p) { return p.c !== "EXT" && !p.hidden; });
+    var h = '<button class="btn link" data-go="accueil">← Retour à l’accueil</button>';
+    h += '<div class="card"><h3>Nouvelle note</h3><div class="small muted">Le ' + fmtDateTime(nowIso()) + " (date et heure ajoutées automatiquement)</div>" +
+      '<div class="two"><div class="field"><label for="nPar">Par</label><select id="nPar"><option value="">—</option>' + ppl.map(function (p) { return '<option value="' + p.id + '"' + (p.id === noteForm.auteur ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div>" +
+      '<div class="field"><label for="nCat">Nature</label><select id="nCat">' + NOTE_CATS.map(function (c) { return "<option" + (c === noteForm.cat ? " selected" : "") + ">" + esc(c) + "</option>"; }).join("") + "</select></div></div>" +
+      '<div class="field"><label for="nTxt">Note' + (noteForm.cat === NOTE_CATS[NOTE_CATS.length - 1] ? " (à préciser)" : "") + '</label><textarea id="nTxt" rows="4" placeholder="Ce qui s’est passé, où, ce qu’il faut faire…"></textarea></div>' +
+      '<div class="actions"><button class="btn" id="noteSave">Enregistrer la note</button></div></div>';
+    h += '<div class="card"><h3>Historique des notes</h3>';
+    if (!notes.length) h += '<div class="small muted">Aucune note pour l’instant.</div>';
+    var seen = LS.get("notesVues", "");
+    notes.forEach(function (n) {
+      var isNew = (n.date || "") > seen && n.auteur !== CONF.moi;
+      h += '<div class="note-row"><div class="note-h"><span class="note-tag ' + (NOTE_SEV[n.cat] || "") + '">' + esc(n.cat) + "</span>" + (isNew ? '<span class="note-new">nouvelle</span>' : "") + '<span class="small muted">' + fmtDateTime(n.date) + " · " + esc(n.auteurNom || "?") + "</span></div>" +
+        (n.txt ? '<div class="note-txt">' + esc(n.txt).replace(/\n/g, "<br>") + "</div>" : "") + "</div>";
+    });
+    LS.set("notesVues", nowIso()); // ouvertes : la pastille de l'accueil disparaît
+    return h + "</div>";
+  }
+
+  /* Annuaire urgence : numéros nationaux fixes, contacts du lac gardés dans la base partagée (SPEC.annuaire), modifiables */
+  var URG_NAT = [["112", "Urgences (numéro européen)"], ["15", "SAMU"], ["18", "Pompiers"], ["17", "Police, gendarmerie"]];
+  function renderAnnuaire() {
+    var list = SPEC.annuaire || [], edit = ui.annEdit, h = '<button class="btn link" data-go="bateau">← Retour au bateau</button>';
+    h += '<div class="card urg-nat"><h3>Numéros d’urgence</h3><div class="urg-grid">' + URG_NAT.map(function (u) { return '<a class="urg-big" href="tel:' + u[0] + '"><b>' + u[0] + "</b><span>" + u[1] + "</span></a>"; }).join("") + "</div></div>";
+    var groups = []; list.forEach(function (c) { if (groups.indexOf(c.g || "Autres") < 0) groups.push(c.g || "Autres"); });
+    h += '<div class="card"><div class="row"><h3>Contacts du lac</h3><button class="btn link" id="annEdit">' + (edit ? "Terminé" : "Modifier") + "</button></div>";
+    if (!list.length && !edit) h += '<div class="small muted">Aucun contact pour l’instant : touchez « Modifier » pour les saisir.</div>';
+    if (edit) {
+      h += '<div class="small muted">Groupe, nom, rôle et numéro. Les changements sont partagés avec la famille.</div>';
+      list.forEach(function (c, i) {
+        h += '<div class="ann-edit"><input data-ann="' + i + '" data-ak="g" value="' + esc(c.g || "") + '" placeholder="Groupe (ex. Association SNLG)" aria-label="Groupe"><input data-ann="' + i + '" data-ak="n" value="' + esc(c.n || "") + '" placeholder="Nom" aria-label="Nom">' +
+          '<input data-ann="' + i + '" data-ak="r" value="' + esc(c.r || "") + '" placeholder="Rôle" aria-label="Rôle"><input data-ann="' + i + '" data-ak="t" value="' + esc(c.t || "") + '" placeholder="Téléphone" inputmode="tel" aria-label="Téléphone"><button class="x" data-anndel="' + i + '" aria-label="Supprimer ce contact">×</button></div>';
+      });
+      h += '<button class="btn ghost sm" id="annAdd">+ Ajouter un contact</button>';
+    } else {
+      groups.forEach(function (g) {
+        h += '<div class="ann-g">' + esc(g) + "</div>";
+        list.filter(function (c) { return (c.g || "Autres") === g; }).forEach(function (c) {
+          h += '<div class="ann-row' + (c.n && c.n !== g ? " ind" : "") + '"><span><b>' + esc(c.n || g) + "</b>" + (c.r ? '<span class="small muted"> · ' + esc(c.r) + "</span>" : "") + "</span>" +
+            (c.t ? '<a class="call" href="tel:' + telHref(c.t) + '">' + PHONE_ICON + esc(c.t) + "</a>" : '<span class="small muted">numéro à compléter</span>') + "</div>";
+        });
+      });
+      if (ui.annNew) {
+        var gNew = ui.annNewCat === "__new";
+        h += '<div class="ann-new"><div class="sub-h">Nouveau numéro</div>' +
+          '<div class="field"><label for="anGs">Section (facultatif)</label><select id="anGs"><option value="">— Aucune —</option>' + groups.filter(function (g) { return g !== "Autres"; }).map(function (g) { return '<option value="' + esc(g) + '"' + (ui.annNewCat === g ? " selected" : "") + ">" + esc(g) + "</option>"; }).join("") + '<option value="__new"' + (gNew ? " selected" : "") + ">+ Nouvelle section…</option></select></div>" +
+          (gNew ? '<div class="field"><label for="anG">Nom de la nouvelle section</label><input id="anG" placeholder="ex. Dépannage, Ponton…" autocomplete="off"></div>' : "") +
+          '<div class="two"><div class="field"><label for="anN">Nom</label><input id="anN" placeholder="ex. Yvan" autocomplete="off"></div><div class="field"><label for="anR">Fonction (facultatif)</label><input id="anR" placeholder="ex. moniteur" autocomplete="off"></div></div>' +
+          '<div class="field"><label for="anT">Téléphone</label><input id="anT" inputmode="tel" placeholder="06 00 00 00 00" autocomplete="off"></div>' +
+          '<div class="actions"><button class="btn ghost" id="annNewCancel">Annuler</button><button class="btn" id="annNewSave">Ajouter</button></div></div>';
+      } else h += '<button class="btn ghost sm" id="annNewOpen" style="margin-top:10px">+ Ajouter un numéro</button>';
+    }
+    return h + "</div>";
+  }
+
   /* Activité : le bilan en premier ; les dépenses s'ouvrent par un lien en bas de page. */
   function renderActivite() {
     if (finView === "dep") return '<button class="btn link" data-fin="bilan">← Retour à l’activité</button>' + renderDepenses();
     var B = balance();
-    return renderBilan() +
+    return '<button class="btn big center-btn" data-depnew="1">Saisir une dépense</button>' + renderBilan() +
       '<button class="card link-card" data-fin="dep"><span><b>Dépenses et balance</b><span class="small muted">' + depenses.length + " dépenses · " + esc(balanceText(B)) + '</span></span><span class="chev" aria-hidden="true">›</span></button>';
   }
+  /* Bandeau de l'accueil : voiles de fils fins qui ondulent et se croisent, du turquoise au jaune, sur bleu nuit (dessin original généré) */
+  function meshSvg() {
+    var s = '<svg class="hd-waves" viewBox="0 0 400 60" preserveAspectRatio="none"><defs><linearGradient id="meshG" x1="0" x2="1">' +
+      '<stop offset="0" stop-color="#1fd1d9"/><stop offset=".28" stop-color="#6f5bff"/><stop offset=".5" stop-color="#ff3f93"/><stop offset=".74" stop-color="#ff7a1f"/><stop offset="1" stop-color="#ffc928"/></linearGradient></defs><g fill="none" stroke="url(#meshG)" stroke-width=".55">';
+    for (var r = 0; r < 2; r++) for (var i = 0; i < 16; i++) {
+      var d = "", ph = (r ? 2.6 : 0) + i * 0.11, amp = (r ? 11 : 15) + 5 * Math.sin(i * 0.45), cy = r ? 34 : 28;
+      for (var x = 0; x <= 400; x += 8) { var y = cy + amp * Math.sin(x / 400 * Math.PI * (r ? 2.6 : 2) + ph) * (0.55 + 0.45 * Math.sin(x / 400 * Math.PI)); d += (x ? "L" : "M") + x + " " + y.toFixed(1); }
+      s += '<path d="' + d + '" opacity="' + (0.28 + 0.4 * Math.sin(i / 15 * Math.PI)).toFixed(2) + '"/>';
+    }
+    return s + "</g></svg>";
+  }
+  var HEAD_DECO = meshSvg();
+  /* Bandeaux en rubans de lumière (dessin original) : Session en bleu, Essence en orangé, Activité en violet.
+     A : couleurs du ruban principal, C : couleurs de la vague du bas, k : couleur des reflets */
+  function ribbonSvg(p, A, C, k) {
+    var st = function (c, o) { return '<stop offset="' + o + '" stop-color="' + c[0] + '" stop-opacity="' + c[1] + '"/>'; };
+    return '<svg class="hd-waves" viewBox="0 0 400 60" preserveAspectRatio="none"><defs>' +
+      '<linearGradient id="' + p + 'A" x1="0" x2="1">' + st(A[0], 0) + st(A[1], 0.35) + st(A[2], 0.75) + st(A[3], 1) + "</linearGradient>" +
+      '<linearGradient id="' + p + 'B" x1="0" x2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".4" stop-color="#fff" stop-opacity=".9"/><stop offset=".8" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>' +
+      '<linearGradient id="' + p + 'C" x1="0" x2="1">' + st(C[0], 0) + st(C[1], 0.6) + st(C[2], 1) + "</linearGradient></defs>" +
+      '<path d="M0 34C80 14 170 50 260 34S360 14 400 20V60H0z" fill="url(#' + p + 'C)"/>' +
+      '<path d="M0 40C90 20 190 56 290 36S370 22 400 26V32C370 28 300 44 290 42 190 62 90 28 0 48z" fill="url(#' + p + 'A)"/>' +
+      '<path d="M0 30C100 10 200 48 300 28S375 16 400 18" fill="none" stroke="url(#' + p + 'B)" stroke-width="1.4"/>' +
+      '<path d="M0 46C110 30 210 60 310 44S380 34 400 36" fill="none" stroke="url(#' + p + 'B)" stroke-width=".9" opacity=".7"/>' +
+      '<g fill="' + k + '"><circle cx="232" cy="38" r="2.2" opacity=".55"/><circle cx="252" cy="36" r="1.6" opacity=".45"/><circle cx="330" cy="27" r="2.6" opacity=".35"/><circle cx="356" cy="31" r="1.4" opacity=".5"/></g></svg>';
+  }
+  var SES_DECO = ribbonSvg("ses", [["#7fe7ff", .05], ["#9ff0ff", .55], ["#4fd8e8", .35], ["#2fe0b0", .6]], [["#1fb6d6", .55], ["#0b6f9e", .25], ["#19d4a8", .55]], "#bdf6ff");
+  var ESS_DECO = ribbonSvg("ess", [["#ffd27a", .05], ["#ffe1a6", .6], ["#ffa463", .4], ["#ff6b45", .65]], [["#ffb347", .5], ["#b8361c", .25], ["#ff7a3d", .55]], "#ffe8c2");
+  var ACT_DECO = ribbonSvg("act", [["#dcbcff", .05], ["#ead2ff", .6], ["#c592ff", .4], ["#ff7fbf", .65]], [["#a874ff", .5], ["#4f1f8a", .25], ["#e14ea0", .55]], "#f4dfff");
   /* Bandeau : nom de l'écran, visuel et couleur propres à chaque menu */
   var HEADS = {
-    accueil: { t: "Accueil", v: '<span class="logo img-logo" role="img" aria-label="Malibu"></span>' },
-    sortie: { t: "Session", th: '<span class="thumb img-ski" aria-hidden="true"></span>' },
-    essence: { t: "Essence", v: '<span class="hv img-pump" aria-hidden="true"></span>' },
-    activite: { t: "Activité", v: '<span class="hv" style="background:#1f2a33;color:#d6dade" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg></span>' },
+    accueil: { t: "", v: '<span class="head-deco" aria-hidden="true">' + HEAD_DECO + '</span><span class="logo img-logo" role="img" aria-label="Malibu"></span>' },
+    sortie: { t: "Session", v: '<span class="head-deco" aria-hidden="true">' + SES_DECO + "</span>", th: '<span class="thumb img-ski" aria-hidden="true"></span>' },
+    essence: { t: "Essence", v: '<span class="head-deco" aria-hidden="true">' + ESS_DECO + '</span><span class="hv img-pump" aria-hidden="true"></span>' },
+    activite: { t: "Activité", v: '<span class="head-deco" aria-hidden="true">' + ACT_DECO + '</span><span class="hv" style="background:#1f2a33;color:#d6dade" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg></span>' },
     depenses: { t: "Dépenses", v: '<span class="hv" style="background:#14532d;color:#cfeed3;font:700 23px var(--f-body)" aria-hidden="true">€</span>' },
-    pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + starSvg(true, 24) + "</span>" },
+    pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + WHEEL_ICON + "</span>" },
+    journal: { t: "Journal - Notes", v: '<span class="hv" style="background:#ffffff;color:#1e4d6b" aria-hidden="true">' + QI.journal + "</span>" },
+    annuaire: { t: "Urgence - Dépannage", v: '<span class="hv urg-ic" aria-hidden="true">' + URG_ICON + "</span>" },
     bateau: { t: "Bateau", v: '<span class="thumb img-boat" style="background-position:45% 60%" aria-hidden="true"></span>' }
   };
   function renderHead() {
@@ -1264,9 +1479,22 @@
   document.querySelector(".tabs").addEventListener("click", function (e) { var b = e.target.closest("button[data-tab]"); if (b) goTab(b.dataset.tab); });
 
   screen.addEventListener("click", function (e) {
+    var tr = e.target.closest("tr[data-ses]");
+    if (tr) { ui.sesOpen = ui.sesOpen === tr.dataset.ses ? "" : tr.dataset.ses; return render(); } // liste des sessions : ouvrir / fermer le détail
     var b = e.target.closest("button"); if (!b || b.disabled) return;
     var ds = b.dataset, k, t;
     if (ds.go) return goTab(ds.go);
+    if (ds.essyear) { essYear = ds.essyear; return render(); }
+    if (ds.qa) { // boutons d'accès direct de l'accueil
+      if (ds.qa === "achat") { view.essence = "achat"; return goTab("essence"); }
+      if (ds.qa === "mise") { if (!bidons.length) { toast("Aucun bidon en stock : notez d’abord un achat."); view.essence = null; return goTab("essence"); } view.essence = "mise"; return goTab("essence"); }
+      if (ds.qa === "stats") { finView = "bilan"; return goTab("activite"); }
+      if (ds.qa === "hist") {
+        finView = "bilan"; var hy = latestYear() || String(new Date().getFullYear()); bilanYear = hy; ui["ses" + hy] = true; goTab("activite");
+        var sc0 = document.querySelector('[data-coll="ses' + hy + '"]'); if (sc0) screen.scrollTop = sc0.closest(".card").offsetTop - 8;
+        return;
+      }
+    }
     if (b.id === "engBtn") return engineToggle();
     if (ds.act) return act(Number(ds.id), ds.act);
     if (ds.det) { t = findTour(Number(ds.det)); t.open = !t.open; return render(); }
@@ -1296,9 +1524,14 @@
       sortie = { active: true, closing: false, compteurDeb: parseNum(document.getElementById("cDeb").value), jaugeDeb: startJauge, compteurFin: null, jaugeFin: startJauge, plein: true, bidonsPlein: 1, pleinF: "YC",
         pilote: inListStart(startPilote) ? startPilote : startList[0].pid, engine: "on", engAcc: 0, engSince: now, startedAt: now, participants: startList, tours: [] };
       sortie.pleinF = famOf(participant(sortie.pilote)) || "YC";
+      sortie.checks = startChecks; startChecks = {};
       startList = []; picker = null; save(1); return render();
     }
-    if (b.id === "goClose") { sortie.closing = true; sortie.compteurFin = null; view.cancelAsk = false; return render(); }
+    if (b.id === "goClose") { // en terminant : l'appareil photo s'ouvre tout de suite pour photographier le compteur
+      sortie.closing = true; sortie.compteurFin = null; view.cancelAsk = false; render();
+      var cp = document.getElementById("cPhoto"); if (cp && !sortie.photoCompteur) cp.click();
+      return;
+    }
     if (b.id === "cancelAsk") { view.cancelAsk = true; return render(); }
     if (b.id === "cancelNo") { view.cancelAsk = false; return render(); }
     if (b.id === "cancelYes") { view.cancelAsk = false; sortie = { active: false, compteurDeb: lastCompteur(), tours: [], participants: [] }; toast("Session annulée : rien n’a été enregistré."); return render(); }
@@ -1307,6 +1540,26 @@
     if (ds.pdel !== undefined) { docPending.splice(Number(ds.pdel), 1); return render(); }
     if (b.id === "pendCancel") { docPending = []; return render(); }
     if (b.id === "pendSend") { var items = docPending.slice(); docPending = []; addDocs(items); return; }
+    if (b.id === "noteSave") {
+      var nt = document.getElementById("nTxt").value.trim(), au = person(noteForm.auteur);
+      if (!au) { toast("Indiquez qui écrit la note."); return; }
+      if (!nt && noteForm.cat === NOTE_CATS[NOTE_CATS.length - 1]) { toast("Précisez la note dans la zone de saisie."); return; }
+      notes.unshift({ id: "note-" + uid(), kind: "note", date: nowIso(), auteur: au.id, auteurNom: au.name, cat: noteForm.cat, txt: nt });
+      LS.set("notesVues", nowIso()); // pas de pastille sur le téléphone qui l'a écrite
+      toast("Note enregistrée et partagée avec la famille."); return render();
+    }
+    if (b.id === "annNewOpen") { ui.annNew = true; render(); var an = document.getElementById("anN"); if (an) an.focus(); return; }
+    if (b.id === "annNewCancel") { ui.annNew = false; return render(); }
+    if (b.id === "annNewSave") {
+      var gv = function (id) { var e = document.getElementById(id); return e ? e.value.trim() : ""; }, nn = gv("anN"), tt = gv("anT");
+      var sec = gv("anGs") === "__new" ? gv("anG") : gv("anGs");
+      if (!nn && !tt) { toast("Indiquez au moins un nom ou un numéro."); return; }
+      SPEC.annuaire = (SPEC.annuaire || []).concat([{ id: uid(), g: sec || "Autres", n: nn || sec || "Contact", r: gv("anR"), t: tt }]);
+      ui.annNew = false; ui.annNewCat = ""; toast("Numéro ajouté à l’annuaire, partagé avec la famille."); return render();
+    }
+    if (b.id === "annEdit") { ui.annEdit = !ui.annEdit; if (!ui.annEdit) SPEC.annuaire = (SPEC.annuaire || []).filter(function (c) { return c.n || c.t || c.g; }); return render(); }
+    if (b.id === "annAdd") { SPEC.annuaire = (SPEC.annuaire || []).concat([{ id: uid(), g: "", n: "", r: "", t: "" }]); return render(); }
+    if (ds.anndel) { SPEC.annuaire = (SPEC.annuaire || []).filter(function (c, i) { return i !== Number(ds.anndel); }); return render(); }
     if (ds.fig) { // figures de wake : — → en travail → fait → pour plus tard → —
       var pfg = person(pilotSel);
       if (pfg) { var fg = {}; Object.keys(pfg.figures || {}).forEach(function (k) { fg[k] = pfg.figures[k]; }); var order = FIG_ETATS.map(function (x) { return x[0]; }); fg[ds.fig] = order[(order.indexOf(fg[ds.fig] || "") + 1) % order.length]; if (!fg[ds.fig]) delete fg[ds.fig]; pfg.figures = fg; }
@@ -1330,7 +1583,7 @@
       var R = computeRecap(Date.now()), perPid = {};
       R.rows.forEach(function (x) { if (x.perso > 0.05) perPid[x.pid] = Math.round(x.perso * 10) / 10; });
       sessionsArr.push({ id: uid(), mode: "app", bateau: SPEC.devise, date: frToIso(todayFr()), heureDeb: new Date(sortie.startedAt).toTimeString().slice(0, 5), heureFin: new Date().toTimeString().slice(0, 5),
-        compteurDeb: sortie.compteurDeb, compteurFin: sortie.compteurFin, jaugeDeb: sortie.jaugeDeb, jaugeFin: sortie.jaugeFin, plein: !!sortie.plein, pilote: sortie.pilote,
+        compteurDeb: sortie.compteurDeb, compteurFin: sortie.compteurFin, jaugeDeb: sortie.jaugeDeb, jaugeFin: sortie.jaugeFin, plein: !!sortie.plein, pilote: sortie.pilote, photoCompteur: sortie.photoCompteur || null, checks: sortie.checks || {},
         engineMin: Math.round(R.eMin * 10) / 10, famMin: { YC: Math.round(R.b.YC * 10) / 10, OC: Math.round(R.b.OC * 10) / 10 }, factMin: { YC: Math.round(R.fact.YC), OC: Math.round(R.fact.OC) },
         minutes: perPid, commun: Math.round((R.libre + R.balade) * 10) / 10, meca: Math.round(R.meca * 10) / 10,
         participants: sortie.participants.map(function (p) { return { pid: p.pid, role: p.role, host: p.host, fact: p.fact }; }),
@@ -1391,11 +1644,12 @@
     }
     if (b.id === "saveMise") { applyPrelevement(planPrelevement(miseForm.n, miseForm.f), miseForm.f, ""); if (miseForm.plein) lastPlein = todayFr(); view.essence = null; save(1); toast(savedMsg("Versement enregistré.")); return render(); }
     if (b.id === "dNew") { view.dep = true; return render(); }
+    if (ds.depnew) { finView = "dep"; view.dep = true; screen.scrollTop = 0; return render(); }
     if (b.id === "dCancel") { view.dep = false; return render(); }
     if (ds.dpay) { depForm.payeur = ds.dpay; return render(); }
     if (ds.r) { depForm.regle = ds.r; return render(); }
     if (b.id === "dSave") { var m = parseNum(document.getElementById("dM").value); if (!m) return toast("Indiquez un montant."); depenses.unshift({ d: todayFr(), lib: document.getElementById("dLib").value || "Dépense", cat: depForm.cat, m: m, payeur: depForm.payeur, regle: depForm.regle, pct: depForm.pct, isNew: true }); view.dep = false; save(1); toast(savedMsg("Dépense enregistrée.")); return render(); }
-    if (ds.year) { bilanYear = ds.year; return render(); }
+    if (ds.year) { bilanYear = ds.year; bilanYearUser = true; return render(); }
     if (b.id === "cfSave") {
       var u = document.getElementById("cfUrl").value.trim(), cd = document.getElementById("cfCode").value.trim();
       if (u && u.indexOf("https://script.google.com/") !== 0) return toast("L’adresse doit commencer par https://script.google.com/");
@@ -1428,7 +1682,27 @@
     if (el.dataset.f && el.tagName === "SELECT") { var t = findTour(Number(el.dataset.id)); t[el.dataset.f] = el.value; if (el.dataset.f === "act") { t.speed = ""; t.passes = ""; } save(1); return render(); }
     if (el.dataset.f && el.tagName === "INPUT") { save(1); return; }
     if (el.dataset.spec) { save(1); toast("Fiche technique mise à jour."); return; }
+    if (el.dataset.pf && el.type === "date") { // dates : enregistrées sans redessiner l'écran, sinon la saisie au clavier est interrompue
+      var ppd = person(pilotSel); if (ppd) ppd[el.dataset.pf] = el.value;
+      if (el.dataset.pf === "naissance") { var ag = document.getElementById("ageTxt"); if (ag) ag.textContent = ageTxt(el.value) || "date de naissance"; }
+      persistAll(); return;
+    }
     if (el.dataset.pf) { var ppf = person(pilotSel); if (ppf) ppf[el.dataset.pf] = el.value.trim(); return render(); }
+    if (el.id === "cPhoto" && el.files && el.files[0]) {
+      shrinkMeter(el.files[0]).then(function (ph) { sortie.photoCompteur = ph; save(1); toast("Photo du compteur jointe à la session."); render(); }).catch(function (er) { toast(er.message); });
+      return;
+    }
+    if (el.id === "anGs") { // section choisie : si « nouvelle section », on affiche le champ de saisie (sans perdre ce qui est déjà tapé)
+      var keep = { n: document.getElementById("anN").value, r: document.getElementById("anR").value, t: document.getElementById("anT").value };
+      ui.annNewCat = el.value; render();
+      document.getElementById("anN").value = keep.n; document.getElementById("anR").value = keep.r; document.getElementById("anT").value = keep.t;
+      var ng = document.getElementById("anG"); if (ng) ng.focus();
+      return;
+    }
+    if (el.dataset.startchk) { startChecks[el.dataset.startchk] = el.checked; return; }
+    if (el.id === "nPar") { noteForm.auteur = el.value; return; }
+    if (el.id === "nCat") { noteForm.cat = el.value; var lb = document.querySelector('label[for="nTxt"]'); if (lb) lb.textContent = "Note" + (el.value === NOTE_CATS[NOTE_CATS.length - 1] ? " (à préciser)" : ""); return; }
+    if (el.dataset.ann !== undefined) { var ca = (SPEC.annuaire || [])[Number(el.dataset.ann)]; if (ca) { ca[el.dataset.ak] = el.value.trim(); persistAll(); } return; }
     if (el.dataset.pfc) { var ppc = person(pilotSel); if (ppc) ppc[el.dataset.pfc] = el.checked; return render(); } // cases à cocher (permis)
     if (el.dataset.pfo) { // performances : « slalom.bestV », « wake.corde »…
       var ppo = person(pilotSel), kp = el.dataset.pfo.split(".");
@@ -1463,7 +1737,7 @@
     }
     if (el.id === "impFile" && el.files && el.files[0]) {
       var rdr = new FileReader();
-      rdr.onload = function () { try { var js = JSON.parse(rdr.result), n = importHistorique(js); toast(n + (js.format === "carnet-noskids-sauvegarde" ? " lignes restaurées depuis la sauvegarde." : " lignes d’historique importées.")); render(); } catch (er) { toast(er.message); } };
+      rdr.onload = function () { try { var js = JSON.parse(rdr.result), n = importHistorique(js); toast(n + (js.annuaire && !js.sessions ? " contacts ajoutés à l’annuaire urgence." : js.format === "carnet-noskids-sauvegarde" ? " lignes restaurées depuis la sauvegarde." : " lignes d’historique importées.")); render(); } catch (er) { toast(er.message); } };
       rdr.readAsText(el.files[0]); return;
     }
   });
