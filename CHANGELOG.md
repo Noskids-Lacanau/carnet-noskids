@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.6.2 — 2026-11-23
+
+- Nouvelle icône de l'app : la photo du skieur avec le logo Malibu doré (version adaptable pour Android avec le logo dans la zone visible).
+
 ## 1.6.1 — 2026-11-23
 
 - Mode nuit du téléphone : boutons colorés sur fonds profonds de leur couleur avec texte clair ; boutons turquoise et sélecteurs de famille assombris pour garder le texte blanc lisible. Contraste vérifié sur tous les écrans, en mode nuit et en clair.

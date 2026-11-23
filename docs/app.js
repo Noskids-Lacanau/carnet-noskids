@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.6.1", SCHEMA = 1;
+  var APP_VERSION = "1.6.2", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
