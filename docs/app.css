@@ -694,3 +694,12 @@ fieldset.pf-lock:disabled .chip, fieldset.pf-lock:disabled select, fieldset.pf-l
 :root[data-theme="dark"] .quick .qa-bal { background: linear-gradient(180deg, #252c52, #1a203d); border-color: #4b5698; --edge: #0b0e1e; color: #e3e7fb; }
 :root[data-theme="dark"] .note-alert { background: #3a1111; border-color: #943434; color: #ffdcd8; }
 :root[data-theme="dark"] .note-alert .chev { color: #f0a59f; }
+/* Activité : choix du bateau, lien vers le Google Sheet */
+.boat-sel { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
+.boat-chip { display: grid; gap: 2px; text-align: left; padding: 10px 12px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; cursor: pointer; }
+.boat-chip b { font: 700 15px var(--f-display); letter-spacing: .02em; }
+.boat-chip span { font-size: 12px; color: var(--muted); }
+.boat-chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+a.sheet-link { text-decoration: none; color: inherit; display: flex; justify-content: space-between; align-items: center; }
+/* Accueil : achat essence et remplissage un peu moins hauts, alignés en bas sur « Démarrer une session » */
+.qa-mid { min-height: 104px; align-self: end; }

@@ -150,7 +150,7 @@ function pull_(since) {
       try { var rec = JSON.parse(row[5]); rec.table = t; out.push(rec); } catch (e) { /* ligne modifiée à la main : ignorée */ }
     });
   });
-  return { ok: true, records: out, serverTime: now };
+  return { ok: true, records: out, serverTime: now, sheetUrl: ss.getUrl() }; // lien du Sheet, affiché en bas des dépenses
 }
 
 /* Copie complète du Google Sheet dans le dossier « Carnet Noskids – sauvegardes » (avant un effacement). */

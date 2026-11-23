@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 1.8.0 — 2026-11-23
+
+- Activité : synthèse par bateau (Noskids / Response 1993), coût total, litres, minutes, coût par minute, coût fixe annuel
+- Ancien bateau : dépenses jusqu'à fin 2025, achat moins revente (25 000 €) ; nouveau : essence estimée à 13 L/h tant qu'elle n'est pas saisie
+- Dépenses affectables à un bateau (champ bateau, achat du bateau marqué)
+- Temps de ski par personne : tous bateaux confondus
+- Lien vers le Google Sheet en bas des dépenses (envoyé par le serveur 1.3.0)
+- Accueil : boutons achat essence et remplissage moins hauts
+
 ## 1.7.0 — 2026-11-23
 
 - Triangles a la place des + pour deplier

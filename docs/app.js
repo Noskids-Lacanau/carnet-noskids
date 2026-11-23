@@ -20,7 +20,7 @@
     moteur: "PCM 5.7 L 350 ch (246 kW), essence", nMoteur: "750683", dims: "6,09 × 2,28 m · tirant d’eau 0,69 m", categorie: "D · 8 personnes maximum",
     equip: "Tour Monster Tower + bimini, Zero Off, extinction automatique, crépine, kit de rinçage", achat: "35 000 € TTC · facture R01349 du 10/07/2026 · Sports Service (Lacanau)",
     gardiennage: "Offert les hivers 2026-2027 et 2027-2028 (facture)",
-    reservoir: 125, conso: 13, hAchat: 1950, hVie: 4000, valMoteur: 13000, prix: 22000, ans: 15, bidon: 20, tarif: 1,
+    venteAncien: 25000, reservoir: 125, conso: 13, hAchat: 1950, hVie: 4000, valMoteur: 13000, prix: 22000, ans: 15, bidon: 20, tarif: 1,
     /* Annuaire urgence - dépannage : numéros publics (société, police du lac, association), modifiables dans l'app */
     annuaire: [
       { id: "ann-ss-roland", g: "Sport Service Pitrot", n: "Roland Jamin", r: "", t: "06 41 76 79 43" },
@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.7.0", SCHEMA = 1;
+  var APP_VERSION = "1.8.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -240,7 +240,7 @@
         return Sync.call({ action: "pull", since: CONF.lastSync || "" });
       }).then(function (res) {
         if (!res.ok) throw new Error(res.error || "Erreur du serveur");
-        var n = mergeRemote(res.records || []); CONF.lastSync = res.serverTime || CONF.lastSync; dbSave();
+        var n = mergeRemote(res.records || []); CONF.lastSync = res.serverTime || CONF.lastSync; if (res.sheetUrl) CONF.sheetUrl = res.sheetUrl; dbSave();
         Sync.busy = false; Sync.status = "ok"; Sync.lastError = "";
         if (n) { loadArrays(); render(); } else updateNet();
         if (QUEUE.length) Sync.soon();
@@ -916,7 +916,13 @@
     h += '<div class="banner"><div><span class="label">Total</span><span class="v">' + eur0.format(B.tot.total) + '</span></div><div class="yc"><span class="label">Part Yann</span><span class="v">' + eur0.format(B.tot.YC) + '</span></div><div class="oc"><span class="label">Part Olivier</span><span class="v">' + eur0.format(B.tot.OC) + "</span></div></div>" +
       '<div class="alert ok"><b>Balance : ' + balanceText(B) + "</b>Dépenses payées moins la part de chacun, dettes de bidons comprises. Un virement entre familles se note dans la catégorie « " + REGL + " ».</div>" +
       '<button class="btn ghost" id="xlsExport">Exporter la synthèse en Excel</button>';
-    return h + depListHtml();
+    return h + depListHtml() + sheetLinkHtml();
+  }
+  /* Lien vers le Google Sheet (base de données) : donné par le serveur à la synchro, ou saisi dans la fiche technique */
+  function sheetLinkHtml() {
+    var u = CONF.sheetUrl || SPEC.sheetUrl || "";
+    if (!/^https:\/\/docs\.google\.com\//.test(u)) return '<div class="small muted sheet-link">Lien vers le Google Sheet : disponible après la mise à jour du serveur (1.3.0), ou à coller dans la fiche technique (onglet Bateau).</div>';
+    return '<a class="card link-card sheet-link" href="' + esc(u) + '" target="_blank" rel="noopener"><span><b>Ouvrir la base de données (Google Sheet)</b><span class="small muted">Carnet Noskids – données · réservé aux comptes autorisés</span></span><span class="chev" aria-hidden="true">›</span></a>';
   }
   function depFormHtml() {
     var h = "";
@@ -1080,49 +1086,119 @@
     var d = YEARS[y]; if (!d || !d.min) return null; var o = {}; for (var k in d) o[k] = d[k]; o.years = 1; return o;
   }
   function mergePeople(a, b) { var m = {}; a.concat(b).forEach(function (p) { if (!m[p[0]]) m[p[0]] = [p[0], p[1], 0, 0]; m[p[0]][2] += p[2]; m[p[0]][3] += p[3]; }); return Object.keys(m).map(function (k) { return m[k]; }).sort(function (x, y) { return y[2] - x[2]; }); }
-  function renderBilan() {
-    var cy = String(new Date().getFullYear()), yrs = Object.keys(YEARS).filter(function (k) { return k; });
-    if (yrs.indexOf(cy) < 0) yrs.push(cy); yrs.sort(); yrs.push("Toutes");
-    if (!bilanYearUser || !bilanYear) bilanYear = latestYear() || cy; // suit les données tant que personne n'a choisi d'année
-    var h = '<div class="card"><div class="label">Année</div><div class="chips">' + yrs.map(function (y) { return '<button class="chip" data-year="' + y + '" aria-pressed="' + (y === bilanYear) + '">' + y + "</button>"; }).join("") + "</div></div>";
-    var D = yearData(bilanYear);
-    if (!D) return h + '<div class="alert"><b>Aucune session enregistrée pour ' + esc(bilanYear) + ".</b>Les ratios apparaîtront dès les premières sessions. L’historique 2024-2025 s’importe depuis l’onglet Bateau.</div>";
-    var fixM = D.fixes / D.min, essM = D.essence / D.min, usM = usureMin(), amM = amortAn() * D.years / D.min, total = fixM + essM + usM + amM, lh = D.litres / (D.min / 60);
-    h += '<div class="card">' + collHead("indic", "Indicateurs financiers", dec2.format(total) + " € par minute moteur · " + dec1.format(D.min / 60) + " h moteur") + (!ui.indic ? "" : '<div class="kpis kpis-in"><div class="kpi hero"><span class="label">Coût complet par minute moteur</span><span class="v">' + dec2.format(total) + ' €</span><span class="s">soit ' + eur0.format(total * 60) + " de l’heure · invités facturés " + SPEC.tarif + " €/min</span></div>" +
-      '<div class="kpi"><span class="label">Temps moteur</span><span class="v">' + dec1.format(D.min / 60) + ' h</span><span class="s">' + int0.format(D.min) + " min</span></div>" +
-      '<div class="kpi"><span class="label">Litres achetés</span><span class="v">' + int0.format(D.litres) + ' L</span><span class="s">' + esc(D.lnote) + "</span></div>" +
-      '<div class="kpi"><span class="label">Consommation constatée</span><span class="v">' + dec1.format(lh) + ' L/h</span><span class="s">référence ' + SPEC.conso + " L/h (nouveau bateau)</span></div>" +
-      '<div class="kpi"><span class="label">Coût variable</span><span class="v">' + dec2.format(essM) + ' €</span><span class="s">essence par minute moteur</span></div></div>') + "</div>";
-    h += '<div class="card">' + collHead("coutDet", "Détail du coût par minute moteur", "coûts fixes, essence, usure, amortissement") + (!ui.coutDet ? "" : '<table class="rtable"><thead><tr><th>Poste</th><th>Montant</th><th>€/min</th></tr></thead><tbody>' +
-      "<tr><td>Coûts fixes<span class=\"sub\">assurance " + eur0.format(D.fx.assurance) + ", adhésions " + eur0.format(D.fx.adhesions) + ", taxes et corps mort " + eur0.format(D.fx.taxes) + "</span></td><td>" + eur0.format(D.fixes) + "</td><td>" + dec2.format(fixM) + "</td></tr>" +
-      "<tr><td>Essence (variable)</td><td>" + eur0.format(D.essence) + "</td><td>" + dec2.format(essM) + "</td></tr>" +
-      "<tr><td>Usure moteur<span class=\"sub\">" + eur0.format(SPEC.valMoteur) + " sur " + int0.format(SPEC.hVie - SPEC.hAchat) + " h restantes (" + int0.format(SPEC.hAchat) + " → " + int0.format(SPEC.hVie) + " h)</span></td><td>" + eur0.format(usM * D.min) + "</td><td>" + dec2.format(usM) + "</td></tr>" +
-      "<tr><td>Amortissement bateau<span class=\"sub\">" + eur0.format(SPEC.prix) + " sur " + SPEC.ans + " ans = " + eur0.format(amortAn()) + " par an</span></td><td>" + eur0.format(amortAn() * D.years) + "</td><td>" + dec2.format(amM) + "</td></tr>" +
-      '<tr class="tot"><td>Coût complet</td><td>' + eur0.format(total * D.min) + "</td><td>" + dec2.format(total) + "</td></tr></tbody></table>" +
-      '<div class="small muted">Usure et amortissement utilisent la fiche technique du nouveau bateau (onglet Bateau), appliquée ici à l’historique pour illustrer.</div>') + "</div>";
-    if (bilanYear !== "Toutes") h += chartHtml(D, fixM, essM, usM);
-    else h += '<div class="small muted">Choisissez une année pour voir l’évolution du coût au fil de la saison.</div>';
-    var t = D.fam.YC + D.fam.OC;
-    h += '<div class="card"><h3>Temps moteur par famille</h3><div class="split"><i class="yc" style="width:' + (D.fam.YC / t * 100) + '%"></i><i class="oc" style="width:' + (D.fam.OC / t * 100) + '%"></i></div>' +
-      '<div class="legend"><span>' + famDot("YC") + 'Famille Yann <b class="num">' + int0.format(D.fam.YC) + " min · " + Math.round(D.fam.YC / t * 100) + " %</b></span><span>" + famDot("OC") + 'Famille Olivier <b class="num">' + int0.format(D.fam.OC) + " min · " + Math.round(D.fam.OC / t * 100) + " %</b></span></div>" +
-      '<div class="small muted">Invités compris dans leur famille ; temps commun et mécanique partagés.</div></div>';
-    var ppl = D.people;
-    if (ppl.length) {
-      var w = ppl.filter(function (p) { return p[0] === bilanWho; })[0] || ppl[0]; bilanWho = w[0];
-      var max = Math.max(ppl[0][2], D.commun || 0, D.meca || 0, 1);
-      h += '<div class="card">' + collHead("perso", "Temps et sessions par personne", ppl.length + " personne" + (ppl.length > 1 ? "s" : "") + " · " + esc(bilanYear));
-      if (ui.perso) {
-        h += '<div class="field" style="margin-top:12px"><label for="bWho">Personne</label><select id="bWho">' + ppl.map(function (p) { return "<option" + (p[0] === bilanWho ? " selected" : "") + ">" + esc(p[0]) + "</option>"; }).join("") + "</select></div>" +
-          '<div class="kpis"><div class="kpi"><span class="label">Temps de ski</span><span class="v">' + Math.round(w[2]) + ' min</span><span class="s">' + bilanYear + '</span></div><div class="kpi"><span class="label">Sessions</span><span class="v">' + w[3] + '</span><span class="s">≈ ' + Math.round(w[2] / Math.max(1, w[3])) + " min par session</span></div></div>" +
-          '<div style="display:grid;gap:7px">';
-        ppl.forEach(function (p) { h += '<div class="bar-row"><span>' + esc(p[0]) + '</span><div class="track"><div class="fill ' + p[1] + '" style="width:' + (p[2] / max * 100) + '%"></div></div><span class="n">' + Math.round(p[2]) + "</span></div>"; });
-        if (D.commun) h += '<div class="bar-row"><span>Commun</span><div class="track"><div class="fill X" style="width:' + (D.commun / max * 100) + '%"></div></div><span class="n">' + Math.round(D.commun) + "</span></div>";
-        if (D.meca) h += '<div class="bar-row"><span>Mécanique</span><div class="track"><div class="fill X" style="width:' + (D.meca / max * 100) + '%"></div></div><span class="n">' + Math.round(D.meca) + "</span></div>";
-        h += '</div><div class="small muted">En minutes de tours (temps commun et mécanique à part).</div>';
-      }
-      h += "</div>";
+  /* ---------- Synthèse par bateau ----------
+     Ancien bateau (Response 1993) : toutes les dépenses jusqu'à fin 2025, achat compris, moins la revente (SPEC.venteAncien).
+     Nouveau bateau (Noskids, depuis 2026) : dépenses depuis 2026, amortissement et usure moteur de la fiche technique ;
+     tant que l'essence de la période n'est pas renseignée, elle est estimée à SPEC.conso L/h (13 L/h). */
+  var BOATS = [{ k: "new", n: "Noskids · LXR 2015", d: "depuis 2026" }, { k: "old", n: "Response 1993", d: "2023 → 2025" }];
+  var bilanBoat = "";
+  function boatOf(y) { return y && y <= "2025" ? "old" : "new"; }
+  function isAchatBateau(d) { return !!d.achatBateau || (d.cat === "Matériel bateau" && Number(d.m) >= 10000); } // achat du bateau (2 × 11 500 € en 2023, 2 × 5 000 € en 2026)
+  /* Bateau d'une dépense : choisi à l'import (champ « bateau » : déculassage 2026 sur l'ancien, matériel repris sur le nouveau), sinon selon l'année.
+     Une dépense affectée à l'autre bateau compte dans sa première (ou dernière) saison. */
+  function depBoat(d) { return d.bateau === "old" || d.bateau === "new" ? d.bateau : boatOf(yearOf(d)); }
+  function depYear(d) { var y = yearOf(d), b = depBoat(d); if (!y || boatOf(y) === b) return y; return b === "new" ? "2026" : "2025"; }
+  function boatYears(bk) {
+    var s = {};
+    sessionsArr.forEach(function (x) { var y = yearOf(x); if (y && boatOf(y) === bk) s[y] = 1; });
+    depenses.forEach(function (x) { var y = depYear(x); if (y && depBoat(x) === bk && x.cat !== REGL) s[y] = 1; });
+    if (bk === "new") s[String(Math.max(2026, new Date().getFullYear()))] = 1;
+    return Object.keys(s).sort();
+  }
+  function refPrixL() {
+    var l = 0, e = 0; moves.forEach(function (m) { if (m.type === "achat" && Number(m.litres) > 0 && Number(m.prix) > 0) { l += Number(m.litres); e += Number(m.prix); } });
+    return l > 0 ? e / l : 1.85;
+  }
+  function bilanData(bk, year) {
+    var all = boatYears(bk), ys = year === "Toutes" ? all : [year];
+    var D = { bk: bk, ys: ys, years: ys.length, min: 0, tour: 0, nSes: 0, fam: { YC: 0, OC: 0 }, commun: 0, meca: 0, people: [], curve: [], fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, autres: 0, recettes: 0 };
+    ys.forEach(function (y) { var a = YEARS[y]; if (!a) return; D.min += a.min; D.fam.YC += a.fam.YC; D.fam.OC += a.fam.OC; D.commun += a.commun; D.meca += a.meca; D.people = mergePeople(D.people, a.people || []); if (ys.length === 1) D.curve = a.curve; });
+    sessionsArr.forEach(function (s) { if (ys.indexOf(yearOf(s)) < 0) return; D.nSes++; Object.keys(s.minutes || {}).forEach(function (p) { D.tour += Number(s.minutes[p]) || 0; }); });
+    var achatTot = 0;
+    depenses.forEach(function (d) {
+      var y = depYear(d); if (!y || depBoat(d) !== bk || d.cat === REGL) return;
+      var m = Number(d.m) || 0;
+      if (isAchatBateau(d)) { achatTot += m; return; }
+      if (ys.indexOf(y) < 0) return;
+      if (d.cat === "Essence") D.essence += m;
+      else if (FIXED_CATS[d.cat]) { D.fixes += m; D.fx[FIXED_CATS[d.cat]] += m; }
+      else if (d.cat === "Recette invités") D.recettes += m;
+      else D.autres += m;
+    });
+    moves.forEach(function (mv) { if (mv.type === "achat" && ys.indexOf(yearOf(mv)) >= 0) D.litres += Number(mv.litres) || 0; });
+    if (bk === "new" && D.essence <= 0 && D.min > 0) { D.estime = true; D.litres = D.min / 60 * SPEC.conso; D.essence = D.litres * refPrixL(); }
+    if (bk === "old") {
+      D.achat = achatTot; D.vente = Number(SPEC.venteAncien) || 0;
+      D.bateau = (achatTot - D.vente) * ys.length / Math.max(1, all.length); // achat moins revente, réparti sur les saisons du bateau
+      D.usure = 0;
+    } else {
+      D.achat = (Number(SPEC.prix) || 0) + (Number(SPEC.valMoteur) || 0);
+      D.bateau = amortAn() * ys.length; D.usure = usureMin() * D.min;
     }
-    return h + sessionListHtml(bilanYear);
+    D.total = D.fixes + D.essence + D.autres + D.recettes + D.bateau + D.usure;
+    D.fixedYear = (D.fixes + D.autres + D.recettes + D.bateau) / Math.max(1, ys.length); // part fixe d'une saison (pour la courbe)
+    return D;
+  }
+  function perMin(v, min) { return min > 0 ? dec2.format(v / min) + " €" : "—"; }
+  function renderBilan() {
+    if (!bilanBoat) bilanBoat = boatOf(latestYear() || String(new Date().getFullYear()));
+    var yrs = boatYears(bilanBoat).concat(["Toutes"]);
+    if (!bilanYearUser || yrs.indexOf(bilanYear) < 0) { var ly = latestYear(); bilanYear = ly && boatOf(ly) === bilanBoat ? ly : yrs[yrs.length - 2] || "Toutes"; }
+    var h = '<div class="card"><div class="label">Bateau</div><div class="boat-sel">' + BOATS.map(function (b) { return '<button class="boat-chip" data-boat="' + b.k + '" aria-pressed="' + (b.k === bilanBoat) + '"><b>' + esc(b.n) + "</b><span>" + esc(b.d) + "</span></button>"; }).join("") + "</div>" +
+      '<div class="label">Année</div><div class="chips">' + yrs.map(function (y) { return '<button class="chip" data-year="' + y + '" aria-pressed="' + (y === bilanYear) + '">' + y + "</button>"; }).join("") + "</div></div>";
+    var D = bilanData(bilanBoat, bilanYear), B0 = BOATS.filter(function (b) { return b.k === bilanBoat; })[0];
+    var essM = D.min ? D.essence / D.min : 0, usM = D.min ? D.usure / D.min : 0;
+    var per = bilanYear === "Toutes" ? (bilanBoat === "old" ? "sur toute la période du bateau" : "depuis l’achat") : "en " + bilanYear;
+    h += '<div class="card">' + collHead("indic", "Synthèse " + esc(B0.n), (D.min ? perMin(D.total, D.min) + " par minute moteur · " : "") + eur0.format(D.total) + " " + per) + (!ui.indic ? "" :
+      '<div class="kpis kpis-in"><div class="kpi hero"><span class="label">Coût total de l’activité</span><span class="v">' + eur0.format(D.total) + '</span><span class="s">' + per + (D.min ? " · " + perMin(D.total, D.min) + " par minute moteur, soit " + eur0.format(D.total / D.min * 60) + " de l’heure" : "") + "</span></div>" +
+      '<div class="kpi"><span class="label">Temps moteur</span><span class="v">' + dec1.format(D.min / 60) + ' h</span><span class="s">' + int0.format(D.min) + " min · " + D.nSes + " session" + (D.nSes > 1 ? "s" : "") + "</span></div>" +
+      '<div class="kpi"><span class="label">Minutes de tours</span><span class="v">' + int0.format(D.tour) + ' min</span><span class="s">' + (D.tour ? perMin(D.total, D.tour) + " par minute de tour" : "skieurs, wake, bouée") + "</span></div>" +
+      '<div class="kpi"><span class="label">' + (D.estime ? "Litres estimés" : "Litres achetés") + '</span><span class="v">' + int0.format(D.litres) + ' L</span><span class="s">' + (D.estime ? SPEC.conso + " L/h tant que l’essence n’est pas renseignée" : D.min ? dec1.format(D.litres / (D.min / 60)) + " L/h constatés" : "") + "</span></div>" +
+      '<div class="kpi"><span class="label">Coût fixe annuel</span><span class="v">' + eur0.format(D.fixes / Math.max(1, D.years)) + '</span><span class="s">assurance, adhésions, taxes</span></div>' +
+      '<div class="kpi"><span class="label">Coût variable</span><span class="v">' + perMin(D.essence, D.min) + '</span><span class="s">essence par minute moteur' + (D.estime ? " (estimée)" : "") + "</span></div></div>") + "</div>";
+    var lines = [
+      ["Coûts fixes", "assurance " + eur0.format(D.fx.assurance) + ", adhésions " + eur0.format(D.fx.adhesions) + ", taxes et corps mort " + eur0.format(D.fx.taxes), D.fixes],
+      ["Essence" + (D.estime ? " (estimée)" : ""), D.estime ? int0.format(D.litres) + " L à " + SPEC.conso + " L/h × " + dec2.format(refPrixL()) + " €/L" : int0.format(D.litres) + " L achetés", D.essence],
+      ["Entretien, réparations, matériel", "toutes les autres dépenses (hors achat du bateau)", D.autres]
+    ];
+    if (D.recettes) lines.push(["Recettes invités", "minutes facturées aux invités", D.recettes]);
+    if (bilanBoat === "old") lines.push(["Achat moins revente", "achat " + eur0.format(D.achat) + " − revente " + eur0.format(D.vente) + (bilanYear === "Toutes" ? "" : ", réparti sur " + boatYears("old").length + " saisons"), D.bateau]);
+    else {
+      lines.push(["Amortissement bateau", eur0.format(SPEC.prix) + " sur " + SPEC.ans + " ans = " + eur0.format(amortAn()) + " par an", D.bateau]);
+      lines.push(["Usure moteur", eur0.format(SPEC.valMoteur) + " sur " + int0.format(SPEC.hVie - SPEC.hAchat) + " h (" + int0.format(SPEC.hAchat) + " → " + int0.format(SPEC.hVie) + " h)", D.usure]);
+    }
+    h += '<div class="card">' + collHead("coutDet", "Détail du coût", "par poste, " + per) + (!ui.coutDet ? "" : '<table class="rtable"><thead><tr><th>Poste</th><th>Montant</th><th>€/min</th></tr></thead><tbody>' +
+      lines.map(function (l) { return "<tr><td>" + l[0] + '<span class="sub">' + l[1] + "</span></td><td>" + eur0.format(l[2]) + "</td><td>" + (D.min ? dec2.format(l[2] / D.min) : "—") + "</td></tr>"; }).join("") +
+      '<tr class="tot"><td>Coût total</td><td>' + eur0.format(D.total) + "</td><td>" + (D.min ? dec2.format(D.total / D.min) : "—") + "</td></tr></tbody></table>" +
+      '<div class="small muted">' + (bilanBoat === "old" ? "Ancien bateau : dépenses jusqu’à fin 2025. Revente à " + eur0.format(D.vente) + " (modifiable dans la fiche technique, onglet Bateau)." : "Nouveau bateau : dépenses depuis 2026 ; amortissement et usure d’après la fiche technique (achat " + eur0.format(D.achat) + ").") + "</div>") + "</div>";
+    if (bilanYear !== "Toutes" && D.curve.length) h += chartHtml(D, D.fixedYear, essM + usM);
+    if (D.min) {
+      var t = D.fam.YC + D.fam.OC || 1;
+      h += '<div class="card"><h3>Temps moteur par famille</h3><div class="split"><i class="yc" style="width:' + (D.fam.YC / t * 100) + '%"></i><i class="oc" style="width:' + (D.fam.OC / t * 100) + '%"></i></div>' +
+        '<div class="legend"><span>' + famDot("YC") + 'Famille Yann <b class="num">' + int0.format(D.fam.YC) + " min · " + Math.round(D.fam.YC / t * 100) + " %</b></span><span>" + famDot("OC") + 'Famille Olivier <b class="num">' + int0.format(D.fam.OC) + " min · " + Math.round(D.fam.OC / t * 100) + " %</b></span></div>" +
+        '<div class="small muted">Invités compris dans leur famille ; temps commun et mécanique partagés.</div></div>';
+    } else h += '<div class="alert"><b>Aucune session enregistrée ' + (bilanYear === "Toutes" ? "pour ce bateau" : "en " + esc(bilanYear)) + ".</b>Les ratios par minute apparaîtront dès les premières sessions.</div>";
+    h += personCardHtml();
+    return h + sessionListHtml(bilanYear, bilanBoat);
+  }
+  /* Temps de ski par personne : tous les bateaux confondus (l'année choisie, ou toutes les années) */
+  function personCardHtml() {
+    var ys = bilanYear === "Toutes" ? Object.keys(YEARS) : [bilanYear], ppl = [], com = 0, mec = 0;
+    ys.forEach(function (y) { var a = YEARS[y]; if (a) { ppl = mergePeople(ppl, a.people || []); com += a.commun; mec += a.meca; } });
+    if (!ppl.length) return "";
+    var w = ppl.filter(function (p) { return p[0] === bilanWho; })[0] || ppl[0]; bilanWho = w[0];
+    var max = Math.max(ppl[0][2], com, mec, 1), lab = bilanYear === "Toutes" ? "toutes années, tous bateaux" : bilanYear;
+    var h = '<div class="card">' + collHead("perso", "Temps et sessions par personne", ppl.length + " personne" + (ppl.length > 1 ? "s" : "") + " · " + lab);
+    if (ui.perso) {
+      h += '<div class="field" style="margin-top:12px"><label for="bWho">Personne</label><select id="bWho">' + ppl.map(function (p) { return "<option" + (p[0] === bilanWho ? " selected" : "") + ">" + esc(p[0]) + "</option>"; }).join("") + "</select></div>" +
+        '<div class="kpis"><div class="kpi"><span class="label">Temps de ski</span><span class="v">' + Math.round(w[2]) + ' min</span><span class="s">' + lab + '</span></div><div class="kpi"><span class="label">Sessions</span><span class="v">' + w[3] + '</span><span class="s">≈ ' + Math.round(w[2] / Math.max(1, w[3])) + " min par session</span></div></div>" +
+        '<div style="display:grid;gap:7px">';
+      ppl.forEach(function (p) { h += '<div class="bar-row"><span>' + esc(p[0]) + '</span><div class="track"><div class="fill ' + p[1] + '" style="width:' + (p[2] / max * 100) + '%"></div></div><span class="n">' + Math.round(p[2]) + "</span></div>"; });
+      if (com) h += '<div class="bar-row"><span>Commun</span><div class="track"><div class="fill X" style="width:' + (com / max * 100) + '%"></div></div><span class="n">' + Math.round(com) + "</span></div>";
+      if (mec) h += '<div class="bar-row"><span>Mécanique</span><div class="track"><div class="fill X" style="width:' + (mec / max * 100) + '%"></div></div><span class="n">' + Math.round(mec) + "</span></div>";
+      h += '</div><div class="small muted">En minutes de tours, tous bateaux confondus (temps commun et mécanique à part).</div>';
+    }
+    return h + "</div>";
   }
   /* Liste des sessions d'une année (ou de toutes), une carte repliable par année */
   var MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
@@ -1144,10 +1220,10 @@
     if (s.note) h += '<div class="small" style="margin-bottom:6px">' + esc(s.note) + '</div>';
     return h + (photoSrc(s.photoCompteur) ? '<img class="cpt-photo" src="' + photoSrc(s.photoCompteur) + '" alt="Photo du compteur de la session">' : '<div class="small muted">Pas de photo du compteur pour cette session.</div>');
   }
-  function sessionListHtml(sel) {
+  function sessionListHtml(sel, bk) {
     var by = {};
     sessionsArr.forEach(function (s) { var y = yearOf(s); if (y) (by[y] = by[y] || []).push(s); });
-    var yrs = sel === "Toutes" ? Object.keys(by).sort().reverse() : (by[sel] ? [sel] : []);
+    var yrs = sel === "Toutes" ? Object.keys(by).filter(function (y) { return !bk || boatOf(y) === bk; }).sort().reverse() : (by[sel] ? [sel] : []);
     var gapBefore = {}; findGaps().forEach(function (g) { gapBefore[g.to.id] = g; });
     return yrs.map(function (y) {
       var list = by[y].slice().sort(function (a, b) { return dkey(a) < dkey(b) ? -1 : 1; }), key = "ses" + y;
@@ -1170,8 +1246,8 @@
     }).join("");
   }
   var chartPts = [];
-  function chartHtml(D, fixM, essM, usM) {
-    var W = 340, H = 190, L = 34, R = 14, T = 14, B = 30, YMAX = 5, fixedYear = D.fixes + amortAn(), vari = essM + usM;
+  function chartHtml(D, fixedYear, vari) {
+    var W = 340, H = 190, L = 34, R = 14, T = 14, B = 30, YMAX = 5;
     var xmax = Math.ceil(D.min / 500) * 500, sx = function (v) { return L + v / xmax * (W - L - R); }, sy = function (v) { return T + (1 - Math.min(v, YMAX) / YMAX) * (H - T - B); };
     chartPts = D.curve.map(function (p) { var y = fixedYear / p[0] + vari; return { x: sx(p[0]), y: sy(y), v: y, cum: p[0], d: p[1], clip: y > YMAX }; });
     var lastV = chartPts.length ? chartPts[chartPts.length - 1].v : 0;
@@ -1191,7 +1267,7 @@
   }
 
   /* ---------- Bateau ---------- */
-  var SPEC_FIELDS = [["devise", "Nom du bateau", "txt"], ["ancienNom", "Nom sur le titre de navigation", "txt"], ["modele", "Modèle", "txt"], ["hin", "Numéro de coque (HIN)", "txt"], ["immat", "N° d’inscription", "txt"], ["moteur", "Moteur", "txt"], ["nMoteur", "N° moteur", "txt"], ["dims", "Dimensions", "txt"], ["categorie", "Catégorie de conception", "txt"], ["equip", "Équipement", "txt"], ["achat", "Achat", "txt"], ["gardiennage", "Gardiennage", "txt"], ["annee", "Année de construction"], ["reservoir", "Réservoir (L)"], ["conso", "Consommation moyenne (L/h)"], ["hAchat", "Compteur à l’achat (h)"], ["hVie", "Durée de vie moteur (h)"], ["valMoteur", "Valeur pour l’usure moteur (€)"], ["prix", "Prix pour l’amortissement (€)"], ["ans", "Durée d’amortissement (ans)"], ["bidon", "Contenance d’un bidon (L)"], ["tarif", "Tarif invités (€/min)"]];
+  var SPEC_FIELDS = [["devise", "Nom du bateau", "txt"], ["ancienNom", "Nom sur le titre de navigation", "txt"], ["modele", "Modèle", "txt"], ["hin", "Numéro de coque (HIN)", "txt"], ["immat", "N° d’inscription", "txt"], ["moteur", "Moteur", "txt"], ["nMoteur", "N° moteur", "txt"], ["dims", "Dimensions", "txt"], ["categorie", "Catégorie de conception", "txt"], ["equip", "Équipement", "txt"], ["achat", "Achat", "txt"], ["gardiennage", "Gardiennage", "txt"], ["sheetUrl", "Lien du Google Sheet (base de données)", "txt"], ["annee", "Année de construction"], ["reservoir", "Réservoir (L)"], ["conso", "Consommation moyenne (L/h)"], ["hAchat", "Compteur à l’achat (h)"], ["hVie", "Durée de vie moteur (h)"], ["valMoteur", "Valeur pour l’usure moteur (€)"], ["prix", "Prix pour l’amortissement (€)"], ["venteAncien", "Revente de l’ancien bateau, Response 1993 (€)"], ["ans", "Durée d’amortissement (ans)"], ["bidon", "Contenance d’un bidon (L)"], ["tarif", "Tarif invités (€/min)"]];
   function collHead(key, title, sub) { return '<button class="coll" data-coll="' + key + '" aria-expanded="' + !!ui[key] + '"><span class="ct"><span class="ctitle">' + title + '</span><span class="small muted">' + sub + '</span></span>' + TRI + "</button>"; }
   /* Triangle vers le bas (tourné vers le haut quand la partie est ouverte) : un « + » se confondait avec un ajout */
   var TRI = '<span class="tri" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5.5 8.5h13L12 16.5z"/></svg></span>';
@@ -1886,6 +1962,7 @@
     if (ds.r) { depForm.regle = ds.r; return render(); }
     if (b.id === "dSave") { var m = parseNum(document.getElementById("dM").value); if (!m) return toast("Indiquez un montant."); depenses.unshift({ d: todayFr(), lib: document.getElementById("dLib").value || "Dépense", cat: depForm.cat, m: m, payeur: depForm.payeur, regle: depForm.regle, pct: depForm.pct, isNew: true }); view.dep = false; save(1); toast(savedMsg("Dépense enregistrée.")); return render(); }
     if (ds.year) { bilanYear = ds.year; bilanYearUser = true; return render(); }
+    if (ds.boat) { bilanBoat = ds.boat; bilanYearUser = false; return render(); }
     if (b.id === "cfSave") {
       var u = document.getElementById("cfUrl").value.trim(), cd = document.getElementById("cfCode").value.trim();
       if (u && u.indexOf("https://script.google.com/") !== 0) return toast("L’adresse doit commencer par https://script.google.com/");
