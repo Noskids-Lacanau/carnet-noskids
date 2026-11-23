@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.8.3 — 2026-11-23
+
+- Contacts : plus de doublon Propriétaire, la section saisie dans l'annuaire passe en tête
+
 ## 1.8.2 — 2026-11-23
 
 - Détail du coût : toucher un poste affiche les dépenses qu'il contient (ou le calcul : essence estimée, usure, amortissement, achat moins revente)

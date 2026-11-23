@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.2", SCHEMA = 1;
+  var APP_VERSION = "1.8.3", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -1672,9 +1672,12 @@
   var URG_NAT = [["112", "Urgences (numéro européen)"], ["15", "SAMU"], ["18", "Pompiers"], ["17", "Police, gendarmerie"]];
   /* Sections : Propriétaires (numéros des fiches de Yann et Olivier) en tête, puis l'ordre choisi dans l'app (SPEC.annOrdre) */
   var OWN_G = "Propriétaires", ANN_ORDRE = [OWN_G, "Police du lac", "Sport Service Pitrot", "Association SNLG", "VLG"];
+  /* Section « Propriétaire(s) » déjà saisie dans l'annuaire (quel que soit l'accord ou les accents) : c'est elle qui passe en tête, sans doublon */
+  function annNorm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(); }
+  function annOwnSaisie(list) { for (var i = 0; i < list.length; i++) if (/^propri/.test(annNorm(list[i].g))) return list[i].g; return ""; }
   function annGroups(list) {
-    var gs = [OWN_G]; list.forEach(function (c) { var g = c.g || "Autres"; if (gs.indexOf(g) < 0) gs.push(g); });
-    var ord = (SPEC.annOrdre && SPEC.annOrdre.length ? SPEC.annOrdre : ANN_ORDRE), rk = function (g) { var i = ord.indexOf(g); return i < 0 ? 1000 + gs.indexOf(g) : i; };
+    var own = annOwnSaisie(list) || OWN_G, gs = [own]; list.forEach(function (c) { var g = c.g || "Autres"; if (gs.indexOf(g) < 0) gs.push(g); });
+    var ord = (SPEC.annOrdre && SPEC.annOrdre.length ? SPEC.annOrdre : ANN_ORDRE), rk = function (g) { var i = ord.indexOf(g); if (i < 0 && g === own) i = ord.indexOf(OWN_G); return i < 0 ? 1000 + gs.indexOf(g) : i; };
     return gs.sort(function (a, b) { return rk(a) - rk(b); });
   }
   function renderAnnuaire() {
@@ -1696,7 +1699,7 @@
     } else {
       groups.forEach(function (g) {
         h += '<div class="ann-g">' + esc(g) + "</div>";
-        if (g === OWN_G) ["yann", "olivier"].forEach(function (id) {
+        if (g === OWN_G && !annOwnSaisie(list)) ["yann", "olivier"].forEach(function (id) { // numéros des fiches pilotes, seulement si aucune section Propriétaire n'a été saisie
           var p = person(id); if (!p) return;
           h += '<div class="ann-row ind"><span><b>' + esc(p.name) + '</b><span class="small muted"> · propriétaire</span></span>' +
             (p.tel ? '<a class="call" href="tel:' + telHref(p.tel) + '">' + PHONE_ICON + esc(p.tel) + "</a>" : '<button class="btn link small" data-pilotgo="' + id + '">numéro à saisir dans sa fiche</button>') + "</div>";
