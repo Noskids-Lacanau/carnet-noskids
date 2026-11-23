@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.9.0 — 2026-11-23
+
+- Session en cours : l'écran reste allumé (pas de mise en veille)
+- Grand affichage : 4 boutons en haut à droite (pause et fin du skieur, pause et fin de session bateau) ; la fin de session revient à la clôture classique avec la photo du compteur
+
 ## 1.8.9 — 2026-11-23
 
 - Accueil : boutons Live / Démo remontés (ne touchent plus Plein bateau)

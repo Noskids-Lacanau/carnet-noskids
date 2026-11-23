@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.9", SCHEMA = 1;
+  var APP_VERSION = "1.9.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -1573,24 +1573,58 @@
   function applyOrientation() {
     var o = screen.orientation;
     if (!o || !o.lock) return;
-    try { if (sortie.active && rotOn()) { if (o.unlock) o.unlock(); } else o.lock("portrait").catch(function () { /* non pris en charge (iPhone, navigateur) */ }); } catch (e) { /* ignoré */ }
+    try { if (sortie.active && !sortie.closing && rotOn()) { if (o.unlock) o.unlock(); } else o.lock("portrait").catch(function () { /* non pris en charge (iPhone, navigateur) */ }); } catch (e) { /* ignoré */ }
+  }
+  /* Session en cours : l'écran reste allumé (Wake Lock), repris à chaque retour sur l'app, relâché à la fin de la session. */
+  var wakeLock = null, wakeAsk = false;
+  function keepAwake() {
+    var want = !!(sortie && sortie.active) && document.visibilityState === "visible";
+    if (want && !wakeLock && !wakeAsk && navigator.wakeLock && navigator.wakeLock.request) {
+      wakeAsk = true;
+      navigator.wakeLock.request("screen").then(function (l) { wakeAsk = false; wakeLock = l; l.addEventListener("release", function () { wakeLock = null; }); if (!(sortie && sortie.active)) { l.release(); } })
+        .catch(function () { wakeAsk = false; /* refusé (batterie faible) ou non pris en charge */ });
+    } else if (!want && wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", keepAwake);
+  /* Grand affichage : tour en cours ou en pause, et boutons pause / fin du skieur et du bateau */
+  function bigTour() { var r = running(); if (r) return r; for (var i = sortie.tours.length - 1; i >= 0; i--) if (sortie.tours[i].state === "pause") return sortie.tours[i]; return null; }
+  var bigEndAsk = 0;
+  function bigAction(a) {
+    var t = bigTour();
+    if (a === "tpause" && t) return act(t.id, t.state === "run" ? "pause" : "resume");
+    if (a === "tend" && t) return act(t.id, "end");
+    if (a === "boat") return engineToggle();
+    if (a === "end") {
+      if (Date.now() - bigEndAsk > 4000) { bigEndAsk = Date.now(); bigKey = ""; updateBig(); setTimeout(function () { bigKey = ""; updateBig(); }, 4100); return; } // deuxième appui pour confirmer
+      bigEndAsk = 0; var r = running(); if (r) act(r.id, "end");
+      bigOpen = false; sortie.closing = true; sortie.compteurFin = null; view.cancelAsk = false; tab = "sortie"; screen.scrollTop = 0; render(); // retour à la clôture classique, avec la photo du compteur
+      var cp = document.getElementById("cPhoto"); if (cp && !sortie.photoCompteur) cp.click();
+    }
   }
   function bigLayer(id) { var el = document.getElementById(id); if (!el) { el = document.createElement("div"); el.id = id; el.hidden = true; document.body.appendChild(el); } return el; }
   function updateBig() {
     var big = bigLayer("bigView"), msg = bigLayer("rotMsg"), land = isLandscape();
-    var show = sortie.active && ((land && rotOn()) || bigOpen);
+    var show = sortie.active && !sortie.closing && ((land && rotOn()) || bigOpen); // à la clôture, retour à l'affichage classique
     msg.hidden = !(land && !show);
-    if (!msg.hidden && !msg.innerHTML) msg.innerHTML = '<div class="rot-in"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg><b>Tournez le téléphone en portrait</b><span>La rotation n’est possible que pendant une session, si l’option est activée.</span></div>';
+    var mk = sortie.active && sortie.closing ? "close" : "std";
+    if (!msg.hidden && msg.dataset.k !== mk) { msg.dataset.k = mk; msg.innerHTML = '<div class="rot-in"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg><b>Tournez le téléphone en portrait</b><span>' + (mk === "close" ? "Fin de la session : la clôture (photo du compteur, jauge, plein) se fait en portrait." : "La rotation n’est possible que pendant une session.") + "</span></div>"; }
     document.body.classList.toggle("big-on", show);
     big.hidden = !show; big.classList.toggle("rot", show && !land); // téléphone resté en portrait : la fenêtre est affichée couchée, à lire en tournant le téléphone
     if (!show) { bigKey = ""; return; }
     var now = new Date(), r = running(), pil = person((r && r.pilote) || sortie.pilote), on = sortie.engine === "on";
-    var key = (r ? r.id + r.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land;
+    var t = bigTour(), ask = Date.now() - bigEndAsk < 4000;
+    var key = (r ? r.id + r.state : "-") + "|" + (t ? t.id + t.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land + "|" + ask;
     if (key !== bigKey) {
       bigKey = key;
+      // en haut à droite : pause / fin du skieur, pause / fin de la session bateau
+      var acts = '<div class="big-acts">' +
+        '<button class="ba-ski" data-bact="tpause"' + (t ? "" : " disabled") + ">" + (t && t.state === "pause" ? "Reprise skieur" : "Pause skieur") + "</button>" +
+        '<button class="ba-ski" data-bact="tend"' + (t ? "" : " disabled") + ">Fin skieur</button>" +
+        '<button class="ba-boat" data-bact="boat">' + (on ? "Pause bateau" : "Reprise bateau") + "</button>" +
+        '<button class="ba-end' + (ask ? " ask" : "") + '" data-bact="end">' + (ask ? "Confirmer la fin ?" : "Fin session") + "</button></div>";
       big.innerHTML = '<div class="big-card">' +
-        '<div class="big-top"><span class="big-who">' + (r ? esc(tourName(r)) : "Aucun skieur en cours") + "</span>" + (r ? '<span class="big-act">' + esc(ACTS[r.act] || "") + "</span>" : "") + "</div>" +
-        '<div class="big-tour"' + (r ? ' data-timer="t' + r.id + '"' : "") + ">" + (r ? fmtClock(tourMs(r, Date.now())) : "—") + "</div>" +
+        '<div class="big-top"><div class="big-id"><span class="big-who">' + (t ? esc(tourName(t)) : "Aucun skieur en cours") + "</span>" + (t ? '<span class="big-act">' + esc(ACTS[t.act] || "") + (t.state === "pause" ? " · en pause" : "") + "</span>" : "") + "</div>" + acts + "</div>" +
+        '<div class="big-tour' + (t && t.state === "pause" ? " paused" : "") + '"' + (t ? ' data-timer="t' + t.id + '"' : "") + ">" + (t ? fmtClock(tourMs(t, Date.now())) : "—") + "</div>" +
         '<div class="big-grid">' +
         '<div><span class="label">Temps moteur</span><b data-timer="engine">' + fmtClock(engineMs(Date.now())) + '</b><span class="big-s">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
         '<div><span class="label">Pilote</span><b>' + esc(pil ? pil.name : "—") + "</b></div>" +
@@ -1600,7 +1634,10 @@
     var ck = document.getElementById("bigClock"); if (ck) ck.textContent = now.toTimeString().slice(0, 5);
   }
   if (landMq) { var onLand = function () { updateBig(); }; if (landMq.addEventListener) landMq.addEventListener("change", onLand); else if (landMq.addListener) landMq.addListener(onLand); }
-  document.addEventListener("click", function (e) { var b = e.target.closest && e.target.closest("#bigClose"); if (b) { bigOpen = false; updateBig(); } });
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("#bigClose"); if (b) { bigOpen = false; updateBig(); return; }
+    var ba = e.target.closest && e.target.closest("#bigView [data-bact]"); if (ba && !ba.disabled) bigAction(ba.dataset.bact);
+  });
   function render() {
     computeYears();
     var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau };
@@ -1612,7 +1649,7 @@
     if (tab === "essence" && view.essence === "achat") achatPreview();
     renderHead();
     navSync();
-    applyOrientation(); updateBig();
+    applyOrientation(); updateBig(); keepAwake();
   }
   /* ---------- Retour arrière : chaque écran est noté dans l'historique du navigateur ----------
      Le geste « retour » du téléphone (Android) ou le bouton Précédent ramène à l'écran d'avant au lieu de quitter l'app. */
