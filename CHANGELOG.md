@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.8.9 — 2026-11-23
+
+- Accueil : boutons Live / Démo remontés (ne touchent plus Plein bateau)
+- Essence : bouton Correction Stock orange en relief, encart De plein à plein après le total des achats
+
 ## 1.8.8 — 2026-11-23
 
 - Session : préparation compacte (compteur étroit, jauge remontée, familles et vérifications sur une ligne), retour en haut au lancement, partie skieurs sur fond coloré

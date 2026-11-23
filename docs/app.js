@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.8", SCHEMA = 1;
+  var APP_VERSION = "1.8.9", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -750,7 +750,7 @@
   /* Stock de bidons : encart réduit, calé à droite ; à sa gauche, le bouton de correction (saisie erronée ou en double, vol, perte, autre usage) */
   function stockCardHtml() {
     var n = bidons.length;
-    return '<div class="stock-row">' + (!view.essence ? '<div class="stock-left"><button class="btn ghost corr-btn" id="corrOpen">Correction du stock<span>saisie erronée ou en double, vol, perte…</span></button>' +
+    return '<div class="stock-row">' + (!view.essence ? '<div class="stock-left"><button class="corr-btn" id="corrOpen">Correction Stock<span>saisie erronée ou en double, vol, perte…</span></button>' +
       '<div class="legend small"><span>' + famDot("YC") + "payé Yann</span><span>" + famDot("OC") + "payé Olivier</span></div></div>" : "") +
       '<div class="card stock-c"><div class="fc-h">Stock de bidons</div>' + cansHtml(null, "mini") +
       '<div class="fc-s"><b>' + n + " bidon" + (n > 1 ? "s" : "") + "</b> · ≈ " + int0.format(stockL()) + " L · " + eur.format(stockEur()) + "</div></div></div>";
@@ -786,8 +786,8 @@
     }
     h += stockCardHtml();
     dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
-    h += '<div class="card"><h3>De plein à plein</h3><div class="small">Dernier plein : <b>' + esc(lastPlein || "—") + "</b></div></div>";
     h += achatsTotHtml();
+    h += '<div class="card"><h3>De plein à plein</h3><div class="small">Dernier plein : <b>' + esc(lastPlein || "—") + "</b></div></div>"; // après le total des achats
     h += '<div class="card">' + collHead("mvts", "Mouvements", moves.length + " mouvement" + (moves.length > 1 ? "s" : "") + (moves[0] ? " · dernier le " + esc(moves[0].d) : ""));
     if (ui.mvts) {
       h += '<div class="list small" style="margin-top:8px">';
