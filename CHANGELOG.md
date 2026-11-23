@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.9.1 — 2026-11-23
+
+- Nouvelle balance essence : équilibrage depuis le dernier équilibrage (départ hivernage 23/11/2026, réservoir vide) ; consommation entre deux pleins, sinon baisse de jauge, sinon temps moteur ; réservoir suivi par payeur ; passagers non comptés ; ajustement modifiable ajouté à la balance des comptes
+- Fin de session : le moteur est arrêté et le chrono figé (grand affichage et bouton Clôturer)
+
 ## 1.9.0 — 2026-11-23
 
 - Session en cours : l'écran reste allumé (pas de mise en veille)
