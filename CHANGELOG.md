@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.8.7 — 2026-11-23
+
+- Grand affichage de la session couché à l'horizontale (à lire téléphone tourné), sans case à cocher
+- Préparation de la session : encart 2 réorganisé (familles en retrait, + alignés, totaux, boutons Skieur / Passager compacts, nouvelle personne seulement pour les extérieurs), alerte au-delà de 8 personnes
+- Accueil : jauge estimée à côté d'un stock de bidons compact, lignes de boutons espacées, logo Malibu en léger relief
+
 ## 1.8.6 — 2026-11-23
 
 - Session : option « Rotation automatique » ; en paysage, grand affichage (skieur, chrono du tour, temps moteur, pilote, heure), aussi ouvrable en portrait

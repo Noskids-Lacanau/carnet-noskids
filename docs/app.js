@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.6", SCHEMA = 1;
+  var APP_VERSION = "1.8.7", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -415,8 +415,7 @@
       '<div class="clock" data-timer="engine">' + fmtClock(engineMs(now)) + '</div></div><span class="pill ' + (on ? "on" : "off") + '">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
       '<button class="btn big ' + (on ? "stop" : "run") + '" id="engBtn">' + (on ? "Arrêt moteur" : "Démarrer le moteur") + "</button>" +
       '<div class="two"><div class="field"><label for="pilDef">Pilote</label><select id="pilDef">' + piloteOpts(sortie.pilote) + '</select></div><div class="small muted" style="align-self:end">Tours : <span class="num" data-timer="total">' + fmtClock(totalMs(now)) + "</span><br>" + sortie.participants.length + " à bord</div></div>" +
-      '<div class="toggle"><span>Rotation automatique<span class="small muted" style="display:block">téléphone en paysage : grand affichage de la session</span></span><button id="rotTog" aria-pressed="' + rotOn() + '" aria-label="Rotation automatique pendant la session"></button></div>' +
-      '<button class="btn ghost sm" id="bigOpenBtn">Grand affichage</button></div>';
+      '<button class="btn ghost sm" id="bigOpenBtn">Grand affichage (à lire téléphone tourné)</button></div>';
     if (sortie.closing) return h + renderClosing(now);
     sortie.tours.forEach(function (t) {
       var st = t.state, pill = { wait: "en attente", run: "en cours", pause: "en pause", done: "terminé" }[st], p = t.pid ? participant(t.pid) : null, blocked = r && r !== t;
@@ -464,20 +463,27 @@
   function inList(pid) { return curList().some(function (p) { return p.pid === pid; }); }
   var startChecks = {}; // vérifications avant départ (huile, pompe de cale, aération) : aide-mémoire, ne bloque rien
   function boardHtml(step) {
-    var list = curList(), h = '<div class="card"><div class="row"><h3>À bord</h3><span class="small muted">' + list.length + " personne" + (list.length > 1 ? "s" : "") + "</span></div>" + (step ? '<div class="step"><b>2</b>' + step + "</div>" : "");
+    var list = curList(), nTot = list.length;
+    // préparation : le titre numéroté en haut, sans « À bord » ; session en cours : titre « À bord »
+    var h = '<div class="card board">' + (step ? '<div class="step step-row"><b>2</b><span>' + step + '</span><span class="board-n' + (nTot > 8 ? " over" : "") + '">' + nTot + " / 8</span></div>" : '<div class="row"><h3>À bord</h3><span class="small muted">' + nTot + " personne" + (nTot > 1 ? "s" : "") + " / 8</span></div>");
+    if (nTot <= 8) ui.over8Ack = false;
+    if (nTot > 8) h += ui.over8Ack ? '<div class="small over8-mini">' + nTot + " personnes à bord : homologué pour 8, amendes à la charge du groupe.</div>"
+      : '<div class="alert bad over8"><b>' + nTot + " personnes à bord : le bateau est homologué pour 8 personnes.</b>Toute amende sera à la charge du groupe.<div class=\"actions\"><button class=\"btn sm\" id=\"over8Ok\">Compris</button></div></div>";
     ["YF", "OF", "EXT"].forEach(function (c) {
       var rows = list.filter(function (p) { return person(p.pid).c === c; }), open = picker === c;
-      h += '<div class="group"><div class="group-head"><span class="gt">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + CAT[c] + (rows.length ? ' <span class="muted small">&nbsp;· ' + rows.length + "</span>" : "") + "</span>" +
-        '<button class="plus" data-pick="' + c + '" aria-expanded="' + open + '" aria-label="Ajouter : ' + CAT[c] + '">' + (open ? "−" : "+") + "</button></div>";
+      h += '<div class="group"><div class="group-head"><span class="gt">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + CAT[c] + "</span>" +
+        '<button class="plus" data-pick="' + c + '" aria-expanded="' + open + '" aria-label="Ajouter : ' + CAT[c] + '">' + (open ? "−" : "+") + "</button>" +
+        '<span class="g-tot">' + (rows.length ? rows.length + " personne" + (rows.length > 1 ? "s" : "") : "") + "</span></div>";
       if (open) {
         var avail = PEOPLE.filter(function (q) { return q.c === c && !inList(q.id); });
         h += '<div class="picker">' + (avail.length ? '<div class="chips">' + avail.map(function (q) { return '<button class="chip" data-addp="' + q.id + '">+ ' + esc(q.name) + "</button>"; }).join("") + "</div>" : '<div class="small muted">Tout le monde est déjà à bord.</div>') +
-          '<div class="newp"><input id="np' + c + '" placeholder="Nouvelle personne" aria-label="Nom de la nouvelle personne"><button class="btn sm" data-newp="' + c + '">Ajouter</button></div></div>';
+          (c === "EXT" ? '<div class="newp"><input id="np' + c + '" placeholder="Nouvelle personne" aria-label="Nom de la nouvelle personne"><button class="btn sm" data-newp="' + c + '">Ajouter</button></div>' : "") + "</div>"; // nouvelle personne : seulement pour les extérieurs
       }
       rows.forEach(function (p) {
         var pp = person(p.pid), hasTour = sortie.active && sortie.tours.some(function (t) { return t.pid === p.pid; });
-        h += '<div class="prow"><div class="pname"><span>' + famDot(famOf(p)) + esc(pp.name) + "</span>" + (hasTour ? "" : '<button class="x" data-rm="' + p.pid + '" aria-label="Retirer ' + esc(pp.name) + '">×</button>') + "</div>" +
-          segHtml("mini", "data-role-" + p.pid, [["ski", "Skieur"], ["pass", "Passager"]], p.role);
+        h += '<div class="prow"><div class="pname"><span class="pn">' + famDot(famOf(p)) + esc(pp.name) + "</span>" +
+          segHtml("mini role", "data-role-" + p.pid, [["ski", "Skieur"], ["pass", "Passager"]], p.role) +
+          (hasTour ? '<span class="x-ph"></span>' : '<button class="x" data-rm="' + p.pid + '" aria-label="Retirer ' + esc(pp.name) + '">×</button>') + "</div>";
         if (c === "EXT") h += segHtml("mini fam", "data-host-" + p.pid, [["YC", "Invité Yann"], ["OC", "Invité Olivier"]], p.host) +
           '<div class="toggle small"><span>Facturé ' + SPEC.tarif + " € la minute, au bénéfice de la " + FAM[p.host].l + '</span><button data-fact-' + p.pid + '="1" aria-pressed="' + p.fact + '" aria-label="Facturé"></button></div>';
         h += "</div>";
@@ -568,7 +574,10 @@
     if (nu) { var ln = notes.filter(function (n) { return isUnread(n, notesLues()); })[0]; h += '<button class="note-alert" data-go="journal"><span class="na-n">' + nu + '</span><span><b>' + (nu > 1 ? nu + " notes à lire" : "1 note à lire") + "</b>" + esc(ln.cat) + " · " + esc(ln.auteurNom || "?") + " · " + fmtDateTime(ln.date) + '</span><span class="chev" aria-hidden="true">›</span></button>'; }
     var todo = sessionsArr.filter(function (s) { return s.aCompleter; });
     if (todo.length) h += '<div class="alert"><b>' + todo.map(function (s) { return "Saison " + yearOf(s) + " : " + hm(s.engineMin) + " de moteur à détailler"; }).join(" · ") + '</b>Essence achetée et versée, temps par personne. La saison a été saisie en un bloc (compteur ' + todo.map(function (s) { return dec1.format(Number(s.compteurDeb)) + " → " + dec1.format(Number(s.compteurFin)) + " h"; }).join(", ") + ').</div>';
-    h += '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + stockN() + " bidon" + (stockN() > 1 ? "s" : "") + " sur 5 · ≈ " + int0.format(stockL()) + " L</span></div>" + cansHtml() + "</div>";
+    // jauge estimée du bateau (à gauche) et stock de bidons compact (à droite), sur une même ligne
+    var T = theo(), nb = stockN();
+    h += '<div class="fuel-row"><div class="card fuel-g"><div class="gwrap">' + gaugeHtml("theo", T.v, true) + '</div><div class="fg-cap">Stock d’essence estimé<b id="theoL">≈ ' + Math.round(T.L) + " L · " + fracLabel(T.v) + "</b></div></div>" +
+      '<div class="card fuel-c"><div class="fc-h">Stock de bidons</div>' + cansHtml(null, "mini") + '<div class="fc-s"><b>' + nb + " bidon" + (nb > 1 ? "s" : "") + "</b> · ≈ " + int0.format(stockL()) + " L</div></div></div>";
     dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
     if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Bateau pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Compteur moteur</span><span class="v">' + dec1.format(lastCompteur()) + ' h</span><span class="s">fin de la dernière session</span></div>' +
@@ -592,10 +601,7 @@
         '<div class="split"><i class="yc" style="width:' + (Y.fam.YC / t * 100) + '%"></i><i class="oc" style="width:' + (Y.fam.OC / t * 100) + '%"></i></div>' +
         '<div class="legend"><span>' + famDot("YC") + 'Yann <b class="num">' + int0.format(Y.fam.YC) + " min</b></span><span>" + famDot("OC") + 'Olivier <b class="num">' + int0.format(Y.fam.OC) + " min</b></span></div></div>";
     }
-    var T = theo();
-    h += '<div class="card spray-card"><div class="spray-bg img-ski" aria-hidden="true"></div><span class="brandlogo img-logo" aria-hidden="true"></span><div class="spray-in">' +
-      '<div class="glass"><div class="label">Stock d’essence estimé bateau</div><div class="num" id="theoL" style="font-size:18px;font-weight:600">≈ ' + Math.round(T.L) + " L · " + fracLabel(T.v) + '</div><div id="theoTxt">' + T.txt + "</div></div>" +
-      '<div class="gwrap">' + gaugeHtml("theo", T.v, true) + "</div></div></div>";
+    h += '<div class="card spray-card photo-only"><div class="spray-bg img-ski" aria-hidden="true"></div><span class="brandlogo img-logo" aria-hidden="true"></span></div>'; // photo seule : la jauge est remontée à côté des bidons
     return h;
   }
   var RELIEF = true; // boutons en relief (accueil, Bateau) : mettre false pour revenir aux boutons plats
@@ -1435,7 +1441,7 @@
      En dehors d'une session, l'app reste en portrait (verrouillage quand le téléphone le permet, sinon message « tournez le téléphone »).
      Pendant une session, si l'option est activée, le téléphone tourné en paysage affiche une fenêtre en surface :
      skieur en cours, chrono du tour, temps moteur, pilote et heure ; l'app reste derrière, voilée. */
-  function rotOn() { return LS.get("rotation", false) === true; }
+  function rotOn() { return true; } // rotation toujours permise pendant une session (plus de case à cocher)
   var bigOpen = false, bigKey = "";
   var landMq = window.matchMedia ? matchMedia("(orientation: landscape) and (max-height: 600px)") : null;
   function isLandscape() { return !!(landMq && landMq.matches); }
@@ -1451,7 +1457,7 @@
     msg.hidden = !(land && !show);
     if (!msg.hidden && !msg.innerHTML) msg.innerHTML = '<div class="rot-in"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg><b>Tournez le téléphone en portrait</b><span>La rotation n’est possible que pendant une session, si l’option est activée.</span></div>';
     document.body.classList.toggle("big-on", show);
-    big.hidden = !show;
+    big.hidden = !show; big.classList.toggle("rot", show && !land); // téléphone resté en portrait : la fenêtre est affichée couchée, à lire en tournant le téléphone
     if (!show) { bigKey = ""; return; }
     var now = new Date(), r = running(), pil = person((r && r.pilote) || sortie.pilote), on = sortie.engine === "on";
     var key = (r ? r.id + r.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land;
@@ -1464,7 +1470,7 @@
         '<div><span class="label">Temps moteur</span><b data-timer="engine">' + fmtClock(engineMs(Date.now())) + '</b><span class="big-s">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
         '<div><span class="label">Pilote</span><b>' + esc(pil ? pil.name : "—") + "</b></div>" +
         '<div><span class="label">Heure</span><b id="bigClock">' + now.toTimeString().slice(0, 5) + "</b></div></div>" +
-        (land ? "" : '<button class="btn ghost sm big-close" id="bigClose">Fermer le grand affichage</button>') + "</div>";
+        (land ? "" : '<button class="btn ghost sm big-close" id="bigClose">Fermer</button>') + "</div>";
     }
     var ck = document.getElementById("bigClock"); if (ck) ck.textContent = now.toTimeString().slice(0, 5);
   }
@@ -1857,7 +1863,7 @@
       }
     }
     if (b.id === "engBtn") return engineToggle();
-    if (b.id === "rotTog") { LS.set("rotation", !rotOn()); toast(rotOn() ? "Rotation activée : tournez le téléphone pour le grand affichage." : "Rotation désactivée : l’app reste en portrait."); return render(); }
+    if (b.id === "over8Ok") { ui.over8Ack = true; return render(); }
     if (b.id === "bigOpenBtn") { bigOpen = true; return updateBig(); }
     if (ds.act) return act(Number(ds.id), ds.act);
     if (ds.det) { t = findTour(Number(ds.det)); t.open = !t.open; return render(); }

@@ -771,3 +771,57 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .rot-in svg { width: 48px; height: 48px; fill: none; stroke: #ffd84d; stroke-width: 1.8; transform: rotate(-90deg); }
 .rot-in b { font: 700 22px var(--f-display); }
 .rot-in span { font-size: 14px; color: #c9d8df; }
+/* Grand affichage resté en portrait : la fenêtre est couchée (à lire téléphone tourné), quel que soit le verrouillage de rotation */
+#bigView.rot .big-card { position: absolute; left: 50%; top: 50%; width: calc(100vh - 48px); max-width: 760px; max-height: calc(100vw - 24px); transform: translate(-50%, -50%) rotate(90deg); padding: 12px 18px; gap: 6px; overflow: hidden; }
+#bigView.rot .big-who { font-size: min(9vw, 6vh); }
+#bigView.rot .big-act { font-size: min(4vw, 2.6vh); }
+#bigView.rot .big-tour { font-size: min(30vw, 21vh); }
+#bigView.rot .big-grid b { font-size: min(6.5vw, 4.4vh); }
+#bigView.rot .big-grid > div { padding: 6px 10px; }
+#bigView.rot .big-close { padding: 6px 14px; }
+
+/* Préparation de la session, encart 2 : titre numéroté en haut, familles en retrait, « + » alignés, total en bout de ligne */
+.step-row { align-items: center; }
+.step-row span:nth-child(2) { flex: 1; }
+.board-n { font: 600 12.5px var(--f-mono); color: var(--muted); white-space: nowrap; }
+.board-n.over { color: var(--bad); font-weight: 700; }
+.board .group-head { display: grid; grid-template-columns: 172px 34px 1fr; align-items: center; gap: 10px; padding-left: 12px; }
+.board .group-head .gt { white-space: nowrap; }
+.board .g-tot { justify-self: end; font-size: 13px; color: var(--muted); font-weight: 600; }
+.board .prow { margin-left: 12px; }
+.over8-mini { color: var(--bad); font-weight: 600; }
+@media (max-width: 360px) { .board .group-head { grid-template-columns: 150px 34px 1fr; padding-left: 6px; } }
+
+/* Logo Malibu de l'accueil : léger relief, comme une matière dorée en 3D */
+.app-head.h-accueil .logo { filter: drop-shadow(0 -1px 0 rgba(255, 246, 200, .75)) drop-shadow(0 1px 0 rgba(90, 60, 0, .9)) drop-shadow(0 2px 0 rgba(60, 38, 0, .55)) drop-shadow(0 4px 5px rgba(0, 0, 0, .55)); }.board .group-head { grid-template-columns: 136px 34px 1fr; } /* « + » juste après le nom le plus long (Famille Olivier, avec sa photo) */
+@media (max-width: 360px) { .board .group-head { grid-template-columns: 136px 34px 1fr; } }
+
+/* Encart 2 (v2) : familles plus en retrait, personnes encore plus à droite sous leur famille, boutons Skieur / Passager compacts */
+.board .group-head { padding-left: 26px; }
+.board .picker { margin-left: 26px; }
+.board .prow { margin-left: 46px; padding: 5px 0; gap: 4px; }
+.board .prow .pname { display: grid; grid-template-columns: minmax(0, 1fr) auto 26px; align-items: center; gap: 8px; }
+.board .prow .pn { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.board .prow .x-ph { width: 26px; }
+.seg.mini.role { display: inline-flex; width: auto; padding: 2px; border-radius: 8px; gap: 2px; }
+.seg.mini.role button { flex: none; padding: 3px 9px; font-size: 11.5px; line-height: 1.3; border-radius: 6px; min-height: 0; }
+.board .prow > .seg.mini, .board .prow > .toggle { margin-left: 0; }
+@media (max-width: 360px) { .board .group-head, .board .picker { padding-left: 12px; margin-left: 0; } .board .prow { margin-left: 28px; } }
+/* Accueil : lignes de boutons plus espacées (même écart entre 1-2 et 2-3), un peu plus d'air avant la ligne jauge + bidons */
+.quick { margin-top: 6px; row-gap: 14px; margin-bottom: 8px; }
+/* Jauge estimée à gauche, stock de bidons compact à droite */
+.fuel-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 10px; align-items: stretch; }
+.fuel-row .card { padding: 10px; gap: 6px; }
+.fuel-g { justify-items: center; text-align: center; align-content: center; }
+.fuel-g .gwrap { width: 100%; display: grid; justify-items: center; }
+.fuel-g .gauge svg { width: 100%; max-width: 118px; }
+.fg-cap { font-size: 12px; color: var(--muted); line-height: 1.3; }
+.fg-cap b { display: block; font: 700 15px var(--f-body); color: var(--ink); }
+.fuel-c { align-content: center; }
+.fc-h { font: 700 15px var(--f-display); letter-spacing: .02em; }
+.cans.mini { gap: 4px; }
+.cans.mini .can svg { max-width: 32px; }
+.cans.mini .can { font-size: 10px; }
+.fc-s { font-size: 12.5px; color: var(--muted); }
+.fc-s b { color: var(--ink); }
+.spray-card.photo-only { min-height: 140px; }.fuel-g .gauge svg { max-width: 104px; } /* jauge un peu plus petite : ligne plus mince */
