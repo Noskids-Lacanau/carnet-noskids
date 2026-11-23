@@ -5,8 +5,9 @@
   var CAT = { YF: "Famille Yann", OF: "Famille Olivier", EXT: "Extérieurs" };
   var CATF = { YF: "YC", OF: "OC" };
   var PEOPLE = [
-    { id: "yann", name: "Yann", c: "YF" }, { id: "pascale", name: "Pascale", c: "YF" }, { id: "elsa", name: "Elsa", c: "YF" },
-    { id: "baptiste", name: "Baptiste", c: "YF" }, { id: "eve", name: "Eve", c: "YF" },
+    // histWake : part de wake (%) dans le temps de tours de l'historique 2024-2025, qui n'a pas le détail ski / wake (le reste est du ski, surtout du slalom)
+    { id: "yann", name: "Yann", c: "YF", histWake: 10 }, { id: "pascale", name: "Pascale", c: "YF" }, { id: "elsa", name: "Elsa", c: "YF", histWake: 95 },
+    { id: "baptiste", name: "Baptiste", c: "YF", histWake: 80 }, { id: "eve", name: "Eve", c: "YF" },
     { id: "olivier", name: "Olivier", c: "OF" }, { id: "fiorella", name: "Fiorella", c: "OF" }, { id: "thao", name: "Thao", c: "OF" },
     { id: "malou", name: "Malou", c: "OF" }, { id: "calie", name: "Calie", c: "OF" },
     { id: "julien", name: "Julien", c: "EXT" }, { id: "jessica", name: "Jessica", c: "EXT" }, { id: "louca", name: "Louca", c: "EXT" },
@@ -111,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.3", SCHEMA = 1;
+  var APP_VERSION = "1.8.4", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -1512,6 +1513,7 @@
       '<div class="field"><label for="slDV">Vitesse de démarrage actuelle</label>' + selHtml("slDV", "slalom.debV", SL_SPEEDS, sl.debV, kmh) + "</div>" +
       '<div class="flabel">Niveau actuel</div>' + slLine("slN", "niv", sl) +
       '<div class="flabel">Meilleure performance</div>' + slLine("slB", "best", sl) +
+      '<div class="field"><label for="pfHw">Historique 2024-2025 : part de wake (%)</label><input id="pfHw" data-pf="histWake" inputmode="numeric" value="' + esc(p.histWake != null ? p.histWake : "") + '" placeholder="ex. 80 (le reste compte en ski)"></div>' +
       '<div class="sub-h">Wake</div><div class="two">' +
       '<div class="field"><label for="wkV">Vitesse souhaitée</label>' + selHtml("wkV", "wake.v", WK_SPEEDS, wk.v, kmh) + "</div>" +
       '<div class="field"><label for="wkC">Longueur de corde</label>' + selHtml("wkC", "wake.corde", WK_CORDES, wk.corde) + "</div></div></div>";
@@ -1555,6 +1557,11 @@
       (s.participants || []).forEach(function (p) { if (p.pid === pid) { here = true; if (p.role === "pass") st.pass += Number(s.engineMin) || 0; } });
       if (here) st.sessions++;
     });
+    var pp = person(pid);
+    if (st.hist && pp && hasNum(pp.histWake) && String(pp.histWake) !== "") { // historique réparti entre wake et ski selon la part indiquée sur la fiche
+      var hw = Math.max(0, Math.min(100, Number(pp.histWake))) / 100;
+      st.histTot = st.hist; st.histWake = hw; st.wake += st.hist * hw; st.ski += st.hist * (1 - hw); st.hist = 0;
+    }
     return st;
   }
   function hm(min) { min = Math.round(min || 0); return min < 60 ? min + " min" : Math.floor(min / 60) + " h " + String(min % 60).padStart(2, "0"); }
@@ -1596,10 +1603,11 @@
     h += pratiqueHtml(p);
     h += '<div class="card"><h3>Statistiques de pratique</h3>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Ski</span><span class="v">' + hm(s.ski) + '</span><span class="s">slalom, ski libre, formation</span></div>' +
-      '<div class="kpi"><span class="label">Wake</span><span class="v">' + hm(s.wake) + '</span><span class="s">depuis l’app</span></div>' +
+      '<div class="kpi"><span class="label">Wake</span><span class="v">' + hm(s.wake) + '</span><span class="s">' + (s.histTot ? "historique 2024-2025 compris" : "depuis l’app") + '</span></div>' +
       '<div class="kpi"><span class="label">Passager</span><span class="v">' + hm(s.pass) + '</span><span class="s">sessions à bord sans skier</span></div>' +
       '<div class="kpi"><span class="label">Pilotage</span><span class="v">' + hm(s.pilot) + '</span><span class="s">tours tractés et trajets</span></div></div>';
-    if (s.hist) h += '<div class="small muted">Historique 2024-2025 : ' + hm(s.hist) + " de tours, sans le détail ski ou wake. " + s.sessions + " session(s) au total.</div>";
+    if (s.hist) h += '<div class="small muted">Historique 2024-2025 : ' + hm(s.hist) + " de tours, sans le détail ski ou wake (part de wake à indiquer dans Pratique). " + s.sessions + " session(s) au total.</div>";
+    else if (s.histTot) h += '<div class="small muted">Dont historique 2024-2025 : ' + hm(s.histTot) + " de tours, comptés " + Math.round(s.histWake * 100) + " % en wake et " + Math.round((1 - s.histWake) * 100) + " % en ski (réglable dans Pratique). " + s.sessions + " session(s) au total.</div>";
     h += "</div>" + figuresHtml(p);
     h += '<div class="card"><h3>Diplômes et qualifications</h3><div class="chips">' +
       DIPLOMES.map(function (d) { var on = (p.diplomes || []).indexOf(d) >= 0; return '<button class="chip" data-dipl="' + esc(d) + '" aria-pressed="' + on + '">' + (on ? "✓ " : "") + esc(d) + "</button>"; }).join("") + "</div>" +
