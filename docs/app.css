@@ -626,3 +626,71 @@ body.app-mode .screen { padding-left: max(12px, env(safe-area-inset-left, 0px));
 .note-x { justify-self: start; padding: 0; font-size: 12.5px; color: var(--muted); }
 .note-x:hover { color: var(--bad); }
 .note-del { margin-top: 4px; }
+
+/* v1.7 : triangles de dépliage (à la place des « + », confondus avec un ajout) */
+.tri { width: 30px; height: 30px; display: grid; place-items: center; flex: none; color: var(--accent); }
+.tri svg { width: 18px; height: 18px; fill: currentColor; transition: transform .18s; }
+.coll[aria-expanded="true"] .tri svg { transform: rotate(180deg); }
+
+/* Fiche pilote : étoiles à droite du prénom, photo sans cerclage jaune, lecture seule pour les autres */
+.pilot-hero .name-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hero-av { box-shadow: 0 10px 24px -12px rgba(8, 30, 40, .45); }
+.ph-pick.ro { cursor: default; }
+fieldset.pf-lock { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 12px; }
+fieldset.pf-lock:disabled .chip, fieldset.pf-lock:disabled select, fieldset.pf-lock:disabled input { opacity: .85; cursor: default; }
+.ro-note { margin: 0; }
+.fam-ph.ro { cursor: default; border-style: solid; }
+
+/* Accueil : 2e ligne (dépense, balance), compteur de notes à lire */
+.qa-wide { grid-column: span 2; min-height: 64px; grid-template-columns: auto 1fr; align-items: center; align-content: center; column-gap: 10px; padding: 10px 12px; }
+.qa-wide .qa-ic { grid-row: span 2; margin: 0; width: 36px; height: 36px; }
+.qa-wide .qa-t { font-size: 15px; }
+.qa-wide .qa-t:last-child { grid-row: span 2; }
+.qa-wide .qa-s { font-size: 10.5px; line-height: 1.2; }
+.qa-dep { background: #e7f5ea; border-color: #c3e4ca; } .qa-dep .qa-ic { background: #1f7a3a; color: #fff; }
+.qa-bal { background: #eef0fb; border-color: #cfd5f1; } .qa-bal .qa-ic { background: #3d4fa8; color: #fff; }
+.qa-dot.big, .qa-sm .qa-dot.big { top: -7px; right: -5px; min-width: 26px; height: 26px; font-size: 14px; padding: 0 7px; box-shadow: 0 0 0 2.5px var(--bg, #fff), 0 3px 8px rgba(0, 0, 0, .3); animation: dotPulse 1.6s ease-in-out 3; }
+@keyframes dotPulse { 50% { transform: scale(1.18); } }
+.note-alert { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; text-align: left; font: inherit; cursor: pointer; padding: 10px 12px; border-radius: 14px; border: 1px solid #f4c3bf; background: #fdeceb; color: #5a1010; }
+.note-alert .na-n { min-width: 30px; height: 30px; border-radius: 99px; background: #e53935; color: #fff; display: grid; place-items: center; font: 700 15px var(--f-body); padding: 0 8px; }
+.note-alert b { display: block; font-size: 15px; }
+.note-alert span { font-size: 12.5px; }
+.note-alert .chev { font-size: 22px; color: #b4534d; }
+
+/* Notes : photo ou vidéo jointe */
+.note-media { display: flex; gap: 8px; flex-wrap: wrap; }
+.media-btn { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.media-btn svg, .note-att svg, .note-vid svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; }
+.note-att { display: grid; gap: 4px; justify-items: start; }
+.note-img { max-width: 100%; max-height: 260px; border-radius: 10px; border: 1px solid var(--line); object-fit: contain; }
+.note-vid { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--accent); }
+
+/* Annuaire : ordre des sections */
+.ann-order { display: grid; gap: 6px; }
+.ao-row { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font-size: 14px; }
+.ao-b { width: 34px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; font-size: 12px; }
+.ao-b:disabled { opacity: .35; cursor: default; }
+
+/* Essence : stock en nombre de bidons, puis volume estimé */
+.stock-sum { font-size: 15px; line-height: 1.35; }
+.stock-sum span { display: block; font-size: 13px; color: var(--muted); }
+
+/* Activité : boutons dépense et balance */
+.fin-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fin-btns .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; padding: 13px 8px; }
+.fb-ic svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.app-head .hv svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.bal-t td .sub { display: block; }
+.bal-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.bal-row:first-of-type { border-top: 0; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .quick .qa-dep { background: linear-gradient(180deg, #1c3b25, #132b1a); border-color: #3c7a4c; --edge: #08160c; color: #dff3e4; }
+  :root:not([data-theme="light"]) .quick .qa-bal { background: linear-gradient(180deg, #252c52, #1a203d); border-color: #4b5698; --edge: #0b0e1e; color: #e3e7fb; }
+  :root:not([data-theme="light"]) .note-alert { background: #3a1111; border-color: #943434; color: #ffdcd8; }
+  :root:not([data-theme="light"]) .note-alert .chev { color: #f0a59f; }
+}
+:root[data-theme="dark"] .quick .qa-dep { background: linear-gradient(180deg, #1c3b25, #132b1a); border-color: #3c7a4c; --edge: #08160c; color: #dff3e4; }
+:root[data-theme="dark"] .quick .qa-bal { background: linear-gradient(180deg, #252c52, #1a203d); border-color: #4b5698; --edge: #0b0e1e; color: #e3e7fb; }
+:root[data-theme="dark"] .note-alert { background: #3a1111; border-color: #943434; color: #ffdcd8; }
+:root[data-theme="dark"] .note-alert .chev { color: #f0a59f; }

@@ -1,5 +1,16 @@
 # Journal des versions
 
+## 1.7.0 — 2026-11-23
+
+- Triangles a la place des + pour deplier
+- Notes : photo ou video, compteur et bandeau des notes a lire
+- Annuaire : Proprietaires en tete, ordre des sections reglable
+- Fiche pilote : etoiles a droite du prenom, modifiable par la personne, Yann ou Olivier
+- Essence : formulaire achat revu, bidons de plus de 20 L, payeur obligatoire
+- Balance essence de plein a plein, boutons Depense et Balance
+- Retour arriere par le geste du telephone
+- Serveur 1.3.0 : photo jointe et lien video dans l e-mail des notes
+
 ## 1.6.4 — 2026-11-23
 
 - Journal - Notes : effacer une note, après confirmation (l'effacement se propage aux autres téléphones)

@@ -5,7 +5,7 @@
  *
  * Installation (une seule fois) : voir README.md, partie « Mise en production ».
  */
-var VERSION_SERVEUR = '1.2.0';
+var VERSION_SERVEUR = '1.3.0';
 var TABLES = ['personnes', 'sessions', 'bidons', 'dettes', 'mouvements', 'depenses', 'documents', 'entretien', 'parametres', 'etat'];
 var COLONNES_FIXES = ['id', 'modifie_le', 'recu_le', 'supprime', 'par', 'json'];
 var DOSSIER_DOCUMENTS = 'Carnet Noskids – documents';
@@ -193,8 +193,13 @@ function envoyerNotes_(notes) {
   notes.forEach(function (n) {
     var quand = n.date ? Utilities.formatDate(new Date(n.date), 'Europe/Paris', "dd/MM/yyyy 'à' HH:mm") : '';
     var sujet = 'Carnet Noskids – ' + (n.cat || 'Note') + (n.auteurNom ? ' (' + n.auteurNom + ')' : '');
-    var corps = (n.cat || 'Note') + '\n' + 'Par ' + (n.auteurNom || '?') + (quand ? ', le ' + quand : '') + '\n\n' + (n.txt || '(sans texte)') + '\n\n' + 'Journal - Notes : ' + ADRESSE_APP;
-    MailApp.sendEmail({ to: dest, subject: sujet, body: corps, name: 'Carnet Noskids' });
+    var corps = (n.cat || 'Note') + '\n' + 'Par ' + (n.auteurNom || '?') + (quand ? ', le ' + quand : '') + '\n\n' + (n.txt || '(sans texte)') +
+      (n.video && n.video.url ? '\n\nVidéo : ' + n.video.url : '') + (n.photo && n.photo.d ? '\n\nPhoto jointe.' : '') + '\n\n' + 'Journal - Notes : ' + ADRESSE_APP;
+    var mail = { to: dest, subject: sujet, body: corps, name: 'Carnet Noskids' };
+    if (n.photo && n.photo.d && String(n.photo.d).indexOf('base64,') > 0) { // photo de la note en pièce jointe
+      try { mail.attachments = [Utilities.newBlob(Utilities.base64Decode(String(n.photo.d).split('base64,')[1]), 'image/jpeg', 'photo-note.jpg')]; } catch (e) { /* photo illisible : e-mail sans pièce jointe */ }
+    }
+    MailApp.sendEmail(mail);
   });
 }
 /* À lancer une fois depuis l'éditeur ou le menu : autorise l'envoi d'e-mails et envoie une note d'essai. */

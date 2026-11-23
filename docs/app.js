@@ -111,7 +111,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.6.4", SCHEMA = 1;
+  var APP_VERSION = "1.7.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -143,7 +143,7 @@
   var docs = {}; DOC_CATS.forEach(function (c) { docs[c] = []; });
   var view = { essence: null, dep: false, cancelAsk: false, purge: null };
   var finView = "bilan", pilotSel = "";
-  var achatForm = { verse: true, plein: true, f: "YC", b: 2, step: null, L: 0, P: 0, tfOpen: false, tf: "YC", tn: 1 }, miseForm = { plein: true, f: "YC", n: 1 };
+  var achatForm = { verse: false, plein: true, f: "", b: 2, step: null, L: 0, P: 0, tfOpen: false, tf: "YC", tn: 1 }, miseForm = { plein: true, f: "YC", n: 1 };
   var bilanYear = "", bilanWho = "", bilanYearUser = false;
 
   /* ---------- Dates ---------- */
@@ -295,59 +295,61 @@
 
   /* ---------- Bidons ---------- */
   function canSvg(b, i) {
-    var lvl = b ? Math.max(0, Math.min(1, b.litres / SPEC.bidon)) : 0, h = 44 * lvl, id = "cc" + i + Math.random().toString(36).slice(2, 6);
+    var cap = b ? (b.cap || Math.max(SPEC.bidon, b.litres)) : SPEC.bidon; // un bidon peut contenir plus de 20 L (jusqu'à 25 L)
+    var lvl = b ? Math.max(0, Math.min(1, b.litres / cap)) : 0, h = 44 * lvl, id = "cc" + i + Math.random().toString(36).slice(2, 6);
     var body = "M8 16 h28 l12 12 v30 a4 4 0 0 1 -4 4 h-36 a4 4 0 0 1 -4 -4 v-38 a4 4 0 0 1 4 -4 z";
     return '<span class="can ' + (b ? b.f : "empty") + '"><svg viewBox="0 0 52 66" aria-hidden="true"><defs><clipPath id="' + id + '"><path d="' + body + '"/></clipPath></defs>' +
       (b ? '<rect class="lvl" clip-path="url(#' + id + ')" x="0" y="' + (62 - h) + '" width="52" height="' + h + '"/>' : "") +
       '<path class="body-out" d="' + body + '"/><path class="hdl" d="M14 16 v-8 h14 v8"/><path class="hdl" d="M40 12 l7 -7"/></svg>' +
-      "<span>" + (b ? (b.litres >= SPEC.bidon ? SPEC.bidon + " L" : int0.format(b.litres) + " L") : "vide") + "</span></span>";
+      "<span>" + (b ? int0.format(b.litres) + " L" : "vide") + "</span></span>";
   }
   function cansHtml(list, cls) { list = list || bidons; var h = '<div class="cans ' + (cls || "") + '">'; for (var i = 0; i < 5; i++) h += canSvg(list[i] || null, i); return h + "</div>"; }
   function detteHtml(d) {
     var other = d.note ? " (" + esc(d.note) + ")" : "";
     var what = d.cans ? half(d.cans) + " bidon(s) (≈ " + eur.format(d.eur) + ")" : eur.format(d.eur);
+    if (d.kind === "essence") return '<div class="alert"><b>Balance essence : ' + FAM[d.from].s + " doit " + eur.format(d.eur) + " à " + FAM[d.to].s + "</b>" + esc(d.note || "") + ". À régler par virement, puis à noter dans les dépenses (« " + REGL + " »).</div>";
     return '<div class="alert"><b>' + FAM[d.from].s + " doit " + what + " à " + FAM[d.to].s + "</b>" + (other ? other.slice(2, -1) + ". " : "") + "Réglé à la prochaine balance.</div>";
   }
   function stockL() { return bidons.reduce(function (a, b) { return a + b.litres; }, 0); }
   function stockEur() { return bidons.reduce(function (a, b) { return a + b.litres * b.prix; }, 0); }
-  function stockN() { return bidons.reduce(function (a, b) { return a + b.litres / SPEC.bidon; }, 0); }
-  /* Prélève n bidons pour la famille f : ses bidons d'abord (du plus ancien au plus récent), puis ceux de l'autre famille, qui créent une dette. */
-  /* n = nombre de bidons vidés (entiers, ou un demi). Un bidon entier vidé = tout son contenu ; un demi = la moitié d'un bidon. */
+  function stockN() { return bidons.length; }
+  /* Horodatage local (AAAA-MM-JJTHH:MM:SS) : sert à remettre sessions et versements dans l'ordre pour la balance essence */
+  function stamp(d) { d = d || new Date(); var p = function (n) { return String(n).padStart(2, "0"); }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
+  /* Prélève n bidons (entiers, ou un demi) pour la famille f : ses bidons d'abord, du plus ancien au plus récent, puis ceux de l'autre famille.
+     Chaque bidon reste compté pour la famille qui l'a payé : c'est la balance essence qui répartit ensuite selon le temps de chacun. */
   function planPrelevement(n, f) {
     var idx = bidons.map(function (b, i) { return i; });
     var order = idx.filter(function (i) { return bidons[i].f === f; }).concat(idx.filter(function (i) { return bidons[i].f !== f; }));
     var left = n, takes = [];
     order.forEach(function (i) {
       if (left <= 0.001) return;
-      var b = bidons[i], part = left >= 1 ? 1 : left, lit = part >= 1 ? b.litres : Math.min(b.litres, SPEC.bidon * part);
+      var b = bidons[i], part = left >= 1 ? 1 : left, lit = part >= 1 ? b.litres : Math.min(b.litres, (b.cap || SPEC.bidon) * part);
       takes.push({ i: i, f: b.f, litres: lit, eur: lit * b.prix, cans: part }); left -= part;
     });
     return { takes: takes, manque: Math.max(0, left) };
   }
-  function planText(plan, f) {
+  function planText(plan) {
     if (!plan.takes.length) return "Le stock est vide.";
-    var o = f === "YC" ? "OC" : "YC", own = 0, other = 0, otherEur = 0;
-    plan.takes.forEach(function (t) { if (t.f === f) own += t.cans; else { other += t.cans; otherEur += t.eur; } });
-    var s = "Bidons vidés : " + (own ? half(own) + " de la " + FAM[f].l : "");
-    if (other) s += (own ? ", puis " : "") + half(other) + " de la " + FAM[o].l + ". " + FAM[f].s + " devra " + half(other) + " bidon(s) (≈ " + eur.format(otherEur) + ") à " + FAM[o].s + ".";
-    else s += ".";
-    return s + (plan.manque > 0.01 ? " Il manque " + half(plan.manque) + " bidon(s) dans le stock." : "");
+    var c = { YC: 0, OC: 0 }, lit = 0;
+    plan.takes.forEach(function (t) { c[t.f] = (c[t.f] || 0) + t.cans; lit += t.litres; });
+    var parts = []; ["YC", "OC"].forEach(function (f) { if (c[f]) parts.push(half(c[f]) + " payé" + (c[f] > 1 ? "s" : "") + " par la " + FAM[f].l); });
+    return "Bidons vidés : " + parts.join(", ") + " (≈ " + int0.format(lit) + " L)." + (plan.manque > 0.01 ? " Il manque " + half(plan.manque) + " bidon(s) dans le stock." : "");
   }
   function simulateStock(plan, addB, addL, addF) {
-    var c = bidons.map(function (b) { return { f: b.f, litres: b.litres, prix: b.prix }; });
+    var c = bidons.map(function (b) { return { f: b.f, litres: b.litres, prix: b.prix, cap: b.cap }; });
     plan.takes.forEach(function (t) { c[t.i].litres -= t.litres; });
     c = c.filter(function (b) { return b.litres > 0.01; });
-    for (var k = 0; k < (addB || 0); k++) c.push({ f: addF, litres: addL / addB, prix: 0 });
+    for (var k = 0; k < (addB || 0); k++) c.push({ f: addF, litres: addL / addB, cap: addL / addB, prix: 0 });
     return c;
   }
-  function applyPrelevement(plan, f, ctx) {
-    plan.takes.forEach(function (t) {
-      bidons[t.i].litres -= t.litres;
-      if (t.f !== f) dettes.push({ from: f, to: t.f, cans: t.cans, eur: t.eur, d: todayFr() });
-    });
+  /* Versement dans le réservoir : noté avec son coût par famille payeuse et l'indication « plein », pour la balance essence. */
+  function applyPrelevement(plan, f, ctx, plein) {
+    var paye = { YC: 0, OC: 0 }, lit = { YC: 0, OC: 0 };
+    plan.takes.forEach(function (t) { bidons[t.i].litres -= t.litres; var pf = t.f === "OC" ? "OC" : "YC"; paye[pf] += t.eur; lit[pf] += t.litres; });
     bidons = bidons.filter(function (b) { return b.litres > 0.01; });
-    var n = plan.takes.reduce(function (a, t) { return a + t.cans; }, 0), tot = plan.takes.reduce(function (a, t) { return a + t.litres; }, 0);
-    moves.unshift({ d: todayFr(), t: "Versement" + (ctx ? " " + ctx : ""), v: half(n) + " bidon(s) · " + int0.format(tot) + " L", who: FAM[f].n });
+    var n = plan.takes.reduce(function (a, t) { return a + t.cans; }, 0), tot = lit.YC + lit.OC;
+    moves.unshift({ type: "verse", at: stamp(), date: todayIso(), d: todayFr(), t: "Versement" + (ctx ? " " + ctx : ""), v: half(n) + " bidon(s) · " + int0.format(tot) + " L", who: FAM[f].n + (plein ? " · plein" : ""),
+      litres: Math.round(tot * 10) / 10, cout: Math.round((paye.YC + paye.OC) * 100) / 100, paye: { YC: Math.round(paye.YC * 100) / 100, OC: Math.round(paye.OC * 100) / 100 }, plein: !!plein });
   }
 
   /* ---------- Sortie : moteur et tours ---------- */
@@ -559,10 +561,12 @@
   function renderAccueil() {
     var now = Date.now(), h = "";
     h += quickHtml(now);
+    var nu = unreadNotes();
+    if (nu) { var ln = notes.filter(function (n) { return isUnread(n, notesLues()); })[0]; h += '<button class="note-alert" data-go="journal"><span class="na-n">' + nu + '</span><span><b>' + (nu > 1 ? nu + " notes à lire" : "1 note à lire") + "</b>" + esc(ln.cat) + " · " + esc(ln.auteurNom || "?") + " · " + fmtDateTime(ln.date) + '</span><span class="chev" aria-hidden="true">›</span></button>'; }
     var todo = sessionsArr.filter(function (s) { return s.aCompleter; });
     if (todo.length) h += '<div class="alert"><b>' + todo.map(function (s) { return "Saison " + yearOf(s) + " : " + hm(s.engineMin) + " de moteur à détailler"; }).join(" · ") + '</b>Essence achetée et versée, temps par personne. La saison a été saisie en un bloc (compteur ' + todo.map(function (s) { return dec1.format(Number(s.compteurDeb)) + " → " + dec1.format(Number(s.compteurFin)) + " h"; }).join(", ") + ').</div>';
-    h += '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + half(Math.round(stockN() * 2) / 2) + " sur 5 · " + int0.format(stockL()) + " L</span></div>" + cansHtml() + "</div>";
-    dettes.forEach(function (d) { h += detteHtml(d); });
+    h += '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + stockN() + " bidon" + (stockN() > 1 ? "s" : "") + " sur 5 · ≈ " + int0.format(stockL()) + " L</span></div>" + cansHtml() + "</div>";
+    dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
     if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Bateau pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Compteur moteur</span><span class="v">' + dec1.format(lastCompteur()) + ' h</span><span class="s">fin de la dernière session</span></div>' +
       '<div class="kpi"><span class="label">Dernier plein</span><span class="v" style="font-size:19px">' + esc(lastPlein || "—") + "</span></div></div>";
@@ -599,7 +603,9 @@
     hist: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/><path d="M3.5 12H2M22 12h-1.5"/></svg>',
     stats: '<svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg>',
     journal: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v4h4M8.5 11h7M8.5 14.5h7M8.5 18h4"/></svg>',
-    play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>'
+    play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
+    euro: '<svg viewBox="0 0 24 24"><path d="M17.5 6.2A7 7 0 1 0 17.5 17.8"/><path d="M4 10h9M4 14h9"/></svg>',
+    balance: '<svg viewBox="0 0 24 24"><path d="M12 3.5v17M7.5 20.5h9M4 7h16"/><path d="M6.5 7L3.5 13.5a3 3 0 0 0 6 0zM17.5 7l-3 6.5a3 3 0 0 0 6 0z"/></svg>'
   };
   function qa(cls, attr, icon, title, sub, extra) {
     return '<button class="qa ' + cls + '" ' + attr + '><span class="qa-ic" aria-hidden="true">' + icon + "</span>" + (extra || "") + '<span class="qa-t">' + title + "</span>" + (sub ? '<span class="qa-s">' + sub + "</span>" : "") + "</button>";
@@ -611,9 +617,12 @@
     // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
     h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat essence", int0.format(stockL()) + " L en bidons") +
       qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Remplissage bateau") +
+      // 2e ligne : dépense et balance ; 3e ligne : quatre petits boutons
+      qa("qa-dep qa-wide", 'data-depnew="1"', QI.euro, "Saisir une dépense") +
+      qa("qa-bal qa-wide", 'data-fin="balance"', QI.balance, "Faire la balance", balanceText(balance()).replace(/\.$/, "")) +
       qa("qa-stats qa-sm", 'data-qa="stats"', QI.stats, "Statistiques") +
       qa("qa-hist qa-sm", 'data-qa="hist"', QI.hist, "Historique sessions") +
-      qa("qa-journal qa-sm", 'data-go="journal"', QI.journal, "Journal - Notes", "", unread ? '<span class="qa-dot" aria-label="' + unread + ' nouvelle(s) note(s)">' + unread + "</span>" : "") +
+      qa("qa-journal qa-sm", 'data-go="journal"', QI.journal, "Journal - Notes", "", unread ? '<span class="qa-dot big" aria-label="' + unread + ' note(s) à lire">' + unread + "</span>" : "") +
       qa("qa-urg qa-sm", 'data-go="annuaire"', URG_ICON, "Contact urgence");
     return h + "</div>";
   }
@@ -635,34 +644,43 @@
   }
 
   /* ---------- Essence ---------- */
+  function stockCardHtml() {
+    var n = bidons.length;
+    return '<div class="card"><h3>Stock de bidons</h3>' + cansHtml() +
+      '<div class="stock-sum"><b>' + n + " bidon" + (n > 1 ? "s" : "") + "</b> en stock (sur 5)<span>≈ " + int0.format(stockL()) + " L estimés · " + eur.format(stockEur()) + "</span></div>" +
+      '<div class="legend"><span>' + famDot("YC") + "payé par la famille Yann</span><span>" + famDot("OC") + "payé par la famille Olivier</span></div>" +
+      (bidons.length && !view.essence ? '<button class="btn ghost sm" id="corrOpen">Corriger le stock (vol, perte, autre usage)</button>' : "") + "</div>";
+  }
+  function achatFormHtml() {
+    var A = achatForm, perCan = A.L > 0 && A.b ? A.L / A.b : 0;
+    return '<div class="card"><h3>1 - Renseigner les bidons achetés</h3>' +
+      '<div class="two"><div class="field"><label for="aL">Litres</label><input id="aL" inputmode="decimal" value="' + (A.L ? half(A.L) : "") + '" placeholder="ex. 44"></div><div class="field"><label for="aP">Prix payé (€)</label><input id="aP" inputmode="decimal" value="' + (A.P ? half(A.P) : "") + '" placeholder="ex. 76,10"></div></div>' +
+      '<div class="field"><span class="flabel">Nombre de bidons remplis</span><div class="stepper"><button data-astep="-1" aria-label="Un bidon de moins">−</button><span class="val">' + A.b + '</span><button data-astep="1" aria-label="Un bidon de plus">+</button></div></div>' +
+      '<div class="small muted" id="aPL">' + achatPLText() + "</div>" +
+      '<div class="field"><span class="flabel">Payé par (obligatoire)</span>' + segHtml("fam", "data-af", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], A.f) + "</div>" +
+      '<div class="toggle"><span>Versé tout de suite dans le réservoir</span><button data-atog="verse" aria-pressed="' + A.verse + '" aria-label="Versé tout de suite"></button></div>' +
+      (A.verse ? '<div class="toggle"><span>Le réservoir est plein</span><button data-atog="plein" aria-pressed="' + A.plein + '" aria-label="Réservoir plein"></button></div>' : "") +
+      '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="saveAchat"' + (A.f ? "" : " disabled") + ">Enregistrer</button></div>" +
+      (A.f ? "" : '<div class="small muted">Choisissez la famille qui a payé pour pouvoir enregistrer.</div>') + "</div>";
+  }
+  function achatPLText() { var A = achatForm; if (!(A.L > 0)) return ""; return "Soit " + dec1.format(A.L / Math.max(1, A.b)) + " L par bidon" + (A.P > 0 ? " · " + dec2.format(A.P / A.L) + " € le litre" : "") + "."; }
   function renderEssence() {
     var h = !view.essence ? '<div class="ess-acts"><button class="ess-btn ess-achat" data-ev="achat"><span class="qa-ic" aria-hidden="true">' + QI.achat + '</span><span>J’ai acheté</span></button><button class="ess-btn ess-mise" data-ev="mise"' + (bidons.length ? "" : " disabled") + '><span class="qa-ic" aria-hidden="true">' + QI.mise + '</span><span>J’ai versé des bidons</span></button></div>' : "";
-    h += '<div class="card"><div class="row"><h3>Stock de bidons</h3><span class="small muted">' + int0.format(stockL()) + " L · " + eur.format(stockEur()) + "</span></div>" + cansHtml() +
-      '<div class="legend"><span>' + famDot("YC") + "payé par la famille Yann</span><span>" + famDot("OC") + "payé par la famille Olivier</span></div>" +
-      (bidons.length && view.essence !== "corr" ? '<button class="btn ghost sm" id="corrOpen">Corriger le stock (vol, perte, autre usage)</button>' : "") + "</div>";
-    dettes.forEach(function (d) { h += detteHtml(d); });
-    if (view.essence === "corr") {
-      h += corrHtml();
-    } else if (view.essence === "achat" && achatForm.step === "check") {
-      h += achatCheckHtml();
-    } else if (view.essence === "achat") {
-      h += '<div class="card"><h3>J’ai acheté de l’essence</h3>' +
-        '<div class="field"><span class="flabel">Payé par</span>' + segHtml("fam", "data-af", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], achatForm.f) + "</div>" +
-        '<div class="two"><div class="field"><label for="aL">Litres</label><input id="aL" inputmode="decimal" value="' + (achatForm.L ? half(achatForm.L) : "40") + '"></div><div class="field"><label for="aP">Prix payé (€)</label><input id="aP" inputmode="decimal" value="' + (achatForm.P ? half(achatForm.P) : "69,20") + '"></div></div>' +
-        '<div class="field"><span class="flabel">Bidons remplis</span><div class="stepper"><button data-astep="-1" aria-label="Un bidon de moins">−</button><span class="val">' + achatForm.b + '</span><button data-astep="1" aria-label="Un bidon de plus">+</button></div></div>' +
-        '<div class="toggle"><span>Versé tout de suite dans le réservoir</span><button data-atog="verse" aria-pressed="' + achatForm.verse + '" aria-label="Versé tout de suite"></button></div>' +
-        (achatForm.verse ? '<div class="toggle"><span>Le réservoir est plein</span><button data-atog="plein" aria-pressed="' + achatForm.plein + '" aria-label="Réservoir plein"></button></div>' : "") +
-        '<div class="small muted" id="aPL"></div>' +
-        '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="saveAchat">Enregistrer</button></div></div>';
-    } else if (view.essence === "mise") {
+    // le formulaire ouvert vient en premier, l'encart du stock en dessous
+    if (view.essence === "corr") h += corrHtml();
+    else if (view.essence === "achat" && achatForm.step === "check") h += achatCheckHtml();
+    else if (view.essence === "achat") h += achatFormHtml();
+    else if (view.essence === "mise") {
       var plan = planPrelevement(miseForm.n, miseForm.f);
       h += '<div class="card"><h3>J’ai versé des bidons</h3>' +
         '<div class="field"><span class="flabel">Qui verse ?</span>' + segHtml("fam", "data-mf", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], miseForm.f) + "</div>" +
         '<div class="field"><span class="flabel">Bidons versés</span><div class="stepper"><button data-mstep="-0.5" aria-label="Un demi-bidon de moins">−</button><span class="val">' + half(miseForm.n) + '</span><button data-mstep="0.5" aria-label="Un demi-bidon de plus">+</button></div></div>' +
-        '<div class="alert ok">' + esc(planText(plan, miseForm.f)) + "</div>" +
+        '<div class="alert ok">' + esc(planText(plan)) + "</div>" +
         '<div class="toggle"><span>Le réservoir est plein</span><button data-mtog="plein" aria-pressed="' + miseForm.plein + '" aria-label="Réservoir plein"></button></div>' +
         '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="saveMise">Enregistrer</button></div></div>';
     }
+    h += stockCardHtml();
+    dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
     h += '<div class="card"><h3>De plein à plein</h3><div class="small">Dernier plein : <b>' + esc(lastPlein) + "</b></div></div>";
     h += achatsTotHtml();
     h += '<div class="card">' + collHead("mvts", "Mouvements", moves.length + " mouvement" + (moves.length > 1 ? "s" : "") + (moves[0] ? " · dernier le " + esc(moves[0].d) : ""));
@@ -746,17 +764,19 @@
     return h + '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="corrSave"' + (sel.length ? "" : " disabled") + ">Enregistrer la correction</button></div></div>";
   }
   function commitAchat() {
-    var A = achatForm, f = A.f, B = A.b, Lt = A.L, P = A.P;
-    var base = { type: "achat", date: todayIso(), d: todayFr(), f: f, litres: Lt, prix: P, bidons: B }; // type, famille, litres et prix : servent aux totaux d'achat
+    var A = achatForm, f = A.f, B = A.b, Lt = A.L, P = A.P, pay = { YC: 0, OC: 0 }; pay[f] = P;
+    // type, famille, litres, prix, versement et plein : servent aux totaux d'achat et à la balance essence
+    var base = { type: "achat", at: stamp(), date: todayIso(), d: todayFr(), f: f, litres: Lt, prix: P, bidons: B, verse: !!A.verse, plein: !!(A.verse && A.plein), cout: P, paye: pay };
     if (A.verse) { moves.unshift(Object.assign({}, base, { t: "Achat versé tout de suite", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n + (A.plein ? " · plein" : "") })); if (A.plein) { lastPlein = todayFr(); lastLevel = 16; lastLevelDate = todayFr(); } }
-    else { for (var bi = 0; bi < B; bi++) bidons.push({ id: uid(), f: f, litres: Lt / B, prix: P / Lt, d: todayFr() }); moves.unshift(Object.assign({}, base, { t: "Achat mis en stock", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n })); }
-    depenses.unshift({ d: todayFr(), lib: "Essence " + int0.format(Lt) + " L", cat: "Essence", m: P, payeur: f, regle: "conso", isNew: true });
-    A.step = null; A.tfOpen = false; A.L = 0; A.P = 0; view.essence = null; save(2); toast(savedMsg("Achat enregistré, dépense créée.")); render();
+    else { for (var bi = 0; bi < B; bi++) bidons.push({ id: uid(), f: f, litres: Lt / B, cap: Lt / B, prix: P / Lt, d: todayFr() }); moves.unshift(Object.assign({}, base, { t: "Achat mis en stock", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n })); }
+    // la dépense est comptée pour la famille qui a payé ; la balance essence corrige ensuite selon la consommation
+    depenses.unshift({ d: todayFr(), lib: "Essence " + int0.format(Lt) + " L (" + B + " bidon" + (B > 1 ? "s" : "") + ")", cat: "Essence", m: P, payeur: f, regle: "payeur", isNew: true });
+    A.step = null; A.tfOpen = false; A.L = 0; A.P = 0; A.f = ""; A.verse = false; A.plein = true; view.essence = null; save(2); toast(savedMsg("Achat enregistré, dépense créée.")); render();
   }
 
   /* ---------- Dépenses ---------- */
   var REGL = "Règlement entre familles";
-  var CATS = [["Assurance", "5050"], ["Matériel bateau", "5050"], ["Entretien", "5050"], ["Réparation", "5050"], ["Adhésion", "5050"], ["Taxes", "5050"], ["Taxe / corps mort lac", "5050"], ["Essence", "conso"], ["Matériel loisir", "payeur"], ["Recette invités", "payeur"], ["Remboursement", "5050"], [REGL, "regl"], ["Autres", "5050"]];
+  var CATS = [["Assurance", "5050"], ["Matériel bateau", "5050"], ["Entretien", "5050"], ["Réparation", "5050"], ["Adhésion", "5050"], ["Taxes", "5050"], ["Taxe / corps mort lac", "5050"], ["Essence", "payeur"], ["Matériel loisir", "payeur"], ["Recette invités", "payeur"], ["Remboursement", "5050"], [REGL, "regl"], ["Autres", "5050"]];
   var depForm = { cat: "Matériel bateau", regle: "5050", pct: 50, payeur: "YC" };
   /* Part de consommation de chaque famille : temps moteur de l'année de la dépense (toutes années si inconnue). */
   function consoRatio(year) {
@@ -794,10 +814,105 @@
     if (Math.abs(v) < 1) return "Les comptes sont équilibrés.";
     return v > 0 ? "Olivier doit " + eur.format(v) + " à Yann." : "Yann doit " + eur.format(-v) + " à Olivier.";
   }
+  /* ---------- Balance essence (de plein à plein) ----------
+     L'essence versée pour refaire le plein a été consommée par les sessions qui précèdent ce plein : son coût est réparti
+     entre les familles au prorata de leur temps moteur dans ces sessions. Chaque achat reste compté pour la famille qui l'a payé ;
+     l'écart entre « consommé » et « payé » donne une dette (écriture d'équilibrage), sans toucher aux dépenses.
+     Départ : le premier plein noté à partir du 1er janvier 2027, compté payé par Yann et partagé 50/50 (contenu du réservoir commun). */
+  var BAL_DEBUT = "2027-01-01", balForm = null;
+  function sesKey(s) { return dkey(s) + "T" + (s.heureFin || "12:00") + ":00"; }
+  function pourKey(m) { return m.at || ((m.date || frToIso(m.d)) + "T12:00:00"); }
+  function poursList() { return moves.filter(function (m) { return (m.type === "verse" || (m.type === "achat" && m.verse)) && m.paye; }).map(function (m) { return { m: m, k: pourKey(m) }; }).sort(function (a, b) { return a.k < b.k ? -1 : 1; }); }
+  function famSplit(s) { var y = Number(s.famMin && s.famMin.YC) || 0, o = Number(s.famMin && s.famMin.OC) || 0; if (y + o <= 0) { var e = Number(s.engineMin) || 0; return { YC: e / 2, OC: e / 2 }; } return { YC: y, OC: o }; }
+  function lastPrixL() { var a = moves.filter(function (m) { return m.type === "achat" && Number(m.litres) > 0 && Number(m.prix) > 0; })[0]; return a ? Number(a.prix) / Number(a.litres) : 1.8; }
+  function keyFr(k) { return k ? isoToFr(k.slice(0, 10)) : ""; }
+  function computeBalEss() {
+    var R = { segs: [], due: { YC: 0, OC: 0 }, paid: { YC: 0, OC: 0 }, init: null, start: "", end: "" };
+    var P = poursList(), S = sessionsArr.filter(function (s) { return (s.bateau || SPEC.devise) === SPEC.devise && dkey(s) >= BAL_DEBUT; }).map(function (s) { return { s: s, k: sesKey(s) }; }).sort(function (a, b) { return a.k < b.k ? -1 : 1; });
+    var prevs = dettes.filter(function (d) { return d.kind === "essence" && d.fin; }).sort(function (a, b) { return a.fin < b.fin ? -1 : 1; }), last = prevs[prevs.length - 1];
+    var t0;
+    if (last) t0 = last.fin;
+    else {
+      var first = P.filter(function (x) { return x.k >= BAL_DEBUT && x.m.plein; })[0];
+      if (!first) { R.noStart = true; R.pendingS = S; R.pendingP = P.filter(function (x) { return x.k >= BAL_DEBUT; }); return R; }
+      t0 = first.k;
+      var ip = P.filter(function (x) { return x.k >= BAL_DEBUT && x.k <= t0; }), il = 0, ic = 0;
+      ip.forEach(function (x) { il += Number(x.m.litres) || 0; ic += Number(x.m.cout) || 0; });
+      var F = balForm || {};
+      R.init = { at: t0, pours: ip, litres: F.litres != null ? F.litres : SPEC.reservoir, prixL: F.prixL != null ? F.prixL : Math.round((il > 0 ? ic / il : lastPrixL()) * 1000) / 1000, payeur: F.payeur || "YC",
+        sesAvant: S.filter(function (x) { return x.k < t0; }).length };
+      R.init.val = Math.round(R.init.litres * R.init.prixL * 100) / 100;
+      R.paid[R.init.payeur] += R.init.val; R.due.YC += R.init.val / 2; R.due.OC += R.init.val / 2;
+    }
+    R.start = t0;
+    var prev = t0;
+    P.filter(function (x) { return x.k > t0 && x.m.plein; }).forEach(function (fu) {
+      var seg = { from: prev, to: fu.k, pours: P.filter(function (x) { return x.k > prev && x.k <= fu.k; }), sessions: S.filter(function (x) { return x.k > prev && x.k <= fu.k; }), min: { YC: 0, OC: 0 }, cout: 0, litres: 0, paye: { YC: 0, OC: 0 } };
+      seg.pours.forEach(function (x) { seg.cout += Number(x.m.cout) || 0; seg.litres += Number(x.m.litres) || 0; seg.paye.YC += Number(x.m.paye.YC) || 0; seg.paye.OC += Number(x.m.paye.OC) || 0; });
+      seg.sessions.forEach(function (x) { var m = famSplit(x.s); seg.min.YC += m.YC; seg.min.OC += m.OC; });
+      var tm = seg.min.YC + seg.min.OC;
+      seg.due = tm > 0 ? { YC: seg.cout * seg.min.YC / tm, OC: seg.cout * seg.min.OC / tm } : { YC: seg.cout / 2, OC: seg.cout / 2 };
+      R.due.YC += seg.due.YC; R.due.OC += seg.due.OC; R.paid.YC += seg.paye.YC; R.paid.OC += seg.paye.OC;
+      R.segs.push(seg); prev = fu.k;
+    });
+    R.end = prev;
+    R.pendingS = S.filter(function (x) { return x.k > prev; }); R.pendingP = P.filter(function (x) { return x.k > prev; });
+    var dOC = R.due.OC - R.paid.OC; // positif : la famille Olivier a consommé plus qu'elle n'a payé
+    R.amount = Math.round(Math.abs(dOC) * 100) / 100; R.from = dOC > 0 ? "OC" : "YC"; R.to = R.from === "OC" ? "YC" : "OC";
+    R.ready = !!(R.init || R.segs.length);
+    return R;
+  }
+  function balResultText(R) { return R.amount < 0.5 ? "Rien à régler : chacun a payé l’essence qu’il a consommée." : FAM[R.from].s + " doit " + eur.format(R.amount) + " à " + FAM[R.to].s + "."; }
+  function renderBalance() {
+    var R = computeBalEss(), h = '<button class="btn link" data-fin="bilan">← Retour à l’activité</button>';
+    h += '<div class="card"><h3>Balance essence</h3><div class="small">De plein à plein : l’essence versée pour refaire le plein est répartie entre les sessions qui l’ont consommée, au temps moteur de chaque famille. Chaque achat reste compté pour la famille qui l’a payé ; l’écart dit qui doit combien à qui. Les dépenses ne changent pas : la validation passe une écriture d’équilibrage (dette), réglée ensuite par un virement.</div>' +
+      (R.noStart ? "" : '<div class="small muted" style="margin-top:6px">Période : du plein du ' + keyFr(R.start) + (R.end > R.start ? " au plein du " + keyFr(R.end) : "") + (R.init ? " (plein de départ)" : "") + ".</div>") + "</div>";
+    if (R.noStart) {
+      h += '<div class="alert"><b>Pas encore de plein de départ</b>La première balance commence au premier plein noté à partir du 1er janvier 2027 (achat versé avec « réservoir plein », ou bidons versés jusqu’au plein). Ce plein est compté payé par Yann et partagé 50/50.' +
+        (R.pendingS.length ? " " + R.pendingS.length + " session(s) déjà notée(s) depuis le 1er janvier 2027 seront comptées après ce plein." : "") + "</div>";
+      return h + balHistHtml();
+    }
+    if (R.init) {
+      var I = R.init;
+      h += '<div class="card"><h3>Plein de départ du ' + keyFr(I.at) + '</h3><div class="small muted">Le réservoir plein est un stock commun : sa valeur est comptée payée par ' + FAM[I.payeur].s + " et partagée 50/50." + (I.sesAvant ? " " + I.sesAvant + " session(s) notée(s) avant ce plein ne sont pas comptées." : "") + "</div>" +
+        '<div class="two"><div class="field"><label for="biL">Litres dans le réservoir</label><input id="biL" inputmode="decimal" value="' + half(I.litres) + '"></div><div class="field"><label for="biP">Prix du litre (€)</label><input id="biP" inputmode="decimal" value="' + half(I.prixL) + '"></div></div>' +
+        '<div class="field"><span class="flabel">Payé par</span>' + segHtml("fam", "data-bip", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], I.payeur) + "</div>" +
+        '<div class="small">Valeur : <b>' + eur.format(I.val) + "</b>, soit " + eur.format(I.val / 2) + " pour chaque famille.</div></div>";
+    }
+    if (R.segs.length) {
+      h += '<div class="card"><h3>De plein en plein</h3><table class="rtable bal-t"><thead><tr><th>Période</th><th>Essence</th><th>Yann</th><th>Olivier</th></tr></thead><tbody>';
+      R.segs.forEach(function (g) {
+        var tm = g.min.YC + g.min.OC;
+        h += "<tr><td>" + keyFr(g.from).slice(0, 5) + " → " + keyFr(g.to).slice(0, 5) + '<span class="sub">' + g.sessions.length + " session" + (g.sessions.length > 1 ? "s" : "") + (tm > 0 ? " · " + Math.round(g.min.YC / tm * 100) + " % Y / " + Math.round(g.min.OC / tm * 100) + " % O" : " · sans session : 50/50") + "</span></td>" +
+          "<td>" + int0.format(g.litres) + " L<span class=\"sub\">" + eur.format(g.cout) + "</span></td>" +
+          '<td class="part">consommé ' + eur.format(g.due.YC) + '<span class="sub">payé ' + eur.format(g.paye.YC) + "</span></td>" +
+          '<td class="part">consommé ' + eur.format(g.due.OC) + '<span class="sub">payé ' + eur.format(g.paye.OC) + "</span></td></tr>";
+      });
+      h += "</tbody></table></div>";
+    } else if (!R.init) h += '<div class="alert"><b>Pas de nouveau plein depuis la dernière balance</b>La balance se fait de plein à plein : refaites le plein (idéalement à la passation entre les familles), puis revenez ici.</div>';
+    h += '<div class="card"><h3>Résultat</h3><table class="rtable"><thead><tr><th></th><th>Yann</th><th>Olivier</th></tr></thead><tbody>' +
+      "<tr><td>Essence consommée</td><td>" + eur.format(R.due.YC) + "</td><td>" + eur.format(R.due.OC) + "</td></tr>" +
+      "<tr><td>Essence payée</td><td>" + eur.format(R.paid.YC) + "</td><td>" + eur.format(R.paid.OC) + "</td></tr>" +
+      '<tr class="tot"><td>Écart</td><td>' + eur.format(R.paid.YC - R.due.YC) + "</td><td>" + eur.format(R.paid.OC - R.due.OC) + "</td></tr></tbody></table>" +
+      '<div class="alert ok"><b>' + esc(balResultText(R)) + "</b>Calcul : pour chaque période de plein à plein, coût de l’essence versée × part du temps moteur de la famille, moins ce qu’elle a payé." + (R.init ? " Plein de départ : moitié de sa valeur pour chaque famille." : "") + "</div>";
+    if (R.pendingS.length || R.pendingP.length) h += '<div class="small muted">Après le dernier plein : ' + R.pendingS.length + " session(s) et " + R.pendingP.length + " versement(s), comptés à la prochaine balance.</div>";
+    h += '<div class="actions"><button class="btn" id="balValider"' + (R.ready ? "" : " disabled") + ">Valider la balance</button></div></div>";
+    return h + balHistHtml();
+  }
+  function balHistHtml() {
+    var list = dettes.filter(function (d) { return d.kind === "essence"; }).slice().reverse();
+    var h = '<div class="card"><h3>Balances validées</h3>';
+    if (!list.length) h += '<div class="small muted">Aucune pour l’instant.</div>';
+    list.forEach(function (d) {
+      h += '<div class="bal-row"><span><b>' + (Number(d.eur) >= 0.5 ? FAM[d.from].s + " doit " + eur.format(d.eur) + " à " + FAM[d.to].s : "Équilibrée") + '</b><span class="small muted"> · ' + esc(d.note || "") + " · validée le " + esc(d.d || "") + "</span></span>" +
+        (Number(d.eur) >= 0.5 ? (d.regle ? '<span class="pill okp">réglée</span>' : '<button class="btn sm" data-balregle="' + esc(d.id) + '">Virement fait : le noter</button>') : "") + "</div>";
+    });
+    return h + '<div class="small muted">Balance générale (toutes dépenses) : ' + esc(balanceText(balance())) + "</div></div>";
+  }
   function renderDepenses() {
     var B = balance(), h = "";
     if (view.dep) h += depFormHtml();
-    else h += '<button class="btn big center-btn" id="dNew">Saisir une dépense</button>';
+    else h += finBtnsHtml();
     h += '<div class="banner"><div><span class="label">Total</span><span class="v">' + eur0.format(B.tot.total) + '</span></div><div class="yc"><span class="label">Part Yann</span><span class="v">' + eur0.format(B.tot.YC) + '</span></div><div class="oc"><span class="label">Part Olivier</span><span class="v">' + eur0.format(B.tot.OC) + "</span></div></div>" +
       '<div class="alert ok"><b>Balance : ' + balanceText(B) + "</b>Dépenses payées moins la part de chacun, dettes de bidons comprises. Un virement entre familles se note dans la catégorie « " + REGL + " ».</div>" +
       '<button class="btn ghost" id="xlsExport">Exporter la synthèse en Excel</button>';
@@ -1059,7 +1174,9 @@
     var W = 340, H = 190, L = 34, R = 14, T = 14, B = 30, YMAX = 5, fixedYear = D.fixes + amortAn(), vari = essM + usM;
     var xmax = Math.ceil(D.min / 500) * 500, sx = function (v) { return L + v / xmax * (W - L - R); }, sy = function (v) { return T + (1 - Math.min(v, YMAX) / YMAX) * (H - T - B); };
     chartPts = D.curve.map(function (p) { var y = fixedYear / p[0] + vari; return { x: sx(p[0]), y: sy(y), v: y, cum: p[0], d: p[1], clip: y > YMAX }; });
-    var s = '<div class="card"><h3>Coût complet par minute, au fil de la saison</h3><div class="small muted">Les coûts fixes et l’amortissement de l’année sont répartis sur les minutes déjà faites : très lourds au début, de plus en plus légers.</div><div class="chart" id="chartWrap"><svg viewBox="0 0 ' + W + " " + H + '" data-chart="1" role="img" aria-label="Coût complet par minute moteur selon les minutes cumulées">';
+    var lastV = chartPts.length ? chartPts[chartPts.length - 1].v : 0;
+    if (!ui.courbe) { chartPts = []; return '<div class="card">' + collHead("courbe", "Coût complet par minute", "au fil de la saison" + (lastV ? " · " + dec2.format(lastV) + " €/min à ce jour" : "")) + "</div>"; }
+    var s = '<div class="card">' + collHead("courbe", "Coût complet par minute", "au fil de la saison" + (lastV ? " · " + dec2.format(lastV) + " €/min à ce jour" : "")) + '<div class="small muted">Les coûts fixes et l’amortissement de l’année sont répartis sur les minutes déjà faites : très lourds au début, de plus en plus légers.</div><div class="chart" id="chartWrap"><svg viewBox="0 0 ' + W + " " + H + '" data-chart="1" role="img" aria-label="Coût complet par minute moteur selon les minutes cumulées">';
     for (var g = 0; g <= YMAX; g++) s += '<line class="c-grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + sy(g) + '" y2="' + sy(g) + '"/><text class="c-axis" x="' + (L - 6) + '" y="' + (sy(g) + 3.5) + '" text-anchor="end">' + g + " €</text>";
     for (var xv = 0; xv <= xmax; xv += 500) s += '<text class="c-axis" x="' + sx(xv) + '" y="' + (H - 12) + '" text-anchor="middle">' + int0.format(xv) + "</text>";
     s += '<text class="c-axis" x="' + (W - R) + '" y="' + (H - 1) + '" text-anchor="end">minutes moteur cumulées</text>';
@@ -1075,7 +1192,9 @@
 
   /* ---------- Bateau ---------- */
   var SPEC_FIELDS = [["devise", "Nom du bateau", "txt"], ["ancienNom", "Nom sur le titre de navigation", "txt"], ["modele", "Modèle", "txt"], ["hin", "Numéro de coque (HIN)", "txt"], ["immat", "N° d’inscription", "txt"], ["moteur", "Moteur", "txt"], ["nMoteur", "N° moteur", "txt"], ["dims", "Dimensions", "txt"], ["categorie", "Catégorie de conception", "txt"], ["equip", "Équipement", "txt"], ["achat", "Achat", "txt"], ["gardiennage", "Gardiennage", "txt"], ["annee", "Année de construction"], ["reservoir", "Réservoir (L)"], ["conso", "Consommation moyenne (L/h)"], ["hAchat", "Compteur à l’achat (h)"], ["hVie", "Durée de vie moteur (h)"], ["valMoteur", "Valeur pour l’usure moteur (€)"], ["prix", "Prix pour l’amortissement (€)"], ["ans", "Durée d’amortissement (ans)"], ["bidon", "Contenance d’un bidon (L)"], ["tarif", "Tarif invités (€/min)"]];
-  function collHead(key, title, sub) { return '<button class="coll" data-coll="' + key + '" aria-expanded="' + ui[key] + '"><span class="ct"><span class="ctitle">' + title + '</span><span class="small muted">' + sub + '</span></span><span class="chev" aria-hidden="true">' + (ui[key] ? "−" : "+") + "</span></button>"; }
+  function collHead(key, title, sub) { return '<button class="coll" data-coll="' + key + '" aria-expanded="' + !!ui[key] + '"><span class="ct"><span class="ctitle">' + title + '</span><span class="small muted">' + sub + '</span></span>' + TRI + "</button>"; }
+  /* Triangle vers le bas (tourné vers le haut quand la partie est ouverte) : un « + » se confondait avec un ajout */
+  var TRI = '<span class="tri" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5.5 8.5h13L12 16.5z"/></svg></span>';
   function intTxt(e) { var a = []; if (e[1]) a.push(e[1] + " h"); if (e[2]) a.push(e[2] === 1 ? "1 an" : e[2] + " ans"); return (a.length ? "Tous les " + a.join(" ou ") : "") + (e[3] ? (a.length ? " · " : "") + e[3] : ""); }
   function maintStatus(i) {
     var e = ENTR[i], m = maint[i], cur = lastCompteur(), now = new Date(), parts = [], late = false, soon = false;
@@ -1219,7 +1338,45 @@
     if (tab === "activite" && finView === "dep") depPreview();
     if (tab === "essence" && view.essence === "achat") achatPreview();
     renderHead();
+    navSync();
   }
+  /* ---------- Retour arrière : chaque écran est noté dans l'historique du navigateur ----------
+     Le geste « retour » du téléphone (Android) ou le bouton Précédent ramène à l'écran d'avant au lieu de quitter l'app. */
+  var navKey = "", navRestoring = false;
+  function navState() {
+    return { tab: tab, fin: tab === "activite" ? finView : "", pil: tab === "pilotes" ? pilotSel : "", ess: tab === "essence" ? (view.essence || "") : "", dep: tab === "activite" && finView === "dep" && view.dep ? 1 : 0 };
+  }
+  function navSync() {
+    var s = navState(), k = JSON.stringify(s);
+    if (k === navKey) return;
+    try { if (!navKey || navRestoring) history.replaceState(s, ""); else history.pushState(s, ""); } catch (e) { /* historique indisponible */ }
+    navKey = k; navRestoring = false;
+  }
+  window.addEventListener("popstate", function (e) {
+    var s = e.state; if (!s || !s.tab) return;
+    if (sortie.active && sortie.closing && tab === "sortie") sortie.closing = false; // retour depuis la clôture : on revient à la session en cours
+    tab = s.tab; finView = s.fin || "bilan"; pilotSel = s.pil || ""; view.essence = s.ess || null; view.dep = !!s.dep;
+    achatForm.step = null; view.cancelAsk = false;
+    navRestoring = true; screen.scrollTop = 0; render();
+  });
+  /* iPhone (app installée) : pas de geste retour natif. Glisser depuis le bord droit (ou gauche) de l'écran vers l'intérieur = retour. */
+  (function edgeSwipe() {
+    if (/Android/i.test(navigator.userAgent)) return; // Android a déjà son geste retour système
+    var installed = navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+    if (!installed) return; // dans Safari, le geste retour existe déjà (il ferait doublon)
+    var x0 = null, y0 = 0, side = 0, EDGE = 28;
+    document.addEventListener("touchstart", function (e) {
+      if (e.touches.length !== 1) { x0 = null; return; }
+      var t = e.touches[0], w = window.innerWidth;
+      side = t.clientX <= EDGE ? 1 : t.clientX >= w - EDGE ? -1 : 0;
+      x0 = side ? t.clientX : null; y0 = t.clientY;
+    }, { passive: true });
+    document.addEventListener("touchend", function (e) {
+      if (x0 == null) return;
+      var t = e.changedTouches[0], dx = (t.clientX - x0) * side, dy = Math.abs(t.clientY - y0); x0 = null;
+      if (dx > 70 && dy < 60 && history.state && navKey) history.back();
+    }, { passive: true });
+  })();
   /* ---------- Pilotes : fiche, heures, grade ---------- */
   var GRADES = [
     { label: "Pilote 1 étoile", detail: "Conduite du bateau sur le lac, dans le respect de la réglementation, accompagné d’une personne qui connaît le bateau." },
@@ -1278,6 +1435,8 @@
   }
   function starsHtml(n, size) { var s = '<span class="stars" role="img" aria-label="' + (n ? n + " étoile" + (n > 1 ? "s" : "") : "aucun grade") + '">'; for (var i = 1; i <= 4; i++) s += starSvg(i <= n, size); return s + "</span>"; }
   function canValidate() { return CONF.moi === "yann" || CONF.moi === "olivier"; }
+  /* Fiche pilote : modifiable par la personne elle-même (choix « Je suis »), Yann et Olivier modifient tout */
+  function canEdit(p) { return canValidate() || (!!CONF.moi && !!p && CONF.moi === p.id); }
   /* Heures calculées à partir des sessions : tours, rôle à bord, pilotage. */
   function pilotStats(pid) {
     var st = { ski: 0, wake: 0, pass: 0, pilot: 0, hist: 0, sessions: 0 };
@@ -1311,23 +1470,26 @@
     h += '<div class="card"><h3>Photos des familles</h3><div class="small muted">Elles s’affichent devant le nom de la famille dans l’onglet Session.</div><div class="fam-photos">' +
       ["YC", "OC"].map(function (f) {
         var s = photoSrc((SPEC.famPhotos || {})[f]);
-        return '<label class="fam-ph">' + (s ? '<img src="' + s + '" alt="">' : '<span class="ph-empty f-' + f + '">' + FAM[f].s.charAt(0) + "</span>") + "<span>" + FAM[f].n + '</span><span class="small muted">' + (s ? "Changer" : "Ajouter") + '</span><input type="file" accept="image/*" data-famphoto="' + f + '" hidden></label>';
-      }).join("") + "</div></div>";
+        var img = s ? '<img src="' + s + '" alt="">' : '<span class="ph-empty f-' + f + '">' + FAM[f].s.charAt(0) + "</span>";
+        if (!canValidate()) return '<span class="fam-ph ro">' + img + "<span>" + FAM[f].n + "</span></span>";
+        return '<label class="fam-ph">' + img + "<span>" + FAM[f].n + '</span><span class="small muted">' + (s ? "Changer" : "Ajouter") + '</span><input type="file" accept="image/*" data-famphoto="' + f + '" hidden></label>';
+      }).join("") + "</div>" + (canValidate() ? "" : '<div class="small muted">Seuls Yann et Olivier peuvent changer ces photos.</div>') + "</div>";
     h += '<div class="card"><h3>Prérogatives selon le grade</h3><div class="small muted">Chaque grade inclut les prérogatives des grades précédents.</div>' + GRADES.map(function (g, i) { return '<div class="grade-row">' + starsHtml(i + 1, 14) + "<span><b>" + g.label + '</b><br><span class="small">' + esc(g.detail) + "</span></span><span></span></div>"; }).join("") + "</div>";
     return h;
   }
   function pilotDetailHtml(p) {
     var s = pilotStats(p.id), g = p.grade || 0;
     var h = '<button class="btn link" data-pilot="">← Tous les pilotes</button>';
-    var age = ageTxt(p.naissance);
+    var age = ageTxt(p.naissance), ed = canEdit(p);
+    if (!ed) h += '<div class="alert ro-note"><b>Fiche en lecture seule</b>Seuls ' + esc(p.name) + (p.id === "yann" || p.id === "olivier" ? "" : ", Yann") + (p.id === "olivier" ? " et Yann" : " et Olivier") + " peuvent la modifier" + (CONF.moi ? "." : " (choix « Je suis » dans Bateau, Connexion et partage).") + "</div>";
+    h += '<fieldset class="pf-lock"' + (ed ? "" : " disabled") + '>';
     h += '<div class="card pilot-hero"><div class="ph-left">' +
-      "<h3>" + esc(p.name) + "</h3>" +
+      '<div class="name-line"><h3>' + esc(p.name) + "</h3>" + starsHtml(g, 22) + "</div>" +
       '<div class="birth"><input type="date" class="mini-date" data-pf="naissance" value="' + esc(p.naissance || "") + '" aria-label="Date de naissance">' + '<span class="small muted" id="ageTxt">' + (age || "date de naissance") + "</span>" + "</div>" +
       '<div class="tel-line"><input type="tel" class="mini-tel" data-pf="tel" value="' + esc(p.tel || "") + '" placeholder="Téléphone" inputmode="tel" autocomplete="off" aria-label="Téléphone de ' + esc(p.name) + '">' + (p.tel ? '<a class="call" href="tel:' + telHref(p.tel) + '">' + PHONE_ICON + "Appeler</a>" : "") + "</div>" +
-      starsHtml(g, 22) +
       '<div class="small muted">' + (g ? esc(GRADES[g - 1].label) + " · validé par " + esc(p.gradePar || "?") + (p.gradeLe ? " le " + esc(p.gradeLe) : "") : "Pas encore de grade") + "</div>" +
       '<div class="perms">' + permisHtml(p, "permisCotier", "Côtier") + permisHtml(p, "permisFluvial", "Fluvial") + "</div></div>" +
-      '<label class="ph-pick">' + pilotAvatar(p, "hero-av") + '<span class="small">' + (p.photo ? "Changer" : "Ajouter une photo") + '</span><input type="file" accept="image/*" id="pfPhoto" hidden></label></div>';
+      (ed ? '<label class="ph-pick">' + pilotAvatar(p, "hero-av") + '<span class="small">' + (p.photo ? "Changer" : "Ajouter une photo") + '</span><input type="file" accept="image/*" id="pfPhoto" hidden></label>' : '<span class="ph-pick ro">' + pilotAvatar(p, "hero-av") + "</span>") + "</div>";
     h += pratiqueHtml(p);
     h += '<div class="card"><h3>Statistiques de pratique</h3>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Ski</span><span class="v">' + hm(s.ski) + '</span><span class="s">slalom, ski libre, formation</span></div>' +
@@ -1346,6 +1508,7 @@
       }).join("") + "</div>" : '<div class="small muted">Aucune pièce pour l’instant.</div>') +
       '<div class="two"><div class="field"><label for="pjType">Type de pièce</label><select id="pjType"><option value="Permis bateau">Permis ou code</option><option value="Diplômes et formations">Diplôme, formation, secourisme</option><option value="Autres">Autre</option></select></div>' +
       '<div class="field"><label for="pjFile">Fichier ou photo</label><input id="pjFile" class="file-in" type="file" multiple accept="image/*,application/pdf,.tif,.tiff"></div></div></div>';
+    h += "</fieldset>";
     h += '<div class="card"><h3>Grade</h3>';
     GRADES.forEach(function (gr, i) {
       var n = i + 1;
@@ -1359,8 +1522,18 @@
   /* Journal - Notes : date et auteur automatiques, nature au choix, historique ; pastille rouge sur l'accueil pour les notes pas encore vues */
   var NOTE_CATS = ["Anomalie constatée", "Situation particulière", "Perte d’objet", "Chose à remplacer", "Déclaration d’un contrôle", "Alarme moteur", "Niveau d’huile faible", "Autres (à préciser)"];
   var NOTE_SEV = { "Anomalie constatée": "bad", "Alarme moteur": "bad", "Niveau d’huile faible": "bad", "Chose à remplacer": "warn", "Perte d’objet": "warn", "Déclaration d’un contrôle": "warn" };
-  var noteForm = { cat: NOTE_CATS[0], auteur: "" };
-  function unreadNotes() { var seen = LS.get("notesVues", ""); return notes.filter(function (n) { return (n.date || "") > seen && n.auteur !== CONF.moi; }).length; }
+  var noteForm = { cat: NOTE_CATS[0], auteur: "", photo: null, video: null, busy: false };
+  /* Notes lues : liste des identifiants déjà vus sur ce téléphone (une note arrivée plus tard par la synchro reste « nouvelle »). */
+  function notesLues() {
+    var l = LS.get("notesLues", null);
+    if (!l) { var seen = LS.get("notesVues", ""); l = notes.filter(function (n) { return seen && (n.date || "") <= seen; }).map(function (n) { return n.id; }); LS.set("notesLues", l); }
+    return l;
+  }
+  function isUnread(n, lues) { return lues.indexOf(n.id) < 0 && (!CONF.moi || n.auteur !== CONF.moi); }
+  function unreadNotes() { var l = notesLues(); return notes.filter(function (n) { return isUnread(n, l); }).length; }
+  function markNotesRead() { LS.set("notesLues", notes.map(function (n) { return n.id; })); }
+  var CAM_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.6-2.2h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13" r="3.6"/></svg>';
+  var VID_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6.5" width="12.5" height="11" rx="1.6"/><path d="M15.5 10.5l5.5-3v9l-5.5-3z"/></svg>';
   function fmtDateTime(iso) { var d = new Date(iso); return isNaN(d) ? "" : d.toLocaleDateString("fr-FR") + " à " + d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }); }
   function renderJournal() {
     if (!noteForm.auteur) noteForm.auteur = CONF.moi || "";
@@ -1369,33 +1542,49 @@
     h += '<div class="card"><h3>Nouvelle note</h3><div class="small muted">Le ' + fmtDateTime(nowIso()) + " (date et heure ajoutées automatiquement)</div>" +
       '<div class="two"><div class="field"><label for="nPar">Par</label><select id="nPar"><option value="">—</option>' + ppl.map(function (p) { return '<option value="' + p.id + '"' + (p.id === noteForm.auteur ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div>" +
       '<div class="field"><label for="nCat">Nature</label><select id="nCat">' + NOTE_CATS.map(function (c) { return "<option" + (c === noteForm.cat ? " selected" : "") + ">" + esc(c) + "</option>"; }).join("") + "</select></div></div>" +
-      '<div class="field"><label for="nTxt">Note' + (noteForm.cat === NOTE_CATS[NOTE_CATS.length - 1] ? " (à préciser)" : "") + '</label><textarea id="nTxt" rows="4" placeholder="Ce qui s’est passé, où, ce qu’il faut faire…"></textarea></div>' +
-      '<div class="actions"><button class="btn" id="noteSave">Enregistrer la note</button></div></div>';
+      '<div class="field"><label for="nTxt">Note' + (noteForm.cat === NOTE_CATS[NOTE_CATS.length - 1] ? " (à préciser)" : "") + '</label><textarea id="nTxt" rows="4" placeholder="Ce qui s’est passé, où, ce qu’il faut faire…">' + esc(noteForm.txt || "") + "</textarea></div>" +
+      '<div class="note-media"><label class="btn ghost sm media-btn">' + CAM_ICON + (noteForm.photo ? "Reprendre la photo" : "Prendre une photo") + '<input type="file" accept="image/*" capture="environment" id="nPhoto" hidden></label>' +
+      '<label class="btn ghost sm media-btn">' + VID_ICON + (noteForm.video ? "Changer la vidéo" : "Filmer une vidéo") + '<input type="file" accept="video/*" capture="environment" id="nVideo" hidden></label></div>' +
+      (noteForm.photo ? '<div class="note-att"><img class="note-img" src="' + photoSrc(noteForm.photo) + '" alt="Photo jointe"><button class="btn link" data-nrm="photo">Retirer la photo</button></div>' : "") +
+      (noteForm.video ? '<div class="note-att small">' + VID_ICON + " " + esc(noteForm.video.name) + " · " + sizeTxt(noteForm.video.size) + ' <button class="btn link" data-nrm="video">Retirer</button><div class="small muted">' + (CONF.url && CONF.code ? "La vidéo sera rangée dans Google Drive avec la note (15 Mo au plus, soit 20 à 30 secondes)." : "Connexion à la base partagée nécessaire pour envoyer une vidéo.") + "</div></div>" : "") +
+      '<div class="actions"><button class="btn" id="noteSave"' + (noteForm.busy ? " disabled" : "") + ">" + (noteForm.busy ? "Envoi de la vidéo…" : "Enregistrer la note") + "</button></div></div>";
     h += '<div class="card"><h3>Historique des notes</h3>';
     if (!notes.length) h += '<div class="small muted">Aucune note pour l’instant.</div>';
-    var seen = LS.get("notesVues", "");
+    var lues = notesLues();
     notes.forEach(function (n) {
-      var isNew = (n.date || "") > seen && n.auteur !== CONF.moi;
+      var isNew = isUnread(n, lues);
       h += '<div class="note-row"><div class="note-h"><span class="note-tag ' + (NOTE_SEV[n.cat] || "") + '">' + esc(n.cat) + "</span>" + (isNew ? '<span class="note-new">nouvelle</span>' : "") + '<span class="small muted">' + fmtDateTime(n.date) + " · " + esc(n.auteurNom || "?") + "</span></div>" +
         (n.txt ? '<div class="note-txt">' + esc(n.txt).replace(/\n/g, "<br>") + "</div>" : "") +
+        (photoSrc(n.photo) ? '<img class="note-img" src="' + photoSrc(n.photo) + '" alt="Photo jointe à la note" loading="lazy">' : "") +
+        (n.video && n.video.url ? '<a class="note-vid" href="' + esc(n.video.url) + '" target="_blank" rel="noopener">' + VID_ICON + "Voir la vidéo</a>" : "") +
         (ui.noteDel === n.id
           ? '<div class="alert bad note-del"><b>Effacer cette note ?</b>Elle disparaîtra aussi des autres téléphones.<div class="actions"><button class="btn ghost sm" data-notedel="">Non</button><button class="btn stop sm" data-notedelok="' + esc(n.id) + '">Oui, effacer</button></div></div>'
           : '<button class="btn link note-x" data-notedel="' + esc(n.id) + '">Effacer</button>') + "</div>";
     });
-    LS.set("notesVues", nowIso()); // ouvertes : la pastille de l'accueil disparaît
+    markNotesRead(); // ouvertes : la pastille de l'accueil disparaît
     return h + "</div>";
   }
 
   /* Annuaire urgence : numéros nationaux fixes, contacts du lac gardés dans la base partagée (SPEC.annuaire), modifiables */
   var URG_NAT = [["112", "Urgences (numéro européen)"], ["15", "SAMU"], ["18", "Pompiers"], ["17", "Police, gendarmerie"]];
+  /* Sections : Propriétaires (numéros des fiches de Yann et Olivier) en tête, puis l'ordre choisi dans l'app (SPEC.annOrdre) */
+  var OWN_G = "Propriétaires", ANN_ORDRE = [OWN_G, "Police du lac", "Sport Service Pitrot", "Association SNLG", "VLG"];
+  function annGroups(list) {
+    var gs = [OWN_G]; list.forEach(function (c) { var g = c.g || "Autres"; if (gs.indexOf(g) < 0) gs.push(g); });
+    var ord = (SPEC.annOrdre && SPEC.annOrdre.length ? SPEC.annOrdre : ANN_ORDRE), rk = function (g) { var i = ord.indexOf(g); return i < 0 ? 1000 + gs.indexOf(g) : i; };
+    return gs.sort(function (a, b) { return rk(a) - rk(b); });
+  }
   function renderAnnuaire() {
     var list = SPEC.annuaire || [], edit = ui.annEdit, h = '<button class="btn link" data-go="bateau">← Retour au bateau</button>';
     h += '<div class="card urg-nat"><h3>Numéros d’urgence</h3><div class="urg-grid">' + URG_NAT.map(function (u) { return '<a class="urg-big" href="tel:' + u[0] + '"><b>' + u[0] + "</b><span>" + u[1] + "</span></a>"; }).join("") + "</div></div>";
-    var groups = []; list.forEach(function (c) { if (groups.indexOf(c.g || "Autres") < 0) groups.push(c.g || "Autres"); });
+    var groups = annGroups(list);
     h += '<div class="card"><div class="row"><h3>Contacts du lac</h3><button class="btn link" id="annEdit">' + (edit ? "Terminé" : "Modifier") + "</button></div>";
     if (!list.length && !edit) h += '<div class="small muted">Aucun contact pour l’instant : touchez « Modifier » pour les saisir.</div>';
     if (edit) {
-      h += '<div class="small muted">Groupe, nom, rôle et numéro. Les changements sont partagés avec la famille.</div>';
+      h += '<div class="sub-h">Ordre des sections</div><div class="ann-order">' + groups.map(function (g, i) {
+        return '<div class="ao-row"><span>' + esc(g) + '</span><button class="ao-b" data-annmv="' + i + '" data-dir="-1" aria-label="Monter ' + esc(g) + '"' + (i ? "" : " disabled") + '>▲</button><button class="ao-b" data-annmv="' + i + '" data-dir="1" aria-label="Descendre ' + esc(g) + '"' + (i < groups.length - 1 ? "" : " disabled") + ">▼</button></div>";
+      }).join("") + "</div>";
+      h += '<div class="sub-h">Contacts</div><div class="small muted">Groupe, nom, rôle et numéro. Les changements sont partagés avec la famille. Les numéros des propriétaires se saisissent dans leur fiche pilote.</div>';
       list.forEach(function (c, i) {
         h += '<div class="ann-edit"><input data-ann="' + i + '" data-ak="g" value="' + esc(c.g || "") + '" placeholder="Groupe (ex. Association SNLG)" aria-label="Groupe"><input data-ann="' + i + '" data-ak="n" value="' + esc(c.n || "") + '" placeholder="Nom" aria-label="Nom">' +
           '<input data-ann="' + i + '" data-ak="r" value="' + esc(c.r || "") + '" placeholder="Rôle" aria-label="Rôle"><input data-ann="' + i + '" data-ak="t" value="' + esc(c.t || "") + '" placeholder="Téléphone" inputmode="tel" aria-label="Téléphone"><button class="x" data-anndel="' + i + '" aria-label="Supprimer ce contact">×</button></div>';
@@ -1404,6 +1593,11 @@
     } else {
       groups.forEach(function (g) {
         h += '<div class="ann-g">' + esc(g) + "</div>";
+        if (g === OWN_G) ["yann", "olivier"].forEach(function (id) {
+          var p = person(id); if (!p) return;
+          h += '<div class="ann-row ind"><span><b>' + esc(p.name) + '</b><span class="small muted"> · propriétaire</span></span>' +
+            (p.tel ? '<a class="call" href="tel:' + telHref(p.tel) + '">' + PHONE_ICON + esc(p.tel) + "</a>" : '<button class="btn link small" data-pilotgo="' + id + '">numéro à saisir dans sa fiche</button>') + "</div>";
+        });
         list.filter(function (c) { return (c.g || "Autres") === g; }).forEach(function (c) {
           h += '<div class="ann-row' + (c.n && c.n !== g ? " ind" : "") + '"><span><b>' + esc(c.n || g) + "</b>" + (c.r ? '<span class="small muted"> · ' + esc(c.r) + "</span>" : "") + "</span>" +
             (c.t ? '<a class="call" href="tel:' + telHref(c.t) + '">' + PHONE_ICON + esc(c.t) + "</a>" : '<span class="small muted">numéro à compléter</span>') + "</div>";
@@ -1412,7 +1606,7 @@
       if (ui.annNew) {
         var gNew = ui.annNewCat === "__new";
         h += '<div class="ann-new"><div class="sub-h">Nouveau numéro</div>' +
-          '<div class="field"><label for="anGs">Section (facultatif)</label><select id="anGs"><option value="">— Aucune —</option>' + groups.filter(function (g) { return g !== "Autres"; }).map(function (g) { return '<option value="' + esc(g) + '"' + (ui.annNewCat === g ? " selected" : "") + ">" + esc(g) + "</option>"; }).join("") + '<option value="__new"' + (gNew ? " selected" : "") + ">+ Nouvelle section…</option></select></div>" +
+          '<div class="field"><label for="anGs">Section (facultatif)</label><select id="anGs"><option value="">— Aucune —</option>' + groups.filter(function (g) { return g !== "Autres" && g !== OWN_G; }).map(function (g) { return '<option value="' + esc(g) + '"' + (ui.annNewCat === g ? " selected" : "") + ">" + esc(g) + "</option>"; }).join("") + '<option value="__new"' + (gNew ? " selected" : "") + ">+ Nouvelle section…</option></select></div>" +
           (gNew ? '<div class="field"><label for="anG">Nom de la nouvelle section</label><input id="anG" placeholder="ex. Dépannage, Ponton…" autocomplete="off"></div>' : "") +
           '<div class="two"><div class="field"><label for="anN">Nom</label><input id="anN" placeholder="ex. Yvan" autocomplete="off"></div><div class="field"><label for="anR">Fonction (facultatif)</label><input id="anR" placeholder="ex. moniteur" autocomplete="off"></div></div>' +
           '<div class="field"><label for="anT">Téléphone</label><input id="anT" inputmode="tel" placeholder="06 00 00 00 00" autocomplete="off"></div>' +
@@ -1423,10 +1617,12 @@
   }
 
   /* Activité : le bilan en premier ; les dépenses s'ouvrent par un lien en bas de page. */
+  function finBtnsHtml() { return '<div class="fin-btns"><button class="btn big" data-depnew="1"><span class="fb-ic" aria-hidden="true">' + QI.euro + '</span>Saisir une dépense</button><button class="btn big ghost" data-fin="balance"><span class="fb-ic" aria-hidden="true">' + QI.balance + '</span>Faire la balance</button></div>'; }
   function renderActivite() {
     if (finView === "dep") return '<button class="btn link" data-fin="bilan">← Retour à l’activité</button>' + renderDepenses();
+    if (finView === "balance") return renderBalance();
     var B = balance();
-    return '<button class="btn big center-btn" data-depnew="1">Saisir une dépense</button>' + renderBilan() +
+    return finBtnsHtml() + renderBilan() +
       '<button class="card link-card" data-fin="dep"><span><b>Dépenses et balance</b><span class="small muted">' + depenses.length + " dépenses · " + esc(balanceText(B)) + '</span></span><span class="chev" aria-hidden="true">›</span></button>';
   }
   /* Bandeau de l'accueil : voiles de fils fins qui ondulent et se croisent, du turquoise au jaune, sur bleu nuit (dessin original généré) */
@@ -1464,6 +1660,7 @@
     sortie: { t: "Session", v: '<span class="head-deco" aria-hidden="true">' + SES_DECO + "</span>", th: '<span class="thumb img-ski" aria-hidden="true"></span>' },
     essence: { t: "Essence", v: '<span class="head-deco" aria-hidden="true">' + ESS_DECO + '</span><span class="hv img-pump" aria-hidden="true"></span>' },
     activite: { t: "Activité", v: '<span class="head-deco" aria-hidden="true">' + ACT_DECO + '</span><span class="hv" style="background:#1f2a33;color:#d6dade" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg></span>' },
+    balance: { t: "Balance", v: '<span class="hv" style="background:#14532d;color:#cfeed3" aria-hidden="true">' + QI.balance + "</span>" },
     depenses: { t: "Dépenses", v: '<span class="hv" style="background:#14532d;color:#cfeed3;font:700 23px var(--f-body)" aria-hidden="true">€</span>' },
     pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + WHEEL_ICON + "</span>" },
     journal: { t: "Journal - Notes", v: '<span class="hv" style="background:#ffffff;color:#1e4d6b" aria-hidden="true">' + QI.journal + "</span>" },
@@ -1471,13 +1668,13 @@
     bateau: { t: "Bateau", v: '<span class="thumb img-boat" style="background-position:45% 60%" aria-hidden="true"></span>' }
   };
   function renderHead() {
-    var key = tab === "activite" ? (finView === "dep" ? "depenses" : "activite") : tab, H = HEADS[key];
-    document.getElementById("appHead").className = "app-head h-" + (key === "activite" ? "bilan" : key);
+    var key = tab === "activite" ? (finView === "dep" ? "depenses" : finView === "balance" ? "balance" : "activite") : tab, H = HEADS[key];
+    document.getElementById("appHead").className = "app-head h-" + (key === "activite" ? "bilan" : key === "balance" ? "depenses" : key);
     document.getElementById("hVis").innerHTML = H.v || "";
     document.getElementById("hTitle").textContent = H.t;
     document.getElementById("hThumb").innerHTML = H.th || "";
   }
-  function achatPreview() { var el = document.getElementById("aPL"); if (!el) return; var l = parseNum(document.getElementById("aL").value), p = parseNum(document.getElementById("aP").value); el.textContent = l > 0 ? "Soit " + dec2.format(p / l) + " € le litre." : ""; }
+  function achatPreview() { var el = document.getElementById("aPL"); if (el) el.textContent = achatPLText(); }
   function goTab(t) { tab = t; screen.scrollTop = 0; render(); }
   var toastTimer;
   function toast(msg) { var t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2800); }
@@ -1487,7 +1684,7 @@
   screen.addEventListener("click", function (e) {
     var tr = e.target.closest("tr[data-ses]");
     if (tr) { ui.sesOpen = ui.sesOpen === tr.dataset.ses ? "" : tr.dataset.ses; return render(); } // liste des sessions : ouvrir / fermer le détail
-    var b = e.target.closest("button"); if (!b || b.disabled) return;
+    var b = e.target.closest("button"); if (!b || b.disabled || b.matches(":disabled")) return;
     var ds = b.dataset, k, t;
     if (ds.go) return goTab(ds.go);
     if (ds.essyear) { essYear = ds.essyear; return render(); }
@@ -1541,7 +1738,7 @@
     if (b.id === "cancelAsk") { view.cancelAsk = true; return render(); }
     if (b.id === "cancelNo") { view.cancelAsk = false; return render(); }
     if (b.id === "cancelYes") { view.cancelAsk = false; sortie = { active: false, compteurDeb: lastCompteur(), tours: [], participants: [] }; toast("Session annulée : rien n’a été enregistré."); return render(); }
-    if (ds.fin) { finView = ds.fin; screen.scrollTop = 0; return render(); }
+    if (ds.fin) { finView = ds.fin; if (ds.fin === "balance") balForm = null; return goTab("activite"); }
     if (ds.pilot !== undefined) { pilotSel = ds.pilot; screen.scrollTop = 0; return render(); }
     if (ds.pdel !== undefined) { docPending.splice(Number(ds.pdel), 1); return render(); }
     if (b.id === "pendCancel") { docPending = []; return render(); }
@@ -1550,12 +1747,27 @@
     if (ds.notedelok) { notes = notes.filter(function (n) { return n.id !== ds.notedelok; }); ui.noteDel = ""; toast("Note effacée."); return render(); }
     if (b.id === "noteSave") {
       var nt = document.getElementById("nTxt").value.trim(), au = person(noteForm.auteur);
+      noteForm.txt = nt;
       if (!au) { toast("Indiquez qui écrit la note."); return; }
-      if (!nt && noteForm.cat === NOTE_CATS[NOTE_CATS.length - 1]) { toast("Précisez la note dans la zone de saisie."); return; }
-      notes.unshift({ id: "note-" + uid(), kind: "note", date: nowIso(), auteur: au.id, auteurNom: au.name, cat: noteForm.cat, txt: nt });
-      LS.set("notesVues", nowIso()); // pas de pastille sur le téléphone qui l'a écrite
-      toast("Note enregistrée et partagée avec la famille."); return render();
+      if (!nt && !noteForm.photo && noteForm.cat === NOTE_CATS[NOTE_CATS.length - 1]) { toast("Précisez la note dans la zone de saisie."); return; }
+      var nrec = { id: "note-" + uid(), kind: "note", date: nowIso(), auteur: au.id, auteurNom: au.name, cat: noteForm.cat, txt: nt };
+      if (noteForm.photo) nrec.photo = noteForm.photo;
+      var nfin = function () {
+        notes.unshift(nrec); LS.set("notesLues", notesLues().concat([nrec.id])); // pas de pastille sur le téléphone qui l'a écrite
+        noteForm.photo = null; noteForm.video = null; noteForm.txt = ""; noteForm.busy = false;
+        toast("Note enregistrée et partagée avec la famille."); render();
+      };
+      var vf = noteForm.video;
+      if (!vf) return nfin();
+      if (!(CONF.url && CONF.code && navigator.onLine)) return toast("Pas de connexion : la vidéo ne peut pas partir. Retirez-la ou réessayez avec du réseau.");
+      if (vf.size > 15 * 1048576) return toast("Vidéo trop lourde (15 Mo au plus) : filmez 20 à 30 secondes.");
+      noteForm.busy = true; render(); toast("Envoi de la vidéo…");
+      readB64(vf).then(function (b64) { return Sync.call({ action: "upload", name: "Note " + todayIso() + " - " + vf.name, mime: vf.type || "video/mp4", data: b64, cat: "Journal - Notes", y: String(new Date().getFullYear()) }); })
+        .then(function (res) { if (!res.ok) throw new Error(res.error || "erreur du serveur"); nrec.video = { url: res.url, n: vf.name }; nfin(); })
+        .catch(function (er) { noteForm.busy = false; toast("Envoi de la vidéo impossible : " + ((er && er.message) || er)); render(); });
+      return;
     }
+    if (ds.nrm) { var tx0 = document.getElementById("nTxt"); if (tx0) noteForm.txt = tx0.value; noteForm[ds.nrm] = null; return render(); }
     if (b.id === "annNewOpen") { ui.annNew = true; render(); var an = document.getElementById("anN"); if (an) an.focus(); return; }
     if (b.id === "annNewCancel") { ui.annNew = false; return render(); }
     if (b.id === "annNewSave") {
@@ -1566,6 +1778,8 @@
       ui.annNew = false; ui.annNewCat = ""; toast("Numéro ajouté à l’annuaire, partagé avec la famille."); return render();
     }
     if (b.id === "annEdit") { ui.annEdit = !ui.annEdit; if (!ui.annEdit) SPEC.annuaire = (SPEC.annuaire || []).filter(function (c) { return c.n || c.t || c.g; }); return render(); }
+    if (ds.annmv !== undefined) { var go = annGroups(SPEC.annuaire || []), ia = Number(ds.annmv), ib = ia + Number(ds.dir); if (ib >= 0 && ib < go.length) { var tg = go[ia]; go[ia] = go[ib]; go[ib] = tg; SPEC.annOrdre = go; } return render(); }
+    if (ds.pilotgo) { pilotSel = ds.pilotgo; return goTab("pilotes"); }
     if (b.id === "annAdd") { SPEC.annuaire = (SPEC.annuaire || []).concat([{ id: uid(), g: "", n: "", r: "", t: "" }]); return render(); }
     if (ds.anndel) { SPEC.annuaire = (SPEC.annuaire || []).filter(function (c, i) { return i !== Number(ds.anndel); }); return render(); }
     if (ds.fig) { // figures de wake : — → en travail → fait → pour plus tard → —
@@ -1597,7 +1811,7 @@
         participants: sortie.participants.map(function (p) { return { pid: p.pid, role: p.role, host: p.host, fact: p.fact }; }),
         tours: sortie.tours.map(function (t) { return { pid: t.pid, act: t.act, min: Math.round(tourMs(t, Date.now()) / 600) / 100, pauses: t.pauses, laps: t.laps, speed: t.speed, passes: t.passes, pilote: t.pilote, orig: t.orig }; }) });
       ["YC", "OC"].forEach(function (f) { var mn = Math.round(R.fact[f]); if (mn > 0) depenses.unshift({ id: uid(), d: todayFr(), lib: "Invités facturés (" + mn + " min)", cat: "Recette invités", m: -mn * SPEC.tarif, payeur: f, regle: f }); });
-      if (sortie.plein && bidons.length) { applyPrelevement(planPrelevement(sortie.bidonsPlein, sortie.pleinF), sortie.pleinF, "pour le plein"); lastPlein = todayFr(); msg = "Session et plein enregistrés."; }
+      if (sortie.plein && bidons.length) { applyPrelevement(planPrelevement(sortie.bidonsPlein, sortie.pleinF), sortie.pleinF, "pour le plein", true); lastPlein = todayFr(); msg = "Session et plein enregistrés."; }
       lastLevel = sortie.plein ? 16 : sortie.jaugeFin; lastLevelDate = todayFr();
       sortie = { active: false, compteurDeb: endC, tours: [], participants: [] }; save(3); toast(savedMsg(msg)); return render();
     }
@@ -1613,16 +1827,16 @@
       toast(savedMsg("Session rattrapée enregistrée.")); return render();
     }
     if (ds.ev === "achat" || ds.ev === "mise") { view.essence = ds.ev; return render(); }
-    if (ds.ev === "cancel") { view.essence = null; achatForm.step = null; return render(); }
+    if (ds.ev === "cancel") { view.essence = null; achatForm.step = null; achatForm.f = ""; achatForm.verse = false; achatForm.L = 0; achatForm.P = 0; return render(); }
     if (ds.af) { achatForm.f = ds.af; return render(); }
     if (ds.mf) { miseForm.f = ds.mf; return render(); }
     if (ds.atog) { achatForm[ds.atog] = !achatForm[ds.atog]; return render(); }
     if (ds.mtog) { miseForm.plein = !miseForm.plein; b.setAttribute("aria-pressed", String(miseForm.plein)); return; }
-    if (ds.astep) { achatForm.b = Math.max(1, Math.min(5, achatForm.b + Number(ds.astep))); achatForm.L = achatForm.b * SPEC.bidon; achatForm.P = Math.round(achatForm.L * 1.73 * 100) / 100; return render(); }
+    if (ds.astep) { achatForm.b = Math.max(1, Math.min(5, achatForm.b + Number(ds.astep))); return render(); }
     if (ds.mstep) { miseForm.n = Math.max(0.5, Math.min(5, miseForm.n + Number(ds.mstep))); return render(); }
     if (b.id === "saveAchat") {
       achatForm.L = parseNum(document.getElementById("aL").value); achatForm.P = parseNum(document.getElementById("aP").value);
-      if (achatForm.L <= 0 || achatForm.P <= 0) return toast("Indiquez les litres et le prix.");
+      if (achatForm.L <= 0 || achatForm.P <= 0) return toast("Indiquez les litres et le prix."); if (!achatForm.f) return toast("Indiquez la famille qui a payé.");
       if (!bidons.length) return commitAchat();
       achatForm.step = "check"; achatForm.tfOpen = false; achatForm.tf = achatForm.f; achatForm.tn = Math.max(achatNeed(), 1); return render();
     }
@@ -1648,11 +1862,25 @@
     if (b.id === "achBoth") {
       var pl = planPrelevement(achatForm.tn, achatForm.tf), left = cansAfter(pl);
       if (left + achatForm.b > 5) return toast("Il resterait " + left + " bidon(s) plein(s) : impossible d’en remplir " + achatForm.b + " de plus. Augmentez le nombre de bidons versés.");
-      applyPrelevement(pl, achatForm.tf, "oublié, noté à l’achat"); return commitAchat();
+      applyPrelevement(pl, achatForm.tf, "oublié, noté à l’achat", false); return commitAchat();
     }
-    if (b.id === "saveMise") { applyPrelevement(planPrelevement(miseForm.n, miseForm.f), miseForm.f, ""); if (miseForm.plein) lastPlein = todayFr(); view.essence = null; save(1); toast(savedMsg("Versement enregistré.")); return render(); }
+    if (b.id === "saveMise") { applyPrelevement(planPrelevement(miseForm.n, miseForm.f), miseForm.f, "", miseForm.plein); if (miseForm.plein) lastPlein = todayFr(); view.essence = null; save(1); toast(savedMsg("Versement enregistré.")); return render(); }
     if (b.id === "dNew") { view.dep = true; return render(); }
-    if (ds.depnew) { finView = "dep"; view.dep = true; screen.scrollTop = 0; return render(); }
+    if (ds.bip) { balForm = balForm || {}; balForm.payeur = ds.bip; return render(); }
+    if (b.id === "balValider") {
+      var RB = computeBalEss(); if (!RB.ready) return;
+      var nS = RB.segs.reduce(function (a, g) { return a + g.sessions.length; }, 0);
+      dettes.push({ id: uid(), kind: "essence", from: RB.from, to: RB.to, eur: RB.amount >= 0.5 ? RB.amount : 0, d: todayFr(), date: todayIso(), debut: RB.start, fin: RB.end, regle: RB.amount < 0.5,
+        note: "essence du " + keyFr(RB.start) + " au " + keyFr(RB.end) + " (" + nS + " session" + (nS > 1 ? "s" : "") + (RB.init ? ", plein de départ " + eur.format(RB.init.val) : "") + ")",
+        detail: { consomme: { YC: Math.round(RB.due.YC * 100) / 100, OC: Math.round(RB.due.OC * 100) / 100 }, paye: { YC: Math.round(RB.paid.YC * 100) / 100, OC: Math.round(RB.paid.OC * 100) / 100 }, init: RB.init ? { litres: RB.init.litres, prixL: RB.init.prixL, payeur: RB.init.payeur, val: RB.init.val } : null } });
+      balForm = null; save(1); toast(savedMsg("Balance validée : " + balResultText(RB))); return render();
+    }
+    if (ds.balregle) {
+      var dr = dettes.filter(function (x) { return x.id === ds.balregle; })[0]; if (!dr) return;
+      depenses.unshift({ id: uid(), d: todayFr(), lib: "Virement balance essence (" + FAM[dr.from].s + " → " + FAM[dr.to].s + ")", cat: REGL, m: Number(dr.eur), payeur: dr.from, regle: "regl", isNew: true });
+      dr.regle = true; save(1); toast(savedMsg("Virement noté dans les dépenses.")); return render();
+    }
+    if (ds.depnew) { finView = "dep"; view.dep = true; return goTab("activite"); }
     if (b.id === "dCancel") { view.dep = false; return render(); }
     if (ds.dpay) { depForm.payeur = ds.dpay; return render(); }
     if (ds.r) { depForm.regle = ds.r; return render(); }
@@ -1683,7 +1911,7 @@
     if (el.id === "cDeb") { sortie.compteurDeb = parseNum(el.value); sortie.debEdited = true; var wd = document.getElementById("cDebWarn"); if (wd) wd.innerHTML = startWarnHtml(parseNum(el.value)); return; }
     if (el.id === "cFin") { sortie.compteurFin = parseNum(el.value); document.getElementById("recapCard").innerHTML = recapHtml(Date.now()); }
     if (el.id === "dM" || el.id === "dPct") depPreview();
-    if (el.id === "aL" || el.id === "aP") achatPreview();
+    if (el.id === "aL" || el.id === "aP") { achatForm[el.id === "aL" ? "L" : "P"] = parseNum(el.value); achatPreview(); }
   });
   screen.addEventListener("change", function (e) {
     var el = e.target;
@@ -1709,6 +1937,12 @@
     }
     if (el.dataset.startchk) { startChecks[el.dataset.startchk] = el.checked; return; }
     if (el.id === "nPar") { noteForm.auteur = el.value; return; }
+    if ((el.id === "nPhoto" || el.id === "nVideo") && el.files && el.files[0]) {
+      var tx1 = document.getElementById("nTxt"); if (tx1) noteForm.txt = tx1.value;
+      if (el.id === "nVideo") { noteForm.video = el.files[0]; return render(); }
+      shrinkMeter(el.files[0]).then(function (ph) { noteForm.photo = ph; render(); }).catch(function (er) { toast(er.message); });
+      return;
+    }
     if (el.id === "nCat") { noteForm.cat = el.value; var lb = document.querySelector('label[for="nTxt"]'); if (lb) lb.textContent = "Note" + (el.value === NOTE_CATS[NOTE_CATS.length - 1] ? " (à préciser)" : ""); return; }
     if (el.dataset.ann !== undefined) { var ca = (SPEC.annuaire || [])[Number(el.dataset.ann)]; if (ca) { ca[el.dataset.ak] = el.value.trim(); persistAll(); } return; }
     if (el.dataset.pfc) { var ppc = person(pilotSel); if (ppc) ppc[el.dataset.pfc] = el.checked; return render(); } // cases à cocher (permis)
@@ -1728,6 +1962,7 @@
       return;
     }
     if (el.id === "cWho") { corrForm.who = el.value; return; }
+    if (el.id === "biL" || el.id === "biP") { balForm = balForm || {}; balForm[el.id === "biL" ? "litres" : "prixL"] = parseNum(el.value); return render(); }
     if (el.dataset.mnt) { maint[Number(el.dataset.mnt)][el.dataset.mnf] = el.value; save(1); return render(); }
     if (el.id === "pilDef") { sortie.pilote = el.value; sortie.tours.forEach(function (t) { if (t.state === "wait") t.pilote = el.value; }); save(1); return render(); }
     if (el.id === "pilStart") { startPilote = el.value; return; }
