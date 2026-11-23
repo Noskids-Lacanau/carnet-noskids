@@ -1,5 +1,9 @@
 # Journal des versions
 
+## 1.6.1 — 2026-11-23
+
+- Mode nuit du téléphone : boutons colorés sur fonds profonds de leur couleur avec texte clair ; boutons turquoise et sélecteurs de famille assombris pour garder le texte blanc lisible. Contraste vérifié sur tous les écrans, en mode nuit et en clair.
+
 ## 1.6.0 — 2026-11-23
 
 - Accueil : boutons d'accès direct en relief (session, achat essence, remplissage, statistiques, historique, journal, contact urgence) ; bandeau redessiné et logo Malibu doré.
