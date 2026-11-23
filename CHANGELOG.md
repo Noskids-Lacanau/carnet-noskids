@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 1.8.8 — 2026-11-23
+
+- Session : préparation compacte (compteur étroit, jauge remontée, familles et vérifications sur une ligne), retour en haut au lancement, partie skieurs sur fond coloré
+- Saisie manuelle des sessions faites sans le téléphone (date, pilote, compteurs, temps et activité par personne)
+- Mode démo (Live / Démo) avec bandeau : rien n'est enregistré ni partagé
+- Jauge du bateau remise à vide pour l'hivernage 2026
+- Essence : boutons plus gros, stock réduit, correction avec extourne d'un achat erroné ou en double, détail des achats par famille
+
 ## 1.8.7 — 2026-11-23
 
 - Grand affichage de la session couché à l'horizontale (à lire téléphone tourné), sans case à cocher

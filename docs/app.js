@@ -52,7 +52,7 @@
       if (m > 0) { var dd = isoToFr(dkey(s)).slice(0, 5), last = y.curve[y.curve.length - 1]; if (last && last[1] === dd) last[0] = y.cum; else y.curve.push([y.cum, dd]); }
     });
     depenses.forEach(function (d) { var yk = yearOf(d); if (!yk) return; var y = Y(yk), fx = FIXED_CATS[d.cat]; if (d.cat === "Essence") y.essence += Number(d.m) || 0; if (fx) { y.fixes += Number(d.m) || 0; y.fx[fx] += Number(d.m) || 0; } });
-    moves.forEach(function (mv) { if (mv.type === "achat" && mv.litres && yearOf(mv)) Y(yearOf(mv)).litres += Number(mv.litres) || 0; });
+    moves.forEach(function (mv) { if (isAchat(mv) && mv.litres && yearOf(mv)) Y(yearOf(mv)).litres += Number(mv.litres) || 0; });
     Object.keys(YEARS).forEach(function (k) {
       var y = YEARS[k]; y.min = Math.round(y.min);
       y.people = Object.keys(y.pmap).map(function (n) { var p = y.pmap[n]; return [p[0], p[1], Math.round(p[2]), p[3]]; }).sort(function (a, b) { return b[2] - a[2]; });
@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.7", SCHEMA = 1;
+  var APP_VERSION = "1.8.8", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -182,6 +182,7 @@
   function snapshotAll() { SNAP = {}; var cur = currentCollections(); COLS.forEach(function (c) { cur[c].forEach(function (r) { if (!r.id) r.id = uid(); SNAP[c + ":" + r.id] = strip(r); }); }); }
   /* Compare l'état affiché à la dernière version connue : ce qui a changé part dans la file d'envoi. */
   function persistAll() {
+    if (typeof DEMO !== "undefined" && DEMO) return; // mode démo : rien n'est enregistré ni envoyé
     var cur = currentCollections(), changed = false;
     COLS.forEach(function (c) {
       var seen = {};
@@ -209,7 +210,10 @@
     vals("entretien").forEach(function (m) { if (maint[m.i]) maint[m.i] = m; });
     var sp = DB.parametres.spec; if (sp && !sp.deleted) Object.keys(sp).forEach(function (k) { SPEC[k] = sp[k]; });
     var et = DB.etat.etat; if (et && !et.deleted) { ETAT = et; lastPlein = et.lastPlein || ""; lastLevel = et.lastLevel != null ? et.lastLevel : 16; lastLevelDate = et.lastLevelDate || ""; if (!ETAT.gapsRecherche) ETAT.gapsRecherche = []; }
+    // hivernage 2026 : le bateau a été hiverné réservoir vide (jauge en bas) ; appliqué une seule fois, puis partagé
     snapshotAll();
+    // seulement pendant l'hiver et s'il n'y a eu aucune session depuis : un téléphone rouvert en saison n'écrase pas le vrai niveau
+    if (et && !et.deleted && !ETAT.hiver2026 && todayIso() < "2027-03-01" && !sessionsArr.some(function (s) { return dkey(s) >= "2026-11-24"; })) { lastLevel = 0; lastLevelDate = "hivernage 2026"; ETAT.hiver2026 = true; } // après la photo : la modification part à la base partagée
   }
   function mergeRemote(list) {
     var n = 0;
@@ -230,7 +234,7 @@
         .then(function (r) { if (!r.ok) throw new Error("Serveur indisponible (" + r.status + ")"); return r.json(); });
     },
     run: function () {
-      if (!CONF.url || !CONF.code || Sync.busy || !navigator.onLine) { updateNet(); return Promise.resolve(); }
+      if (!CONF.url || !CONF.code || Sync.busy || !navigator.onLine || (typeof DEMO !== "undefined" && DEMO)) { updateNet(); return Promise.resolve(); }
       Sync.busy = true; updateNet();
       var batch = QUEUE.slice(0, 150);
       var step = batch.length ? Sync.call({ action: "push", records: batch.map(function (q) { var r = JSON.parse(JSON.stringify(q.rec)); r.table = q.table; return r; }) }) : Promise.resolve({ ok: true });
@@ -275,7 +279,7 @@
   var GC = { x: 120, y: 118 }, G0 = 210, GSWEEP = 240;
   function fracLabel(v) { if (v <= 0) return "Vide"; if (v >= 16) return "Plein"; var n = v, d = 16; while (n % 2 === 0) { n /= 2; d /= 2; } return n + "/" + d; }
   function gPt(v, r) { var a = (G0 - v / 16 * GSWEEP) * Math.PI / 180; return [GC.x + r * Math.cos(a), GC.y - r * Math.sin(a)]; }
-  function gaugeRead(v) { return "<b>" + fracLabel(v) + "</b> · ≈ " + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir; }
+  function gaugeRead(v) { return "<b>" + fracLabel(v) + '</b><span class="gr-sep"> · </span>≈ ' + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir; }
   function gHead(label, key, v) { return '<div class="g-head"><span class="flabel">' + label + '</span><span class="g-read" data-gread="' + key + '">' + gaugeRead(v) + '</span></div>'; }
   function gaugeHtml(key, v, ro) {
     var s = '<div class="gauge"><svg viewBox="0 0 240 236" data-gauge="' + key + '"' + (ro ? ' data-ro="1" role="img" aria-label="Niveau théorique : ' + fracLabel(v) + '"' : ' role="slider" tabindex="0" aria-label="Jauge d’essence"') + ' aria-valuemin="0" aria-valuemax="16" aria-valuenow="' + v + '" aria-valuetext="' + fracLabel(v) + '">';
@@ -409,7 +413,7 @@
   }
 
   function renderSortie() {
-    if (!sortie.active) return renderStart();
+    if (!sortie.active) return view.manuel ? renderManuel() : renderStart();
     var now = Date.now(), r = running(), on = sortie.engine === "on", h = "";
     h += '<div class="card engine"><div class="row"><div><div class="label">Temps moteur · départ ' + dec1.format(sortie.compteurDeb) + " h · jauge " + fracLabel(sortie.jaugeDeb) + "</div>" +
       '<div class="clock" data-timer="engine">' + fmtClock(engineMs(now)) + '</div></div><span class="pill ' + (on ? "on" : "off") + '">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
@@ -434,7 +438,7 @@
         (st === "done" || st === "pause" ? '<button class="btn link" data-edit="' + t.id + '">' + (t.edit ? "Fermer" : "Corriger le temps") + "</button>" : "") + "</div>" +
         (t.open ? detailsHtml(t) : "") + (t.edit ? editorHtml(t) : "") + "</div>";
     });
-    h += '<div class="card"><div class="label">Nouveau tour</div><div class="chips">';
+    h += '<div class="card ski-zone"><div class="label">Nouveau tour</div><div class="chips">';
     sortie.participants.forEach(function (p) { h += '<button class="chip" data-newtour="' + p.pid + '">' + famDot(famOf(p)) + esc(person(p.pid).name) + "</button>"; });
     h += '</div><div class="chips"><button class="chip" data-newtour="balade">+ Balade (tout le bateau)</button><button class="chip" data-newtour="meca">+ Mécanique</button></div></div>';
     h += boardHtml();
@@ -450,14 +454,97 @@
   }
   function renderStart() {
     if (!sortie.debEdited) sortie.compteurDeb = lastCompteur(); // suit les sessions arrivées par synchronisation
-    var h = '<div class="card"><h3>Nouvelle session</h3><div class="step"><b>1</b>Saisissez le compteur constaté au bateau et positionnez la jauge.</div><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
-      '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div>" +
-      '<div class="field gauge-sm">' + gHead("Jauge au départ", "start", startJauge) + gaugeHtml("start", startJauge) + "</div>" +
-      '</div>';
+    // 1 : compteur (champ étroit) et lecture de la jauge à gauche, jauge à droite
+    var h = '<div class="card p1"><div class="step"><b>1</b>Saisissez le compteur constaté au bateau et positionnez la jauge.</div>' +
+      '<div class="p1-grid"><div class="p1-left"><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" class="cpt-in" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
+      '<div class="g-side"><span class="flabel">Jauge au départ</span><span class="g-read" data-gread="start">' + gaugeRead(startJauge) + "</span></div></div>" +
+      '<div class="gauge-sm p1-g">' + gaugeHtml("start", startJauge) + "</div></div>" +
+      '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div></div>";
     h += boardHtml("Indiquez les personnes à bord.");
     if (startList.length) h += '<div class="card"><div class="field"><label for="pilStart">Pilote</label><select id="pilStart">' + startList.map(function (p) { return '<option value="' + p.pid + '"' + (p.pid === startPilote ? " selected" : "") + ">" + esc(person(p.pid).name) + "</option>"; }).join("") + "</select></div></div>";
-    h += '<div class="card"><div class="step"><b>3</b>Vérifiez avant de partir :</div><div class="checks">' + [["huile", "Niveau d’huile"], ["cale", "Pompe de cale"], ["aera", "Aération moteur"]].map(function (c) { return '<label class="chk"><input type="checkbox" data-startchk="' + c[0] + '"' + (startChecks[c[0]] ? " checked" : "") + '> ' + c[1] + "</label>"; }).join("") + "</div></div>";
+    h += '<div class="card"><div class="step"><b>3</b>Vérifiez avant de partir :</div><div class="checks three">' + [["huile", "Niveau d’huile"], ["cale", "Pompe de cale"], ["aera", "Aération moteur"]].map(function (c) { return '<label class="chk"><input type="checkbox" data-startchk="' + c[0] + '"' + (startChecks[c[0]] ? " checked" : "") + "><span>" + c[1] + "</span></label>"; }).join("") + "</div></div>";
     return h + '<div class="card"><div class="step"><b>4</b>Démarrez la session au démarrage du moteur.</div><button class="btn big run" id="goStart">Démarrer la session</button></div>';
+  }
+  /* ---------- Saisie manuelle : session faite sans le téléphone (date, pilote, compteurs, temps et activité par personne) ---------- */
+  var manForm = null;
+  function manNew(prev) { return { date: prev ? prev.date : todayIso(), c1: prev ? prev.c2 : dec1.format(lastCompteur()), c2: "", pilote: prev ? prev.pilote : "", list: prev ? prev.list.map(function (r) { return { pid: r.pid, role: r.role, act: r.act, min: "", host: r.host }; }) : [], pick: null }; }
+  function manRow(pid) { var M = manForm; for (var i = 0; i < M.list.length; i++) if (M.list[i].pid === pid) return M.list[i]; return null; }
+  function manRead() { // relit les champs avant de redessiner, pour ne rien perdre de ce qui est tapé
+    var M = manForm, g = function (id) { var e = document.getElementById(id); return e ? e.value : null; };
+    if (!M || !document.getElementById("mD")) return;
+    M.date = g("mD") || M.date; M.pilote = g("mPil") || ""; M.c1 = g("mC1"); M.c2 = g("mC2");
+    M.list.forEach(function (r) { var a = g("mA_" + r.pid), m = g("mM_" + r.pid); if (a != null) r.act = a; if (m != null) r.min = m; });
+  }
+  function manCalc() {
+    var M = manForm, c1 = parseNum(M.c1), c2 = parseNum(M.c2), eMin = c2 > c1 ? Math.round((c2 - c1) * 600) / 10 : 0, perso = 0, minutes = {}, b = { YC: 0, OC: 0 };
+    M.list.forEach(function (r) { var m = r.role === "ski" ? parseNum(r.min) || 0 : 0; if (m > 0) { perso += m; minutes[r.pid] = m; } });
+    var heads = M.list.length || 1, libre = Math.max(0, eMin - perso), commun = libre / heads;
+    M.list.forEach(function (r) { var f = person(r.pid).c === "EXT" ? r.host : CATF[person(r.pid).c]; b[f] += (minutes[r.pid] || 0) + commun; });
+    return { c1: c1, c2: c2, eMin: eMin, perso: perso, libre: libre, commun: commun, minutes: minutes, b: b };
+  }
+  function manSumHtml() {
+    var M = manForm, R = manCalc();
+    if (!(R.c2 > R.c1)) return '<div class="small muted">Indiquez le compteur de fin (plus grand que le départ) pour calculer le temps moteur.</div>';
+    var h = '<div class="small">Temps moteur : <b>' + hm(R.eMin) + "</b> · tours saisis : " + Math.round(R.perso) + " min" + (M.list.length ? " · temps commun : " + Math.round(R.libre) + " min partagé entre " + M.list.length + " personne" + (M.list.length > 1 ? "s" : "") : "") + "</div>";
+    if (R.perso > R.eMin + 0.5) h += '<div class="alert bad">Les temps saisis (' + Math.round(R.perso) + " min) dépassent le temps moteur (" + Math.round(R.eMin) + " min) : vérifiez les compteurs ou les minutes.</div>";
+    else if (M.list.length) h += '<div class="legend"><span>' + famDot("YC") + 'Famille Yann <b class="num">' + Math.round(R.b.YC) + " min</b></span><span>" + famDot("OC") + 'Famille Olivier <b class="num">' + Math.round(R.b.OC) + " min</b></span></div>";
+    return h;
+  }
+  function renderManuel() {
+    var M = manForm || (manForm = manNew()), FH = { YF: "<small>Famille</small>Yann", OF: "<small>Famille</small>Olivier", EXT: "Extérieur" };
+    var pils = M.list.length ? M.list.map(function (r) { return person(r.pid); }) : PEOPLE.filter(function (p) { return p.c !== "EXT"; });
+    var h = '<div class="man-form"><div class="card"><div class="row"><h3>Saisie manuelle</h3><button class="btn link" id="manClose">Fermer</button></div>' +
+      '<div class="small muted">Pour une session faite sans le téléphone. Après l’enregistrement, vous pouvez saisir la suivante.</div>' +
+      '<div class="two"><div class="field"><label for="mD">Date</label><input id="mD" type="date" value="' + esc(M.date) + '"></div>' +
+      '<div class="field"><label for="mPil">Pilote</label><select id="mPil"><option value="">—</option>' + pils.map(function (p) { return '<option value="' + p.id + '"' + (p.id === M.pilote ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div></div>" +
+      '<div class="two"><div class="field"><label for="mC1">Compteur départ (h)</label><input id="mC1" class="cpt-in" inputmode="decimal" value="' + esc(M.c1) + '"></div>' +
+      '<div class="field"><label for="mC2">Compteur fin (h)</label><input id="mC2" class="cpt-in" inputmode="decimal" value="' + esc(M.c2) + '" placeholder="ex. 1952,4"></div></div></div>';
+    h += '<div class="card board"><div class="step step-row"><b>2</b><span>Personnes à bord, temps et activité</span><span class="board-n' + (M.list.length > 8 ? " over" : "") + '">' + M.list.length + " / 8</span></div>";
+    h += '<div class="fam-heads">' + ["YF", "OF", "EXT"].map(function (c) {
+      var op = M.pick === c;
+      return '<div class="fh' + (op ? " open" : "") + '"><span class="fh-av">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + '</span><span class="fh-t">' + FH[c] + "</span>" +
+        '<button class="plus" data-mpick="' + c + '" aria-expanded="' + op + '" aria-label="Ajouter : ' + CAT[c] + '">' + (op ? "−" : "+") + "</button></div>";
+    }).join("") + "</div>";
+    if (M.pick) {
+      var avail = PEOPLE.filter(function (q) { return q.c === M.pick && !manRow(q.id); });
+      h += '<div class="picker">' + (avail.length ? '<div class="chips">' + avail.map(function (q) { return '<button class="chip" data-maddp="' + q.id + '">+ ' + esc(q.name) + "</button>"; }).join("") + "</div>" : '<div class="small muted">Tout le monde est déjà ajouté.</div>') +
+        (M.pick === "EXT" ? '<div class="newp"><input id="mNp" placeholder="Nouvelle personne" aria-label="Nom de la nouvelle personne"><button class="btn sm" id="mNewp">Ajouter</button></div>' : "") + "</div>";
+    }
+    ["YF", "OF", "EXT"].forEach(function (c) {
+      var rows = M.list.filter(function (r) { return person(r.pid).c === c; });
+      if (!rows.length) return;
+      h += '<div class="group"><div class="fam-sub"><span class="gt">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + CAT[c] + '</span><span class="g-tot">' + rows.length + " personne" + (rows.length > 1 ? "s" : "") + "</span></div>";
+      rows.forEach(function (r) {
+        var pp = person(r.pid), seg = function (v, l) { return '<button data-mrole="' + r.pid + '" data-v="' + v + '" aria-pressed="' + (r.role === v) + '">' + l + "</button>"; };
+        h += '<div class="prow"><div class="pname"><span class="pn">' + famDot(c === "EXT" ? r.host : CATF[c]) + esc(pp.name) + '</span><div class="seg mini role">' + seg("ski", "Skieur") + seg("pass", "Passager") + "</div>" +
+          '<button class="x" data-mrm="' + r.pid + '" aria-label="Retirer ' + esc(pp.name) + '">×</button></div>';
+        if (r.role === "ski") h += '<div class="man-line"><select id="mA_' + r.pid + '" aria-label="Activité de ' + esc(pp.name) + '">' + PERSO_ACTS.map(function (a) { return '<option value="' + a + '"' + (a === r.act ? " selected" : "") + ">" + ACTS[a] + "</option>"; }).join("") + "</select>" +
+          '<span class="man-min"><input id="mM_' + r.pid + '" inputmode="numeric" value="' + esc(r.min) + '" placeholder="0" aria-label="Minutes de ' + esc(pp.name) + '"> min</span></div>';
+        if (c === "EXT") h += '<div class="seg mini fam">' + ["YC", "OC"].map(function (f) { return '<button data-mhost="' + r.pid + '" data-v="' + f + '" aria-pressed="' + (r.host === f) + '">Invité ' + FAM[f].s + "</button>"; }).join("") + "</div>";
+        h += "</div>";
+      });
+      h += "</div>";
+    });
+    h += "</div>";
+    h += '<div class="card"><div id="mSum">' + manSumHtml() + "</div>" +
+      '<div class="actions"><button class="btn ghost" id="manSaveNext">Enregistrer et saisir la suivante</button><button class="btn" id="manSave">Enregistrer</button></div></div></div>';
+    return h;
+  }
+  function manSave() {
+    manRead();
+    var M = manForm, R = manCalc();
+    if (!M.date) { toast("Indiquez la date de la session."); return false; }
+    if (!(R.c2 > R.c1)) { toast("Le compteur de fin doit être plus grand que celui du départ."); return false; }
+    if (!M.list.length) { toast("Ajoutez au moins une personne à bord avec les boutons +."); return false; }
+    if (R.perso > R.eMin + 0.5) { toast("Les temps saisis dépassent le temps moteur : vérifiez."); return false; }
+    var pil = M.pilote && manRow(M.pilote) ? M.pilote : (M.list.filter(function (r) { return person(r.pid).c !== "EXT"; })[0] || M.list[0]).pid;
+    sessionsArr.push({ id: uid(), mode: "manuel", bateau: SPEC.devise, date: M.date, compteurDeb: R.c1, compteurFin: R.c2, pilote: pil, plein: false,
+      engineMin: R.eMin, famMin: { YC: Math.round(R.b.YC * 10) / 10, OC: Math.round(R.b.OC * 10) / 10 }, factMin: { YC: 0, OC: 0 },
+      minutes: R.minutes, commun: Math.round(R.libre * 10) / 10, meca: 0,
+      participants: M.list.map(function (r) { return { pid: r.pid, role: r.role, host: person(r.pid).c === "EXT" ? r.host : CATF[person(r.pid).c], fact: false }; }),
+      tours: M.list.filter(function (r) { return R.minutes[r.pid]; }).map(function (r) { return { pid: r.pid, act: r.act || "slalom", min: R.minutes[r.pid], pauses: 0, laps: 1, pilote: pil }; }) });
+    save(1); toast(savedMsg("Session du " + isoToFr(M.date) + " enregistrée (" + hm(R.eMin) + " de moteur)."));
+    return true;
   }
   function curList() { return sortie.active ? sortie.participants : startList; }
   function inList(pid) { return curList().some(function (p) { return p.pid === pid; }); }
@@ -469,16 +556,23 @@
     if (nTot <= 8) ui.over8Ack = false;
     if (nTot > 8) h += ui.over8Ack ? '<div class="small over8-mini">' + nTot + " personnes à bord : homologué pour 8, amendes à la charge du groupe.</div>"
       : '<div class="alert bad over8"><b>' + nTot + " personnes à bord : le bateau est homologué pour 8 personnes.</b>Toute amende sera à la charge du groupe.<div class=\"actions\"><button class=\"btn sm\" id=\"over8Ok\">Compris</button></div></div>";
+    // les trois groupes sur une même ligne, le « + » collé au nom ; la liste des personnes choisies vient en dessous, par famille
+    var FH = { YF: "<small>Famille</small>Yann", OF: "<small>Famille</small>Olivier", EXT: "Extérieur" };
+    h += '<div class="fam-heads">' + ["YF", "OF", "EXT"].map(function (c) {
+      var op = picker === c;
+      return '<div class="fh' + (op ? " open" : "") + '"><span class="fh-av">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + '</span><span class="fh-t">' + FH[c] + "</span>" +
+        '<button class="plus" data-pick="' + c + '" aria-expanded="' + op + '" aria-label="Ajouter : ' + CAT[c] + '">' + (op ? "−" : "+") + "</button></div>";
+    }).join("") + "</div>";
+    if (picker && CAT[picker]) {
+      var pc = picker, avail = PEOPLE.filter(function (q) { return q.c === pc && !inList(q.id); });
+      h += '<div class="picker"><div class="small muted">Ajouter : ' + CAT[pc] + "</div>" + (avail.length ? '<div class="chips">' + avail.map(function (q) { return '<button class="chip" data-addp="' + q.id + '">+ ' + esc(q.name) + "</button>"; }).join("") + "</div>" : '<div class="small muted">Tout le monde est déjà à bord.</div>') +
+        (pc === "EXT" ? '<div class="newp"><input id="np' + pc + '" placeholder="Nouvelle personne" aria-label="Nom de la nouvelle personne"><button class="btn sm" data-newp="' + pc + '">Ajouter</button></div>' : "") + "</div>"; // nouvelle personne : seulement pour les extérieurs
+    }
     ["YF", "OF", "EXT"].forEach(function (c) {
-      var rows = list.filter(function (p) { return person(p.pid).c === c; }), open = picker === c;
-      h += '<div class="group"><div class="group-head"><span class="gt">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + CAT[c] + "</span>" +
-        '<button class="plus" data-pick="' + c + '" aria-expanded="' + open + '" aria-label="Ajouter : ' + CAT[c] + '">' + (open ? "−" : "+") + "</button>" +
-        '<span class="g-tot">' + (rows.length ? rows.length + " personne" + (rows.length > 1 ? "s" : "") : "") + "</span></div>";
-      if (open) {
-        var avail = PEOPLE.filter(function (q) { return q.c === c && !inList(q.id); });
-        h += '<div class="picker">' + (avail.length ? '<div class="chips">' + avail.map(function (q) { return '<button class="chip" data-addp="' + q.id + '">+ ' + esc(q.name) + "</button>"; }).join("") + "</div>" : '<div class="small muted">Tout le monde est déjà à bord.</div>') +
-          (c === "EXT" ? '<div class="newp"><input id="np' + c + '" placeholder="Nouvelle personne" aria-label="Nom de la nouvelle personne"><button class="btn sm" data-newp="' + c + '">Ajouter</button></div>' : "") + "</div>"; // nouvelle personne : seulement pour les extérieurs
-      }
+      var rows = list.filter(function (p) { return person(p.pid).c === c; });
+      if (!rows.length) return;
+      h += '<div class="group"><div class="fam-sub"><span class="gt">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + CAT[c] + "</span>" +
+        '<span class="g-tot">' + rows.length + " personne" + (rows.length > 1 ? "s" : "") + "</span></div>";
       rows.forEach(function (p) {
         var pp = person(p.pid), hasTour = sortie.active && sortie.tours.some(function (t) { return t.pid === p.pid; });
         h += '<div class="prow"><div class="pname"><span class="pn">' + famDot(famOf(p)) + esc(pp.name) + "</span>" +
@@ -620,7 +714,7 @@
     return '<button class="qa ' + cls + '" ' + attr + '><span class="qa-ic" aria-hidden="true">' + icon + "</span>" + (extra || "") + '<span class="qa-t">' + title + "</span>" + (sub ? '<span class="qa-s">' + sub + "</span>" : "") + "</button>";
   }
   function quickHtml(now) {
-    var unread = unreadNotes(), h = '<div class="quick' + (RELIEF ? " relief" : "") + '">';
+    var unread = unreadNotes(), h = '<div class="quick' + (RELIEF ? " relief" : "") + '">' + demoTogHtml("on-quick"); // Live / Démo, au-dessus des boutons essence
     if (sortie.active) h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Session en cours</span><span class="qa-s">moteur ' + (sortie.engine === "on" ? "en route" : "arrêté") + ' · <b data-timer="engine">' + fmtClock(engineMs(now)) + "</b> · ouvrir</span></button>";
     else h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">GO pour session</span><span class="qa-s">chrono par skieur</span></button>';
     // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
@@ -641,7 +735,7 @@
       var L0 = sortie.jaugeDeb / 16 * cap, em = engineMs(Date.now()), used = em / 3600000 * SPEC.conso, L = Math.max(0, L0 - used);
       return { L: L, v: Math.max(0, Math.min(16, Math.round(L / cap * 16))), txt: "Départ " + fracLabel(sortie.jaugeDeb) + " − " + Math.round(em / 60000) + " min × " + int0.format(SPEC.conso) + " L/h" };
     }
-    return { L: lastLevel / 16 * cap, v: lastLevel, txt: lastLevelDate ? "Fin de session du " + lastLevelDate + (lastLevel >= 16 ? " · plein" : "") : "Aucune session enregistrée : réservoir supposé plein" };
+    return { L: lastLevel / 16 * cap, v: lastLevel, txt: /^hivernage/.test(lastLevelDate) ? "Hiverné réservoir vide" : lastLevelDate ? "Fin de session du " + lastLevelDate + (lastLevel >= 16 ? " · plein" : "") : "Aucune session enregistrée : réservoir supposé plein" };
   }
   function updateTheo() {
     var svg = screen.querySelector('svg[data-gauge="theo"]'); if (!svg) return;
@@ -653,13 +747,15 @@
   }
 
   /* ---------- Essence ---------- */
+  /* Stock de bidons : encart réduit, calé à droite ; à sa gauche, le bouton de correction (saisie erronée ou en double, vol, perte, autre usage) */
   function stockCardHtml() {
     var n = bidons.length;
-    return '<div class="card"><h3>Stock de bidons</h3>' + cansHtml() +
-      '<div class="stock-sum"><b>' + n + " bidon" + (n > 1 ? "s" : "") + "</b> en stock (sur 5)<span>≈ " + int0.format(stockL()) + " L estimés · " + eur.format(stockEur()) + "</span></div>" +
-      '<div class="legend"><span>' + famDot("YC") + "payé par la famille Yann</span><span>" + famDot("OC") + "payé par la famille Olivier</span></div>" +
-      (bidons.length && !view.essence ? '<button class="btn ghost sm" id="corrOpen">Corriger le stock (vol, perte, autre usage)</button>' : "") + "</div>";
+    return '<div class="stock-row">' + (!view.essence ? '<div class="stock-left"><button class="btn ghost corr-btn" id="corrOpen">Correction du stock<span>saisie erronée ou en double, vol, perte…</span></button>' +
+      '<div class="legend small"><span>' + famDot("YC") + "payé Yann</span><span>" + famDot("OC") + "payé Olivier</span></div></div>" : "") +
+      '<div class="card stock-c"><div class="fc-h">Stock de bidons</div>' + cansHtml(null, "mini") +
+      '<div class="fc-s"><b>' + n + " bidon" + (n > 1 ? "s" : "") + "</b> · ≈ " + int0.format(stockL()) + " L · " + eur.format(stockEur()) + "</div></div></div>";
   }
+  function isAchat(m) { return m.type === "achat" && !m.annule; } // un achat extourné (saisie erronée ou en double) ne compte plus
   function achatFormHtml() {
     var A = achatForm, perCan = A.L > 0 && A.b ? A.L / A.b : 0;
     return '<div class="card"><h3>1 - Renseigner les bidons achetés</h3>' +
@@ -674,7 +770,7 @@
   }
   function achatPLText() { var A = achatForm; if (!(A.L > 0)) return ""; return "Soit " + dec1.format(A.L / Math.max(1, A.b)) + " L par bidon" + (A.P > 0 ? " · " + dec2.format(A.P / A.L) + " € le litre" : "") + "."; }
   function renderEssence() {
-    var h = !view.essence ? '<div class="ess-acts"><button class="ess-btn ess-achat" data-ev="achat"><span class="qa-ic" aria-hidden="true">' + QI.achat + '</span><span>J’ai acheté</span></button><button class="ess-btn ess-mise" data-ev="mise"' + (bidons.length ? "" : " disabled") + '><span class="qa-ic" aria-hidden="true">' + QI.mise + '</span><span>J’ai versé des bidons</span></button></div>' : "";
+    var h = !view.essence ? demoTogHtml("on-ess") + '<div class="ess-acts"><button class="ess-btn ess-achat" data-ev="achat"><span class="qa-ic" aria-hidden="true">' + QI.achat + '</span><span>J’ai acheté</span></button><button class="ess-btn ess-mise" data-ev="mise"' + (bidons.length ? "" : " disabled") + '><span class="qa-ic" aria-hidden="true">' + QI.mise + '</span><span>J’ai versé des bidons</span></button></div>' : "";
     // le formulaire ouvert vient en premier, l'encart du stock en dessous
     if (view.essence === "corr") h += corrHtml();
     else if (view.essence === "achat" && achatForm.step === "check") h += achatCheckHtml();
@@ -690,12 +786,12 @@
     }
     h += stockCardHtml();
     dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
-    h += '<div class="card"><h3>De plein à plein</h3><div class="small">Dernier plein : <b>' + esc(lastPlein) + "</b></div></div>";
+    h += '<div class="card"><h3>De plein à plein</h3><div class="small">Dernier plein : <b>' + esc(lastPlein || "—") + "</b></div></div>";
     h += achatsTotHtml();
     h += '<div class="card">' + collHead("mvts", "Mouvements", moves.length + " mouvement" + (moves.length > 1 ? "s" : "") + (moves[0] ? " · dernier le " + esc(moves[0].d) : ""));
     if (ui.mvts) {
       h += '<div class="list small" style="margin-top:8px">';
-      moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
+      moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + (m.annule ? ' <b class="todo">extourné</b>' : "") + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
       h += "</div>" + (moves.length > 30 ? '<div class="small muted">Les 30 plus récents sont affichés.</div>' : "");
     }
     return h + "</div>";
@@ -703,13 +799,18 @@
   /* Total des achats d'essence (litres et montant) par famille, par année */
   var essYear = "";
   function achatsTotHtml() {
-    var ach = moves.filter(function (m) { return m.type === "achat" && (Number(m.litres) || Number(m.prix)); });
+    var ach = moves.filter(function (m) { return isAchat(m) && (Number(m.litres) || Number(m.prix)); });
     if (!ach.length) return "";
     var yrs = []; ach.forEach(function (m) { var y = yearOf(m); if (y && yrs.indexOf(y) < 0) yrs.push(y); }); yrs.sort(); yrs.push("Toutes");
     if (!essYear || yrs.indexOf(essYear) < 0) essYear = yrs.length > 1 ? yrs[yrs.length - 2] : "Toutes";
     var T = { YC: { l: 0, e: 0, n: 0 }, OC: { l: 0, e: 0, n: 0 } };
     ach.forEach(function (m) { if (essYear !== "Toutes" && yearOf(m) !== essYear) return; var t = T[m.f] || T.YC; t.l += Number(m.litres) || 0; t.e += Number(m.prix) || 0; t.n++; });
-    var row = function (f) { var t = T[f]; return "<tr><td>" + famDot(f) + FAM[f].n + '<span class="sub">' + t.n + " achat" + (t.n > 1 ? "s" : "") + (t.l ? " · " + dec2.format(t.e / t.l) + " €/L" : "") + "</span></td><td>" + int0.format(t.l) + " L</td><td>" + eur.format(t.e) + "</td></tr>"; };
+    // touchez une famille : la liste des achats qui composent son total
+    var row = function (f) {
+      var t = T[f], op = ui.achF === f, its = ach.filter(function (m) { return (m.f === "OC" ? "OC" : "YC") === f && (essYear === "Toutes" || yearOf(m) === essYear); });
+      return '<tr class="det-click' + (op ? " open" : "") + '" data-achf="' + f + '" aria-expanded="' + op + '"><td>' + TRI + famDot(f) + FAM[f].n + '<span class="sub">' + t.n + " achat" + (t.n > 1 ? "s" : "") + (t.l ? " · " + dec2.format(t.e / t.l) + " €/L" : "") + "</span></td><td>" + int0.format(t.l) + " L</td><td>" + eur.format(t.e) + "</td></tr>" +
+        (op ? '<tr class="det-row"><td colspan="3">' + (its.length ? its.map(function (m) { var l = Number(m.litres) || 0, p = Number(m.prix) || 0; return '<div class="det-it"><span>' + esc(m.d || isoToFr(m.date)) + '<span class="sub">' + (m.bidons ? m.bidons + " bidon" + (m.bidons > 1 ? "s" : "") + " · " : "") + int0.format(l) + " L" + (l ? " · " + dec2.format(p / l) + " €/L" : "") + (m.verse ? " · versé tout de suite" : "") + '</span></span><b>' + eur.format(p) + "</b></div>"; }).join("") : '<div class="small muted">Aucun achat.</div>') + "</td></tr>" : "");
+    };
     return '<div class="card"><h3>Total des achats</h3><div class="chips small-chips">' + yrs.map(function (y) { return '<button class="chip" data-essyear="' + y + '" aria-pressed="' + (y === essYear) + '">' + y + "</button>"; }).join("") + "</div>" +
       '<table class="rtable" style="margin-top:8px"><thead><tr><th>Famille</th><th>Volume</th><th>Montant</th></tr></thead><tbody>' + row("YC") + row("OC") +
       '<tr class="tot"><td>Total</td><td>' + int0.format(T.YC.l + T.OC.l) + " L</td><td>" + eur.format(T.YC.e + T.OC.e) + "</td></tr></tbody></table></div>";
@@ -740,7 +841,7 @@
     return h + "</div>";
   }
   /* Correction du stock : vol, perte ou autre usage de bidons. */
-  var corrForm = { sel: {}, who: "yann", motif: "vol", usage: "Voiture", aff: "5050" };
+  var corrForm = { sel: {}, who: "yann", motif: "erreur", usage: "Voiture", aff: "5050", ach: "" };
   function corrSel() { return Object.keys(corrForm.sel).filter(function (k) { return corrForm.sel[k]; }).map(Number).filter(function (i) { return i < bidons.length; }); }
   function corrEffects(sel) {
     var C = corrForm, byP = { YC: 0, OC: 0 }, lit = 0, lines = [], dt = [], lab = C.motif === "autre" ? C.usage.toLowerCase() : C.motif;
@@ -753,12 +854,35 @@
     });
     return { lit: lit, byP: byP, lines: lines, dettes: dt };
   }
+  /* Extourne d'un achat saisi par erreur ou en double : bidons encore en stock retirés, écriture inverse, dépense négative. */
+  function extCans(m) {
+    if (!m || m.verse) return [];
+    var per = (Number(m.litres) || 0) / Math.max(1, Number(m.bidons) || 1);
+    return bidons.map(function (b, i) { return { i: i, b: b, s: (b.d === m.d ? 2 : 0) + (Math.abs(b.litres - per) < 0.05 ? 1 : 0) }; })
+      .filter(function (x) { return x.b.f === m.f; }).sort(function (a, b) { return b.s - a.s; }).slice(0, Number(m.bidons) || 0).map(function (x) { return x.i; });
+  }
+  function achLabel(m) { return (m.d || isoToFr(m.date)) + " · " + (m.bidons || "?") + " bidon(s) · " + int0.format(Number(m.litres) || 0) + " L · " + eur.format(Number(m.prix) || 0) + " · " + FAM[m.f === "OC" ? "OC" : "YC"].s; }
+  function extHtml() {
+    var C = corrForm, list = moves.filter(isAchat).slice(0, 10), h = '<div class="field"><span class="flabel">Achat à extourner (touchez-le)</span>';
+    if (!list.length) return h + '<div class="small muted">Aucun achat enregistré.</div></div>';
+    h += '<div class="ach-pick">' + list.map(function (m) { return '<button class="chip" data-cach="' + esc(m.id) + '" aria-pressed="' + (C.ach === m.id) + '">' + esc(achLabel(m)) + (m.verse ? " · versé" : " · en stock") + "</button>"; }).join("") + "</div></div>";
+    var m = moves.filter(function (x) { return x.id === C.ach && isAchat(x); })[0];
+    if (!m) return h + '<div class="small muted">Choisissez l’achat saisi par erreur ou en double.</div>';
+    var idx = extCans(m), B = Number(m.bidons) || 0;
+    h += '<div class="alert ok">L’achat du ' + esc(m.d || isoToFr(m.date)) + " est extourné : une écriture inverse est passée dans les mouvements et une dépense de " + eur.format(-(Number(m.prix) || 0)) + " est créée pour la " + FAM[m.f === "OC" ? "OC" : "YC"].l + ". " +
+      (m.verse ? "Cet achat avait été versé tout de suite : ce versement ne compte plus dans la balance essence." : idx.length + " bidon(s) retiré(s) du stock." + (idx.length < B ? " " + (B - idx.length) + " bidon(s) de cet achat ne sont plus en stock (déjà versés) : leur versement reste compté." : "")) + "</div>";
+    if (idx.length) h += cansHtml(idx.map(function (i) { return bidons[i]; }), "mini");
+    return h;
+  }
   function corrHtml() {
-    var C = corrForm, sel = corrSel(), h = '<div class="card"><h3>Corriger le stock</h3><div class="field"><span class="flabel">Bidons concernés (touchez-les)</span><div class="cans">';
+    var C = corrForm;
+    if (C.motif === "erreur") return '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", [["erreur", "Saisie erronée ou en double"], ["vol", "Vol"], ["perte", "Perte"], ["autre", "Autre usage"]], C.motif) + "</div>" + extHtml() +
+      '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="extSave"' + (C.ach ? "" : " disabled") + ">Extourner l’achat</button></div></div>";
+    var sel = corrSel(), h = '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", [["erreur", "Saisie erronée ou en double"], ["vol", "Vol"], ["perte", "Perte"], ["autre", "Autre usage"]], C.motif) + "</div>" +
+      '<div class="field"><span class="flabel">Bidons concernés (touchez-les)</span><div class="cans">';
     for (var i = 0; i < bidons.length; i++) h += '<button class="can-pick" data-cpick="' + i + '" aria-pressed="' + !!C.sel[i] + '" aria-label="Bidon ' + (i + 1) + '">' + canSvg(bidons[i], i) + "</button>";
     h += "</div></div>" +
-      '<div class="field"><label for="cWho">Correction faite par</label><select id="cWho">' + PEOPLE.filter(function (p) { return p.c !== "EXT"; }).map(function (p) { return '<option value="' + p.id + '"' + (p.id === C.who ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div>" +
-      '<div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", [["vol", "Vol"], ["perte", "Perte"], ["autre", "Autre usage"]], C.motif) + "</div>";
+      '<div class="field"><label for="cWho">Correction faite par</label><select id="cWho">' + PEOPLE.filter(function (p) { return p.c !== "EXT"; }).map(function (p) { return '<option value="' + p.id + '"' + (p.id === C.who ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div>";
     if (C.motif === "autre") h += '<div class="field"><span class="flabel">Usage</span><div class="chips">' + ["Voiture", "Moto", "Dépannage", "Autre"].map(function (u) { return '<button class="chip" data-cusage="' + u + '" aria-pressed="' + (u === C.usage) + '">' + u + "</button>"; }).join("") + "</div></div>";
     h += '<div class="field"><span class="flabel">' + (C.motif === "autre" ? "Utilisé par" : "Perte à la charge de") + "</span>" + segHtml("fam", "data-caff", [["YC", "Yann"], ["OC", "Olivier"], ["5050", "Commun"]], C.aff) + "</div>";
     if (!sel.length) h += '<div class="small muted">Touchez les bidons à retirer du stock.</div>';
@@ -831,9 +955,9 @@
   var BAL_DEBUT = "2027-01-01", balForm = null;
   function sesKey(s) { return dkey(s) + "T" + (s.heureFin || "12:00") + ":00"; }
   function pourKey(m) { return m.at || ((m.date || frToIso(m.d)) + "T12:00:00"); }
-  function poursList() { return moves.filter(function (m) { return (m.type === "verse" || (m.type === "achat" && m.verse)) && m.paye; }).map(function (m) { return { m: m, k: pourKey(m) }; }).sort(function (a, b) { return a.k < b.k ? -1 : 1; }); }
+  function poursList() { return moves.filter(function (m) { return (m.type === "verse" || (isAchat(m) && m.verse)) && m.paye; }).map(function (m) { return { m: m, k: pourKey(m) }; }).sort(function (a, b) { return a.k < b.k ? -1 : 1; }); }
   function famSplit(s) { var y = Number(s.famMin && s.famMin.YC) || 0, o = Number(s.famMin && s.famMin.OC) || 0; if (y + o <= 0) { var e = Number(s.engineMin) || 0; return { YC: e / 2, OC: e / 2 }; } return { YC: y, OC: o }; }
-  function lastPrixL() { var a = moves.filter(function (m) { return m.type === "achat" && Number(m.litres) > 0 && Number(m.prix) > 0; })[0]; return a ? Number(a.prix) / Number(a.litres) : 1.8; }
+  function lastPrixL() { var a = moves.filter(function (m) { return isAchat(m) && Number(m.litres) > 0 && Number(m.prix) > 0; })[0]; return a ? Number(a.prix) / Number(a.litres) : 1.8; }
   function keyFr(k) { return k ? isoToFr(k.slice(0, 10)) : ""; }
   function computeBalEss() {
     var R = { segs: [], due: { YC: 0, OC: 0 }, paid: { YC: 0, OC: 0 }, init: null, start: "", end: "" };
@@ -1060,6 +1184,7 @@
     }).catch(function (e) { toast("Rien n’a été effacé : la copie sur le serveur a échoué (" + e.message + ")."); });
   }
   function importHistorique(json) {
+    if (DEMO) throw new Error("Import impossible en mode démo : repassez en live.");
     if (json && json.format === "carnet-noskids-sauvegarde") {
       var nb = 0;
       COLS.forEach(function (c) { (json[c] || []).forEach(function (r) { if (!r || !r.id) return; var copy = JSON.parse(JSON.stringify(r)); delete copy.updatedAt; delete copy.serverAt; upsertLocal(c, copy); nb++; }); });
@@ -1115,7 +1240,7 @@
     return Object.keys(s).sort();
   }
   function refPrixL() {
-    var l = 0, e = 0; moves.forEach(function (m) { if (m.type === "achat" && Number(m.litres) > 0 && Number(m.prix) > 0) { l += Number(m.litres); e += Number(m.prix); } });
+    var l = 0, e = 0; moves.forEach(function (m) { if (isAchat(m) && Number(m.litres) > 0 && Number(m.prix) > 0) { l += Number(m.litres); e += Number(m.prix); } });
     return l > 0 ? e / l : 1.85;
   }
   function bilanData(bk, year) {
@@ -1134,7 +1259,7 @@
       else if (d.cat === "Recette invités") { D.recettes += m; D.it.recettes.push(d); }
       else { D.autres += m; D.it.autres.push(d); }
     });
-    moves.forEach(function (mv) { if (mv.type === "achat" && ys.indexOf(yearOf(mv)) >= 0) D.litres += Number(mv.litres) || 0; });
+    moves.forEach(function (mv) { if (isAchat(mv) && ys.indexOf(yearOf(mv)) >= 0) D.litres += Number(mv.litres) || 0; });
     if (bk === "new" && D.essence <= 0 && D.min > 0) { D.estime = true; D.litres = D.min / 60 * SPEC.conso; D.essence = D.litres * refPrixL(); }
     if (bk === "old") {
       D.achat = achatTot; D.vente = Number(SPEC.venteAncien) || 0;
@@ -1834,16 +1959,35 @@
     document.getElementById("appHead").className = "app-head h-" + (key === "activite" ? "bilan" : key === "balance" ? "depenses" : key);
     document.getElementById("hVis").innerHTML = H.v || "";
     document.getElementById("hTitle").textContent = H.t;
-    document.getElementById("hThumb").innerHTML = H.th || "";
+    // Session sans chrono en cours : bouton « Saisie manuelle » en haut à droite, à la place de la vignette
+    document.getElementById("hThumb").innerHTML = key === "sortie" && !sortie.active ? '<button class="hd-btn" id="manOpen" aria-pressed="' + !!view.manuel + '">Saisie manuelle</button>' : (H.th || "");
+    var db = document.getElementById("demoBar"); if (db) db.hidden = !DEMO;
+    document.body.classList.toggle("demo", DEMO);
   }
   function achatPreview() { var el = document.getElementById("aPL"); if (el) el.textContent = achatPLText(); }
   function goTab(t) { tab = t; screen.scrollTop = 0; render(); }
   var toastTimer;
   function toast(msg) { var t = document.getElementById("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove("show"); }, 2800); }
 
+  document.getElementById("appHead").addEventListener("click", function (e) {
+    var b = e.target.closest("#manOpen"); if (!b) return;
+    view.manuel = !view.manuel; if (view.manuel && !manForm) manForm = manNew(); screen.scrollTop = 0; render();
+  });
+  /* Mode démonstration : rien n'est enregistré ni envoyé ; en revenant en live, l'app recharge les vraies données. */
+  var DEMO = false;
+  function setDemo(on) {
+    if (on === DEMO) return;
+    if (on) { DEMO = true; toast("Mode démo : les saisies ne sont pas comptabilisées."); return render(); }
+    toast("Retour en live : les saisies de démo sont effacées.");
+    setTimeout(function () { location.reload(); }, 600); // DEMO reste vrai jusqu'au rechargement : rien de la démo n'est écrit
+  }
+  function demoTogHtml(cls) { return '<div class="demo-tog ' + (cls || "") + '" role="group" aria-label="Mode de saisie"><button data-demo="0" aria-pressed="' + !DEMO + '">Live</button><button data-demo="1" aria-pressed="' + DEMO + '">Démo</button></div>'; }
+  document.getElementById("demoBar").addEventListener("click", function (e) { if (e.target.closest("button")) setDemo(false); });
   document.querySelector(".tabs").addEventListener("click", function (e) { var b = e.target.closest("button[data-tab]"); if (b) goTab(b.dataset.tab); });
 
   screen.addEventListener("click", function (e) {
+    var tra = e.target.closest("tr[data-achf]");
+    if (tra) { ui.achF = ui.achF === tra.dataset.achf ? "" : tra.dataset.achf; return render(); } // total des achats : détail par famille
     var trd = e.target.closest("tr[data-detk]");
     if (trd) { ui.detK = ui.detK === trd.dataset.detk ? "" : trd.dataset.detk; return render(); } // détail du coût : ouvrir / fermer un poste
     var tr = e.target.closest("tr[data-ses]");
@@ -1851,6 +1995,7 @@
     var b = e.target.closest("button"); if (!b || b.disabled || b.matches(":disabled")) return;
     var ds = b.dataset, k, t;
     if (ds.go) return goTab(ds.go);
+    if (ds.demo) return setDemo(ds.demo === "1");
     if (ds.essyear) { essYear = ds.essyear; return render(); }
     if (ds.qa) { // boutons d'accès direct de l'accueil
       if (ds.qa === "achat") { view.essence = "achat"; return goTab("essence"); }
@@ -1887,6 +2032,19 @@
       if (k.indexOf("fact") === 0 && k.length > 4) { who = k.slice(4).toLowerCase(); for (j = 0; j < lst.length; j++) if (lst[j].pid === who) lst[j].fact = !lst[j].fact; save(1); return render(); }
     }
     if (ds.newtour) { var nt = newTour(null, ds.newtour); if (ds.newtour !== "balade" && ds.newtour !== "meca") { nt.pid = ds.newtour; nt.act = "slalom"; } sortie.tours.push(nt); save(1); return render(); }
+    // saisie manuelle des sessions
+    if (b.id === "manClose") { view.manuel = false; manForm = null; screen.scrollTop = 0; return render(); }
+    if (ds.mpick) { manRead(); manForm.pick = manForm.pick === ds.mpick ? null : ds.mpick; return render(); }
+    if (ds.maddp) { manRead(); var mp = person(ds.maddp); manForm.list.push({ pid: mp.id, role: "ski", act: "slalom", min: "", host: (manForm.pilote && person(manForm.pilote) && CATF[person(manForm.pilote).c]) || "YC" }); return render(); }
+    if (b.id === "mNewp") {
+      manRead(); var mi = document.getElementById("mNp"), mn = mi.value.trim(); if (!mn) { mi.focus(); return toast("Tapez le nom de la personne."); }
+      var mnp = { id: "p" + (nextId++), name: mn, c: "EXT" }; PEOPLE.push(mnp); manForm.list.push({ pid: mnp.id, role: "ski", act: "slalom", min: "", host: "YC" }); manForm.pick = null; return render();
+    }
+    if (ds.mrm) { manRead(); manForm.list = manForm.list.filter(function (r) { return r.pid !== ds.mrm; }); if (manForm.pilote === ds.mrm) manForm.pilote = ""; return render(); }
+    if (ds.mrole) { manRead(); manRow(ds.mrole).role = ds.v; return render(); }
+    if (ds.mhost) { manRead(); manRow(ds.mhost).host = ds.v; return render(); }
+    if (b.id === "manSave") { if (manSave()) { view.manuel = false; manForm = null; screen.scrollTop = 0; render(); } return; }
+    if (b.id === "manSaveNext") { if (manSave()) { manForm = manNew(manForm); screen.scrollTop = 0; render(); } return; }
     if (b.id === "goStart") {
       if (!startList.length) return toast("Ajoutez au moins une personne à bord avec les boutons +.");
       var now = Date.now();
@@ -1894,7 +2052,9 @@
         pilote: inListStart(startPilote) ? startPilote : startList[0].pid, engine: "on", engAcc: 0, engSince: now, startedAt: now, participants: startList, tours: [] };
       sortie.pleinF = famOf(participant(sortie.pilote)) || "YC";
       sortie.checks = startChecks; startChecks = {};
-      startList = []; picker = null; save(1); return render();
+      startList = []; picker = null; save(1); render();
+      screen.scrollTop = 0; window.scrollTo(0, 0); // session lancée : retour en haut, sur le chrono
+      return;
     }
     if (b.id === "goClose") { // en terminant : l'appareil photo s'ouvre tout de suite pour photographier le compteur
       sortie.closing = true; sortie.compteurFin = null; view.cancelAsk = false; render();
@@ -1924,7 +2084,7 @@
         toast("Note enregistrée et partagée avec la famille."); render();
       };
       var vf = noteForm.video;
-      if (!vf) return nfin();
+      if (!vf || DEMO) return nfin(); // en démo, la vidéo n'est pas envoyée
       if (!(CONF.url && CONF.code && navigator.onLine)) return toast("Pas de connexion : la vidéo ne peut pas partir. Retirez-la ou réessayez avec du réseau.");
       if (vf.size > 15 * 1048576) return toast("Vidéo trop lourde (15 Mo au plus) : filmez 20 à 30 secondes.");
       noteForm.busy = true; render(); toast("Envoi de la vidéo…");
@@ -2011,7 +2171,17 @@
     if (b.id === "achBack") { achatForm.step = null; return render(); }
     if (ds.tf) { achatForm.tf = ds.tf; return render(); }
     if (ds.tnstep) { achatForm.tn = Math.max(Math.max(achatNeed(), 1), Math.min(bidons.length, achatForm.tn + Number(ds.tnstep))); return render(); }
-    if (b.id === "corrOpen") { view.essence = "corr"; corrForm.sel = {}; return render(); }
+    if (b.id === "corrOpen") { view.essence = "corr"; corrForm.sel = {}; corrForm.ach = ""; corrForm.motif = "erreur"; return render(); }
+    if (ds.cach) { corrForm.ach = corrForm.ach === ds.cach ? "" : ds.cach; return render(); }
+    if (b.id === "extSave") {
+      var em = moves.filter(function (x) { return x.id === corrForm.ach && isAchat(x); })[0]; if (!em) return toast("Choisissez l’achat à extourner.");
+      var eidx = extCans(em), ef = em.f === "OC" ? "OC" : "YC", eP = Number(em.prix) || 0, eL = Number(em.litres) || 0, eB = Number(em.bidons) || 0;
+      bidons = bidons.filter(function (x, i) { return eidx.indexOf(i) < 0; });
+      em.annule = todayFr(); // l'achat d'origine reste visible, marqué extourné, et ne compte plus
+      moves.unshift({ type: "extourne", ref: em.id, at: stamp(), date: todayIso(), d: todayFr(), t: "Extourne d’un achat (saisie erronée ou en double)", v: "− " + eB + " bidon(s) · − " + int0.format(eL) + " L · − " + eur.format(eP), who: FAM[ef].n + " · achat du " + (em.d || isoToFr(em.date)) });
+      depenses.unshift({ d: todayFr(), lib: "Extourne essence " + int0.format(eL) + " L (achat du " + (em.d || isoToFr(em.date)) + ", saisie erronée ou en double)", cat: "Essence", m: -eP, payeur: ef, regle: "payeur", isNew: true });
+      view.essence = null; corrForm.ach = ""; save(2); toast(savedMsg("Achat extourné : dépense inverse créée" + (eidx.length ? ", " + eidx.length + " bidon(s) retiré(s) du stock." : "."))); return render();
+    }
     if (ds.cpick) { corrForm.sel[ds.cpick] = !corrForm.sel[ds.cpick]; return render(); }
     if (ds.cmotif) { corrForm.motif = ds.cmotif; return render(); }
     if (ds.cusage) { corrForm.usage = ds.cusage; return render(); }
@@ -2078,6 +2248,7 @@
     if (el.dataset.f && el.tagName === "INPUT") { findTour(Number(el.dataset.id))[el.dataset.f] = el.value.replace(/\D/g, ""); return; }
     if (el.dataset.spec) { var key = el.dataset.spec; SPEC[key] = el.classList.contains("txt") ? el.value : parseNum(el.value); return; }
     if (el.id === "cDeb") { sortie.compteurDeb = parseNum(el.value); sortie.debEdited = true; var wd = document.getElementById("cDebWarn"); if (wd) wd.innerHTML = startWarnHtml(parseNum(el.value)); return; }
+    if (el.closest && el.closest(".man-form") && el.tagName === "INPUT") { manRead(); var ms = document.getElementById("mSum"); if (ms) ms.innerHTML = manSumHtml(); return; }
     if (el.id === "cFin") { sortie.compteurFin = parseNum(el.value); document.getElementById("recapCard").innerHTML = recapHtml(Date.now()); }
     if (el.id === "dM" || el.id === "dPct") depPreview();
     if (el.id === "aL" || el.id === "aP") { achatForm[el.id === "aL" ? "L" : "P"] = parseNum(el.value); achatPreview(); }
@@ -2198,6 +2369,7 @@
     var saved = LS.get("enCours", null);
     if (saved && saved.active) { sortie = saved; (sortie.tours || []).forEach(function (t) { if (t.id >= nextId) nextId = t.id + 1; }); }
     else sortie.compteurDeb = lastCompteur();
+    startJauge = lastLevel; // la jauge de départ part du niveau estimé (réservoir vide après l'hivernage)
   })();
   if (CONF.moi) { startPilote = CONF.moi; corrForm.who = CONF.moi; }
   window.addEventListener("online", function () { updateNet(); Sync.run(); });
