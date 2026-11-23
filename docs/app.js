@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.8.5", SCHEMA = 1;
+  var APP_VERSION = "1.8.6", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -414,7 +414,9 @@
     h += '<div class="card engine"><div class="row"><div><div class="label">Temps moteur · départ ' + dec1.format(sortie.compteurDeb) + " h · jauge " + fracLabel(sortie.jaugeDeb) + "</div>" +
       '<div class="clock" data-timer="engine">' + fmtClock(engineMs(now)) + '</div></div><span class="pill ' + (on ? "on" : "off") + '">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
       '<button class="btn big ' + (on ? "stop" : "run") + '" id="engBtn">' + (on ? "Arrêt moteur" : "Démarrer le moteur") + "</button>" +
-      '<div class="two"><div class="field"><label for="pilDef">Pilote</label><select id="pilDef">' + piloteOpts(sortie.pilote) + '</select></div><div class="small muted" style="align-self:end">Tours : <span class="num" data-timer="total">' + fmtClock(totalMs(now)) + "</span><br>" + sortie.participants.length + " à bord</div></div></div>";
+      '<div class="two"><div class="field"><label for="pilDef">Pilote</label><select id="pilDef">' + piloteOpts(sortie.pilote) + '</select></div><div class="small muted" style="align-self:end">Tours : <span class="num" data-timer="total">' + fmtClock(totalMs(now)) + "</span><br>" + sortie.participants.length + " à bord</div></div>" +
+      '<div class="toggle"><span>Rotation automatique<span class="small muted" style="display:block">téléphone en paysage : grand affichage de la session</span></span><button id="rotTog" aria-pressed="' + rotOn() + '" aria-label="Rotation automatique pendant la session"></button></div>' +
+      '<button class="btn ghost sm" id="bigOpenBtn">Grand affichage</button></div>';
     if (sortie.closing) return h + renderClosing(now);
     sortie.tours.forEach(function (t) {
       var st = t.state, pill = { wait: "en attente", run: "en cours", pause: "en pause", done: "terminé" }[st], p = t.pid ? participant(t.pid) : null, blocked = r && r !== t;
@@ -1429,6 +1431,45 @@
 
   /* ---------- Rendu ---------- */
   var screen = document.getElementById("screen");
+  /* ---------- Session : rotation automatique et grand affichage ----------
+     En dehors d'une session, l'app reste en portrait (verrouillage quand le téléphone le permet, sinon message « tournez le téléphone »).
+     Pendant une session, si l'option est activée, le téléphone tourné en paysage affiche une fenêtre en surface :
+     skieur en cours, chrono du tour, temps moteur, pilote et heure ; l'app reste derrière, voilée. */
+  function rotOn() { return LS.get("rotation", false) === true; }
+  var bigOpen = false, bigKey = "";
+  var landMq = window.matchMedia ? matchMedia("(orientation: landscape) and (max-height: 600px)") : null;
+  function isLandscape() { return !!(landMq && landMq.matches); }
+  function applyOrientation() {
+    var o = screen.orientation;
+    if (!o || !o.lock) return;
+    try { if (sortie.active && rotOn()) { if (o.unlock) o.unlock(); } else o.lock("portrait").catch(function () { /* non pris en charge (iPhone, navigateur) */ }); } catch (e) { /* ignoré */ }
+  }
+  function bigLayer(id) { var el = document.getElementById(id); if (!el) { el = document.createElement("div"); el.id = id; el.hidden = true; document.body.appendChild(el); } return el; }
+  function updateBig() {
+    var big = bigLayer("bigView"), msg = bigLayer("rotMsg"), land = isLandscape();
+    var show = sortie.active && ((land && rotOn()) || bigOpen);
+    msg.hidden = !(land && !show);
+    if (!msg.hidden && !msg.innerHTML) msg.innerHTML = '<div class="rot-in"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg><b>Tournez le téléphone en portrait</b><span>La rotation n’est possible que pendant une session, si l’option est activée.</span></div>';
+    document.body.classList.toggle("big-on", show);
+    big.hidden = !show;
+    if (!show) { bigKey = ""; return; }
+    var now = new Date(), r = running(), pil = person((r && r.pilote) || sortie.pilote), on = sortie.engine === "on";
+    var key = (r ? r.id + r.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land;
+    if (key !== bigKey) {
+      bigKey = key;
+      big.innerHTML = '<div class="big-card">' +
+        '<div class="big-top"><span class="big-who">' + (r ? esc(tourName(r)) : "Aucun skieur en cours") + "</span>" + (r ? '<span class="big-act">' + esc(ACTS[r.act] || "") + "</span>" : "") + "</div>" +
+        '<div class="big-tour"' + (r ? ' data-timer="t' + r.id + '"' : "") + ">" + (r ? fmtClock(tourMs(r, Date.now())) : "—") + "</div>" +
+        '<div class="big-grid">' +
+        '<div><span class="label">Temps moteur</span><b data-timer="engine">' + fmtClock(engineMs(Date.now())) + '</b><span class="big-s">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
+        '<div><span class="label">Pilote</span><b>' + esc(pil ? pil.name : "—") + "</b></div>" +
+        '<div><span class="label">Heure</span><b id="bigClock">' + now.toTimeString().slice(0, 5) + "</b></div></div>" +
+        (land ? "" : '<button class="btn ghost sm big-close" id="bigClose">Fermer le grand affichage</button>') + "</div>";
+    }
+    var ck = document.getElementById("bigClock"); if (ck) ck.textContent = now.toTimeString().slice(0, 5);
+  }
+  if (landMq) { var onLand = function () { updateBig(); }; if (landMq.addEventListener) landMq.addEventListener("change", onLand); else if (landMq.addListener) landMq.addListener(onLand); }
+  document.addEventListener("click", function (e) { var b = e.target.closest && e.target.closest("#bigClose"); if (b) { bigOpen = false; updateBig(); } });
   function render() {
     computeYears();
     var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau };
@@ -1440,6 +1481,7 @@
     if (tab === "essence" && view.essence === "achat") achatPreview();
     renderHead();
     navSync();
+    applyOrientation(); updateBig();
   }
   /* ---------- Retour arrière : chaque écran est noté dans l'historique du navigateur ----------
      Le geste « retour » du téléphone (Android) ou le bouton Précédent ramène à l'écran d'avant au lieu de quitter l'app. */
@@ -1815,6 +1857,8 @@
       }
     }
     if (b.id === "engBtn") return engineToggle();
+    if (b.id === "rotTog") { LS.set("rotation", !rotOn()); toast(rotOn() ? "Rotation activée : tournez le téléphone pour le grand affichage." : "Rotation désactivée : l’app reste en portrait."); return render(); }
+    if (b.id === "bigOpenBtn") { bigOpen = true; return updateBig(); }
     if (ds.act) return act(Number(ds.id), ds.act);
     if (ds.det) { t = findTour(Number(ds.det)); t.open = !t.open; return render(); }
     if (ds.edit) { t = findTour(Number(ds.edit)); t.edit = !t.edit; return render(); }
@@ -2182,9 +2226,12 @@
       else if (k === "total") el.textContent = fmtClock(totalMs(now));
       else { var t = findTour(Number(k.slice(1))); if (t) el.textContent = fmtClock(tourMs(t, now)); }
     });
-    updateTheo();
+    updateTheo(); updateBig();
   }, 500);
 
+  /* Pas de zoom dans l'app (pincement ou double appui) : la page garde sa taille, comme une application */
+  document.addEventListener("gesturestart", function (e) { e.preventDefault(); });
+  document.addEventListener("dblclick", function (e) { e.preventDefault(); }, { passive: false });
   updateNet();
   render();
   Sync.run();

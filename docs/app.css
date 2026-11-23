@@ -747,3 +747,27 @@ tr.det-row td { padding: 4px 6px 10px 26px; background: var(--surface-2); }
 .qa-dep, .qa-bal { background: #ece6ff; border-color: #b9aaf0; }
 .relief .qa-dep, .relief .qa-bal { background: linear-gradient(180deg, #f5f1ff, #ddd3fb); border-color: #a493e6; --edge: #8571d6; }
 .qa-bal .qa-s { color: #4b4378; } /* sous-titre lisible sur le violet (mode jour) */
+
+/* Pas de zoom : double appui désactivé (le pincement est bloqué par la balise viewport et en JavaScript) */
+html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+/* Grand affichage de la session (téléphone en paysage, ou bouton « Grand affichage ») : l'app reste derrière, voilée */
+#bigView, #rotMsg { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); background: rgba(6, 18, 24, .72); -webkit-backdrop-filter: blur(6px) saturate(.6); backdrop-filter: blur(6px) saturate(.6); }
+#bigView[hidden], #rotMsg[hidden] { display: none; }
+.big-card { width: min(100%, 720px); display: grid; gap: 10px; padding: 16px 20px; border-radius: 22px; background: #0f2a36; color: #fff; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, .8); border: 1px solid rgba(255, 255, 255, .12); }
+.big-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.big-who { font: 700 clamp(26px, 7vw, 44px)/1.05 var(--f-display); letter-spacing: .02em; }
+.big-act { font-size: 15px; color: #9fe7f0; }
+.big-tour { font: 700 clamp(64px, 20vw, 132px)/1 var(--f-mono); text-align: center; color: #ffd84d; letter-spacing: -.02em; }
+.big-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.big-grid > div { display: grid; gap: 2px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, .07); }
+.big-grid .label { color: #9fb6c2; }
+.big-grid b { font: 700 clamp(20px, 5vw, 30px)/1.1 var(--f-display); }
+.big-s { font-size: 12px; color: #9fb6c2; }
+.big-close { justify-self: center; background: rgba(255, 255, 255, .1); color: #fff; border-color: rgba(255, 255, 255, .25); }
+@media (orientation: landscape) and (max-height: 600px) { .big-card { padding: 10px 18px; gap: 6px; } .big-tour { font-size: min(34vh, 140px); } }
+body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscale(.4); opacity: .55; }
+.rot-in { display: grid; justify-items: center; gap: 8px; text-align: center; color: #fff; max-width: 420px; }
+.rot-in svg { width: 48px; height: 48px; fill: none; stroke: #ffd84d; stroke-width: 1.8; transform: rotate(-90deg); }
+.rot-in b { font: 700 22px var(--f-display); }
+.rot-in span { font-size: 14px; color: #c9d8df; }

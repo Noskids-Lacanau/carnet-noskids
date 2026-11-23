@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.8.6 — 2026-11-23
+
+- Session : option « Rotation automatique » ; en paysage, grand affichage (skieur, chrono du tour, temps moteur, pilote, heure), aussi ouvrable en portrait
+- Hors session : l'app reste en portrait
+- Zoom désactivé dans l'app
+
 ## 1.8.5 — 2026-11-23
 
 - Accueil : couleurs par nature (essence en orange, finances en violet léger, journal en post-it jaune), lisibles en mode jour et nuit
