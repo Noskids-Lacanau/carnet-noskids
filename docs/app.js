@@ -112,10 +112,10 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.3", SCHEMA = 1;
+  var APP_VERSION = "1.9.4", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
-  var gap = { open: false, rat: "YC", key: "" };
+  var gap = { open: false, rat: "auto", key: "" };
   var sessionsArr = [], bidons = [], dettes = [], moves = [], depenses = [];
   var notes = []; // journal : rangé dans la table « etat » (kind = "note"), sans changement côté serveur
   var lastPlein = "", lastLevel = 16, lastLevelDate = "";
@@ -213,6 +213,8 @@
     // hivernage 2026 : le bateau a été hiverné réservoir vide (jauge en bas) ; appliqué une seule fois, puis partagé
     snapshotAll();
     // seulement pendant l'hiver et s'il n'y a eu aucune session depuis : un téléphone rouvert en saison n'écrase pas le vrai niveau
+    var rz = moves.filter(function (m) { return m.type === "reset" && m.at; }).map(function (m) { return m.at; }).sort().pop();
+    if (rz && !sessionsArr.some(function (s) { return sesKey(s) > rz; }) && !moves.some(function (m) { return (m.type === "verse" || (m.type === "achat" && m.verse && !m.annule)) && !m.annule && (m.at || "") > rz; })) { lastLevel = 0; lastLevelDate = "remise à zéro du " + isoToFr(rz.slice(0, 10)); }
     if (et && !et.deleted && !ETAT.hiver2026 && todayIso() < "2027-03-01" && !sessionsArr.some(function (s) { return dkey(s) >= "2026-11-24"; })) { lastLevel = 0; lastLevelDate = "hivernage 2026"; ETAT.hiver2026 = true; } // après la photo : la modification part à la base partagée
   }
   function mergeRemote(list) {
@@ -420,11 +422,46 @@
   }
   function summary(t) {
     var s = ACTS[t.act];
-    if (t.act === "slalom") { if (t.speed) s += " · " + t.speed + " km/h"; if (t.passes) s += " · " + t.passes + " passage" + (t.passes > 1 ? "s" : ""); }
+    if (t.act === "slalom") { if (t.speed) s += " · " + t.speed + " km/h"; if (t.passes) s += " · " + t.passes + " passage" + (t.passes > 1 ? "s" : ""); if (t.res && (t.res.c || t.res.note)) s += " · " + resSummary(t.res); }
     if ((t.act === "wake" || t.act === "ski") && t.speed) s += " · " + t.speed + " km/h";
     return s;
   }
-  function needsDetails(t) { return (t.act === "slalom" && (!t.speed || !t.passes)) || ((t.act === "wake" || t.act === "ski") && !t.speed); }
+  /* ---------- Résultats de slalom (v1.9.4) ----------
+     Par tour de skieur : meilleure vitesse, corde, bouées (au demi) et note de 1 à 4 étoiles (tour.res).
+     Par session : état du plan d'eau (session.eau). Saisie pendant le tour, à la fin du skieur (écran horizontal),
+     à la clôture, ou plus tard dans le détail de la session. Clé de saisie : « t:<id du tour> » (session en cours)
+     ou « s:<id de session>:<n° du tour> » (session enregistrée) ; « live » ou « s:<id> » pour le plan d'eau. */
+  var RES_BOUEES = []; for (var rb = 0; rb <= 12; rb++) RES_BOUEES.push(rb / 2);
+  var EAUX = [
+    ["plate", "Magnifique, plate", '<svg viewBox="0 0 34 22" aria-hidden="true"><circle cx="26" cy="6" r="3.5"/><path d="M2 15h30M6 19h22"/></svg>'],
+    ["clapot", "Petit clapot", '<svg viewBox="0 0 34 22" aria-hidden="true"><path d="M2 9q3-2 6 0t6 0 6 0 6 0 6 0M2 16q3-2 6 0t6 0 6 0 6 0 6 0"/></svg>'],
+    ["vagues", "Vagues de bateau", '<svg viewBox="0 0 34 22" aria-hidden="true"><path d="M2 17q5-9 10 0t10 0 10 0"/><path d="M4 10l5-4h8l3 4z"/></svg>'],
+    ["agite", "Agité", '<svg viewBox="0 0 34 22" aria-hidden="true"><path d="M2 14q4-8 8 0t8 0 8 0 8 0M2 20q4-5 8 0t8 0 8 0"/><path d="M4 4h12M8 7h12"/></svg>']];
+  function eauLabel(k) { var e = EAUX.filter(function (x) { return x[0] === k; })[0]; return e ? e[1] : ""; }
+  function resTour(key) {
+    var p = String(key).split(":");
+    if (p[0] === "t") return findTour(Number(p[1]));
+    if (p[0] === "s") { var s = sessionsArr.filter(function (x) { return x.id === p[1]; })[0]; return s && s.tours ? s.tours[Number(p[2])] : null; }
+    return null;
+  }
+  function eauHolder(key) { if (key === "live") return sortie; var p = String(key).split(":"); return sessionsArr.filter(function (x) { return x.id === p[1]; })[0] || null; }
+  function resFormHtml(key, res) {
+    res = res || {};
+    var sel = function (lab, f, opts) { return '<label class="res-s field"><span>' + lab + '</span><select data-res="' + esc(key) + "|" + f + '"><option value="">—</option>' + opts.map(function (o) { return '<option value="' + esc(String(o[0])) + '"' + (res[f] != null && String(res[f]) === String(o[0]) ? " selected" : "") + ">" + esc(o[1]) + "</option>"; }).join("") + "</select></label>"; };
+    return '<div class="res-g">' + sel("Meilleure vitesse", "v", SL_SPEEDS.map(function (v) { return [v, v + " km/h"]; })) + sel("Corde", "c", SL_CORDES.map(function (c) { return [c, c]; })) +
+      sel("Bouées", "b", RES_BOUEES.map(function (b) { return [b, half(b)]; })) +
+      '<div class="res-s"><span>Note du tour</span><div class="res-st">' + [1, 2, 3, 4].map(function (n) { return '<button type="button" class="st' + ((res.note || 0) >= n ? " on" : "") + '" data-rstar="' + esc(key) + "|" + n + '" aria-label="' + n + " étoile" + (n > 1 ? "s" : "") + '">★</button>'; }).join("") + "</div></div></div>";
+  }
+  function eauHtml(key, cur) { return '<div class="res-eau">' + EAUX.map(function (e) { return '<button type="button" class="eau' + (cur === e[0] ? " on" : "") + '" data-eau="' + esc(key) + "|" + e[0] + '">' + e[2] + "<span>" + e[1] + "</span></button>"; }).join("") + "</div>"; }
+  function resSummary(r) { if (!r) return ""; var a = []; if (r.v) a.push(r.v + " km/h"); if (r.c) a.push(r.c); if (r.b != null && r.b !== "") a.push(half(r.b) + " bouée" + (Number(r.b) > 1 ? "s" : "")); if (r.note) a.push("★★★★".slice(0, r.note)); return a.join(" · "); }
+  /* Saisie : sélecteur (vitesse, corde, bouées), étoile (un second appui sur la même retire la note), plan d'eau (idem). Renvoie true si traité. */
+  function resInput(el) {
+    if (el.dataset.res) { var p = el.dataset.res.split("|"), tr = resTour(p[0]); if (!tr) return true; var r = tr.res || (tr.res = {}), v = el.value; r[p[1]] = v === "" ? null : (p[1] === "c" ? v : Number(v)); bigKey = ""; render(); return true; }
+    if (el.dataset.rstar) { var q = el.dataset.rstar.split("|"), tq = resTour(q[0]); if (!tq) return true; var rq = tq.res || (tq.res = {}), n = Number(q[1]); rq.note = rq.note === n ? 0 : n; bigKey = ""; render(); return true; }
+    if (el.dataset.eau) { var w = el.dataset.eau.split("|"), hd = eauHolder(w[0]); if (!hd) return true; hd.eau = hd.eau === w[1] ? "" : w[1]; bigKey = ""; render(); return true; }
+    return false;
+  }
+  function needsDetails(t) { return (t.act === "slalom" && (!t.speed || !t.passes || !t.res || !t.res.c)) || ((t.act === "wake" || t.act === "ski") && !t.speed); }
   function piloteOpts(cur) { return sortie.participants.map(function (p) { return '<option value="' + p.pid + '"' + (p.pid === cur ? " selected" : "") + ">" + esc(person(p.pid).name) + "</option>"; }).join(""); }
   function detailsHtml(t) {
     var h = '<div class="details">';
@@ -432,6 +469,7 @@
       '<div class="field"><label for="pil' + t.id + '">Pilote</label><select id="pil' + t.id + '" data-f="pilote" data-id="' + t.id + '">' + piloteOpts(t.pilote) + "</select></div></div>";
     if (t.act === "slalom") h += '<div class="two"><div class="field"><label for="sp' + t.id + '">Vitesse</label><select id="sp' + t.id + '" data-f="speed" data-id="' + t.id + '"><option value="">—</option>' + SLALOM_SPEEDS.map(function (v) { return '<option value="' + v + '"' + (Number(t.speed) === v ? " selected" : "") + ">" + v + " km/h</option>"; }).join("") + '</select></div><div class="field"><label for="ps' + t.id + '">Passages</label><input id="ps' + t.id + '" inputmode="numeric" data-f="passes" data-id="' + t.id + '" value="' + esc(t.passes) + '" placeholder="ex. 4"></div></div>';
     if (t.act === "wake" || t.act === "ski") h += '<div class="field"><label for="sp' + t.id + '">Vitesse (km/h)</label><input id="sp' + t.id + '" inputmode="numeric" data-f="speed" data-id="' + t.id + '" value="' + esc(t.speed) + '" placeholder="ex. 30"></div>';
+    if (t.act === "slalom" && t.pid) h += '<div class="flabel res-h">Résultat du tour</div>' + resFormHtml("t:" + t.id, t.res) + '<div class="flabel res-h">Plan d’eau (pour toute la session)</div>' + eauHtml("live", sortie.eau);
     if (t.act === "balade") h += '<div class="small muted">Temps partagé entre toutes les personnes à bord.</div>';
     if (t.act === "meca") h += '<div class="small muted">Essai ou réglage : partagé à 50/50 entre les familles.</div>';
     return h + '<div class="small muted">Optionnel : peut être complété à la clôture.</div></div>';
@@ -454,7 +492,7 @@
         sumSesHtml(now) + '<div class="small muted">Complétez la clôture ci-dessous puis enregistrez la session. « Retour » permet de reprendre la session.</div></div>';
       return h + renderClosing(now);
     }
-    h += '<div class="card engine"><div class="row"><div><div class="label">Temps moteur · départ ' + dec1.format(sortie.compteurDeb) + " h · jauge " + fracLabel(sortie.jaugeDeb) + "</div>" +
+    h += '<div class="card engine"><div class="row"><div><div class="label">Temps moteur · départ ' + dec1.format(sortie.compteurDeb) + " h · jauge " + fracLabel(sortie.jaugeDeb) + ' · <span id="gpsV">' + gpsTxt() + "</span></div>" +
       '<div class="clock" data-timer="engine">' + fmtClock(engineMs(now)) + '</div></div><span class="pill ' + (on ? "on" : "off") + '">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
       '<button class="btn big ' + (on ? "stop" : "run") + '" id="engBtn">' + (on ? "Arrêt moteur" : "Démarrer le moteur") + "</button>" +
       '<div class="two"><div class="field"><label for="pilDef">Pilote</label><select id="pilDef">' + piloteOpts(sortie.pilote) + '</select></div><div class="small muted" style="align-self:end">Tours : <span class="num" data-timer="total">' + fmtClock(totalMs(now)) + "</span><br>" + sortie.participants.length + " à bord</div></div>" +
@@ -719,11 +757,17 @@
       var list = by[k].sort(function (a, b) { return Number(a.compteurDeb) - Number(b.compteurDeb); });
       for (var i = 1; i < list.length; i++) {
         var a = list[i - 1], b = list[i], g = Number(b.compteurDeb) - sessionEnd(a);
-        if (g > GAP_TOL + 0.001) out.push({ key: a.id + ">" + b.id, from: a, to: b, h: g });
+        if (g <= GAP_TOL + 0.001) continue;
+        // trou déjà traité (v1.9.4) : noté sur la session elle-même, plus dans la fiche commune qu'un autre téléphone peut écraser
+        if (a.gapOk === b.id || (a.mode === "rattrapage" && a.gapKey && a.gapKey.split(">")[1] === b.id) || (b.mode === "rattrapage" && b.gapKey && b.gapKey.split(">")[0] === a.id)) continue;
+        out.push({ key: a.id + ">" + b.id, from: a, to: b, h: g, rech: a.gapRech === b.id || (ETAT.gapsRecherche || []).indexOf(a.id + ">" + b.id) >= 0 });
       }
     });
     return out;
   }
+  /* Un trou de compteur est attribué à la famille de la session d'avant (au prorata de ses temps si elle était mixte). */
+  function gapFam(prev) { var f = famSplit(prev), t = f.YC + f.OC; return t > 0 ? { YC: f.YC / t, OC: f.OC / t } : { YC: 0.5, OC: 0.5 }; }
+  function gapFamTxt(prev) { var p = gapFam(prev); return p.YC > 0.99 ? "Famille Yann" : p.OC > 0.99 ? "Famille Olivier" : "Yann " + Math.round(p.YC * 100) + " % · Olivier " + Math.round(p.OC * 100) + " %"; }
   function renderAccueil() {
     var now = Date.now(), h = "";
     h += quickHtml(now);
@@ -739,7 +783,7 @@
     if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Bateau pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Compteur moteur</span><span class="v">' + dec1.format(lastCompteur()) + ' h</span><span class="s">fin de la dernière session</span></div>' +
       '<div class="kpi"><span class="label">Dernier plein</span><span class="v" style="font-size:19px">' + esc(lastPlein || "—") + "</span></div></div>";
-    var gaps = findGaps(), rech = gaps.filter(function (g) { return (ETAT.gapsRecherche || []).indexOf(g.key) >= 0; });
+    var gaps = findGaps(), rech = gaps.filter(function (g) { return g.rech; });
     var gp = gaps.filter(function (g) { return rech.indexOf(g) < 0; })[0];
     if (rech.length) h += '<div class="small muted">' + rech.length + " trou(s) de compteur en recherche.</div>";
     if (gp) {
@@ -748,7 +792,8 @@
       h += '<div class="alert"><b>' + (srch ? "Trou de compteur en recherche : " : "Trou de compteur : ") + hm(gp.h * 60) + "</b>Entre la session du " + esc(isoToFr(dkey(gp.from))) + " (fin " + dec1.format(sessionEnd(gp.from)) + " h) et celle du " + esc(isoToFr(dkey(gp.to))) + " (début " + dec1.format(gp.to.compteurDeb) + " h). Ça ne bloque rien." + (gap.open ? "" : '<div><button class="btn sm" id="gapOpen">Rattraper cette session</button></div>') + "</div>";
       if (gap.open) h += '<div class="card"><h3>Session rattrapée</h3><div class="two"><div class="field"><label for="gD">Date</label><input id="gD" type="date" value="' + esc(dkey(gp.from)) + '"></div><div class="field"><label for="gM">Durée (min)</label><input id="gM" inputmode="numeric" placeholder="si connue"></div></div>' +
         '<div class="two"><div class="field"><label for="gC1">Compteur début</label><input id="gC1" inputmode="decimal" value="' + dec1.format(sessionEnd(gp.from)) + '"></div><div class="field"><label for="gC2">Compteur fin</label><input id="gC2" inputmode="decimal" value="' + dec1.format(gp.to.compteurDeb) + '"></div></div>' +
-        '<div class="field"><span class="flabel">Rattacher à</span>' + segHtml("fam", "data-grat", [["YC", "Famille Yann"], ["OC", "Famille Olivier"], ["search", "À rechercher"]], gap.rat) + "</div>" +
+        '<div class="field"><span class="flabel">Attribué à</span><div class="small">' + gapFamTxt(gp.from) + " (la session d’avant le trou)</div></div>" +
+        '<div class="toggle"><span>Je ne sais pas encore : à rechercher</span><button data-grat="' + (gap.rat === "search" ? "auto" : "search") + '" aria-pressed="' + (gap.rat === "search") + '" aria-label="À rechercher"></button></div>' +
         '<div class="actions"><button class="btn ghost" id="gapCancel">Annuler</button><button class="btn" id="gapSave">Enregistrer</button></div></div>';
     }
     var yk = latestYear();
@@ -826,14 +871,17 @@
       '<div class="field"><span class="flabel">Nombre de bidons remplis</span><div class="stepper"><button data-astep="-1" aria-label="Un bidon de moins">−</button><span class="val">' + A.b + '</span><button data-astep="1" aria-label="Un bidon de plus">+</button></div></div>' +
       '<div class="small muted" id="aPL">' + achatPLText() + "</div>" +
       '<div class="field"><span class="flabel">Payé par (obligatoire)</span>' + segHtml("fam", "data-af", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], A.f) + "</div>" +
-      '<div class="toggle"><span>Versé tout de suite dans le réservoir</span><button data-atog="verse" aria-pressed="' + A.verse + '" aria-label="Versé tout de suite"></button></div>' +
-      (A.verse ? '<div class="toggle"><span>Le réservoir est plein</span><button data-atog="plein" aria-pressed="' + A.plein + '" aria-label="Réservoir plein"></button></div>' : "") +
+      (A.passe ? "" : '<div class="toggle"><span>Versé tout de suite dans le réservoir</span><button data-atog="verse" aria-pressed="' + A.verse + '" aria-label="Versé tout de suite"></button></div>') +
+      '<div class="toggle"><span>Essence de la saison passée, déjà consommée (ni stock ni réservoir)</span><button data-atog="passe" aria-pressed="' + !!A.passe + '" aria-label="Saison passée"></button></div>' +
+      (A.verse && !A.passe ? '<div class="toggle"><span>Le réservoir est plein</span><button data-atog="plein" aria-pressed="' + A.plein + '" aria-label="Réservoir plein"></button></div>' : "") +
       '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="saveAchat"' + (A.f ? "" : " disabled") + ">Enregistrer</button></div>" +
       (A.f ? "" : '<div class="small muted">Choisissez la famille qui a payé pour pouvoir enregistrer.</div>') + "</div>";
   }
   function achatPLText() { var A = achatForm; if (!(A.L > 0)) return ""; return "Soit " + dec1.format(A.L / Math.max(1, A.b)) + " L par bidon" + (A.P > 0 ? " · " + dec2.format(A.P / A.L) + " € le litre" : "") + "."; }
   function renderEssence() {
     var h = !view.essence ? demoTogHtml("on-ess") + '<div class="ess-acts"><button class="ess-btn ess-achat" data-ev="achat"><span class="qa-ic" aria-hidden="true">' + QI.achat + '</span><span>J’ai acheté</span></button><button class="ess-btn ess-mise" data-ev="mise"' + (bidons.length ? "" : " disabled") + '><span class="qa-ic" aria-hidden="true">' + QI.mise + '</span><span>J’ai versé des bidons</span></button></div>' : "";
+    // remise à zéro unique (v1.9.4) : réservoir vide et stock vidé, tant qu'aucune n'a été faite
+    if (!view.essence && !lastReset()) h += '<div class="alert"><b>Repartir à vide aujourd’hui</b>Réservoir vide et stock de bidons remis à zéro (les bidons notés sont retirés, sans toucher aux dépenses). La balance essence repart d’aujourd’hui.<div><button class="btn sm" id="resetGo">' + (ui.resetAsk ? "Confirmer la remise à zéro" : "Remettre à zéro") + "</button></div></div>";
     // le formulaire ouvert vient en premier, l'encart du stock en dessous
     if (view.essence === "corr") h += corrHtml();
     else if (view.essence === "achat" && achatForm.step === "check") h += achatCheckHtml();
@@ -855,7 +903,7 @@
     h += '<div class="card">' + collHead("mvts", "Mouvements", moves.length + " mouvement" + (moves.length > 1 ? "s" : "") + (moves[0] ? " · dernier le " + esc(moves[0].d) : ""));
     if (ui.mvts) {
       h += '<div class="list small" style="margin-top:8px">';
-      moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + (m.annule ? ' <b class="todo">extourné</b>' : "") + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
+      moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + (m.annule ? ' <b class="todo">' + (m.type === "verse" ? "annulé" : "extourné") + "</b>" : m.corrige ? ' <b class="todo">corrigé</b>' : "") + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
       h += "</div>" + (moves.length > 30 ? '<div class="small muted">Les 30 plus récents sont affichés.</div>' : "");
     }
     return h + "</div>";
@@ -905,7 +953,21 @@
     return h + "</div>";
   }
   /* Correction du stock : vol, perte ou autre usage de bidons. */
-  var corrForm = { sel: {}, who: "yann", motif: "erreur", usage: "Voiture", aff: "5050", ach: "", unit: "bidons", qty: null };
+  var corrForm = { sel: {}, who: "yann", motif: "erreur", usage: "Voiture", aff: "5050", ach: "", unit: "bidons", qty: null, vf: "", vfL: null };
+  var CORR_MOTIFS = [["erreur", "Saisie erronée ou en double"], ["versement", "Versement fictif"], ["vol", "Vol"], ["perte", "Perte"], ["autre", "Autre usage"]];
+  /* Versement fictif (v1.9.4) : un versement noté pour de l'essence qui n'existait pas (achat de test, saisie en double déjà versée).
+     Il est réduit des litres indiqués (tout, par défaut) ; à zéro, il est annulé et ne compte plus dans la balance essence ni dans les indicateurs. */
+  function vfList() { return moves.filter(function (m) { return (m.type === "verse" && !m.annule && (Number(m.litres) || 0) > 0.05) || (isAchat(m) && m.verse); }).slice(0, 12); }
+  function vfHtml() {
+    var C = corrForm, list = vfList(), h = '<div class="field"><span class="flabel">Versement à annuler (touchez-le)</span>';
+    if (!list.length) return h + '<div class="small muted">Aucun versement noté.</div></div>';
+    h += '<div class="ach-pick">' + list.map(function (m) { return '<button class="chip" data-cvf="' + esc(m.id) + '" aria-pressed="' + (C.vf === m.id) + '">' + esc((m.d || isoToFr(m.date)) + " · " + int0.format(Number(m.litres) || 0) + " L · " + (m.type === "achat" ? "achat versé" : m.t) + " · " + (m.who || "")) + "</button>"; }).join("") + "</div></div>";
+    var m = list.filter(function (x) { return x.id === C.vf; })[0];
+    if (!m) return h + '<div class="small muted">Choisissez le versement d’essence qui n’a pas réellement eu lieu.</div>';
+    if (m.type === "achat") return h + '<div class="alert">Cet achat a été versé tout de suite : extournez l’achat (motif « Saisie erronée ou en double »), le versement disparaîtra avec lui.</div>';
+    var L = Number(m.litres) || 0, q = C.vfL != null ? Math.min(C.vfL, L) : L;
+    return h + '<div class="field"><span class="flabel">Litres fictifs à retirer</span><div class="bal-amt"><input id="vfL" inputmode="decimal" value="' + dec1.format(q) + '" aria-label="Litres fictifs"><span>L</span></div><div class="small muted">Sur ' + dec1.format(L) + " L versés. Ces litres sortent du réservoir suivi par la balance essence ; les dépenses ne changent pas (elles se corrigent par l’extourne de l’achat).</div></div>";
+  }
   function corrSel() { return Object.keys(corrForm.sel).filter(function (k) { return corrForm.sel[k]; }).map(Number).filter(function (i) { return i < bidons.length; }); }
   /* Quantité réellement retirée du stock : tous les bidons touchés par défaut, ou le nombre de bidons (au demi) ou de litres indiqué. */
   function corrTakes(sel) {
@@ -938,7 +1000,7 @@
   }
   /* Extourne d'un achat saisi par erreur ou en double : bidons encore en stock retirés, écriture inverse, dépense négative. */
   function extCans(m) {
-    if (!m || m.verse) return [];
+    if (!m || m.verse || m.passe) return []; // achat versé tout de suite ou de la saison passée : aucun bidon en stock
     var per = (Number(m.litres) || 0) / Math.max(1, Number(m.bidons) || 1);
     return bidons.map(function (b, i) { return { i: i, b: b, s: (b.d === m.d ? 2 : 0) + (Math.abs(b.litres - per) < 0.05 ? 1 : 0) }; })
       .filter(function (x) { return x.b.f === m.f; }).sort(function (a, b) { return b.s - a.s; }).slice(0, Number(m.bidons) || 0).map(function (x) { return x.i; });
@@ -952,7 +1014,7 @@
     if (!m) return h + '<div class="small muted">Choisissez l’achat saisi par erreur ou en double.</div>';
     var idx = extCans(m), B = Number(m.bidons) || 0;
     h += '<div class="alert ok">L’achat du ' + esc(m.d || isoToFr(m.date)) + " est extourné : une écriture inverse est passée dans les mouvements et une dépense de " + eur.format(-(Number(m.prix) || 0)) + " est créée pour la " + FAM[m.f === "OC" ? "OC" : "YC"].l + ". " +
-      (m.verse ? "Cet achat avait été versé tout de suite : ce versement ne compte plus dans la balance essence." : idx.length + " bidon(s) retiré(s) du stock." + (idx.length < B ? " " + (B - idx.length) + " bidon(s) de cet achat ne sont plus en stock (déjà versés) : leur versement reste compté." : "")) + "</div>";
+      (m.verse ? "Cet achat avait été versé tout de suite : ce versement ne compte plus dans la balance essence." : idx.length + " bidon(s) retiré(s) du stock." + (idx.length < B ? " " + (B - idx.length) + " bidon(s) de cet achat ne sont plus en stock (déjà versés). Si cet essence n’a jamais existé, annulez aussi le versement : motif « Versement fictif »." : "")) + "</div>";
     if (idx.length) h += cansHtml(idx.map(function (i) { return bidons[i]; }), "mini");
     return h;
   }
@@ -967,9 +1029,11 @@
   }
   function corrHtml() {
     var C = corrForm;
-    if (C.motif === "erreur") return '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", [["erreur", "Saisie erronée ou en double"], ["vol", "Vol"], ["perte", "Perte"], ["autre", "Autre usage"]], C.motif) + "</div>" + extHtml() +
+    if (C.motif === "versement") return '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", CORR_MOTIFS, C.motif) + "</div>" + vfHtml() +
+      '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="vfSave"' + (C.vf ? "" : " disabled") + ">Annuler ce versement</button></div></div>";
+    if (C.motif === "erreur") return '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", CORR_MOTIFS, C.motif) + "</div>" + extHtml() +
       '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="extSave"' + (C.ach ? "" : " disabled") + ">Extourner l’achat</button></div></div>";
-    var sel = corrSel(), h = '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", [["erreur", "Saisie erronée ou en double"], ["vol", "Vol"], ["perte", "Perte"], ["autre", "Autre usage"]], C.motif) + "</div>" +
+    var sel = corrSel(), h = '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", CORR_MOTIFS, C.motif) + "</div>" +
       '<div class="field"><span class="flabel">Bidons concernés (touchez-les)</span><div class="cans">';
     for (var i = 0; i < bidons.length; i++) h += '<button class="can-pick" data-cpick="' + i + '" aria-pressed="' + !!C.sel[i] + '" aria-label="Bidon ' + (i + 1) + '">' + canSvg(bidons[i], i) + "</button>";
     h += "</div></div>" +
@@ -994,17 +1058,18 @@
     var A = achatForm, f = A.f, B = A.b, Lt = A.L, P = A.P, pay = { YC: 0, OC: 0 }; pay[f] = P;
     // type, famille, litres, prix, versement et plein : servent aux totaux d'achat et à la balance essence
     var base = { type: "achat", at: stamp(), date: todayIso(), d: todayFr(), f: f, litres: Lt, prix: P, bidons: B, verse: !!A.verse, plein: !!(A.verse && A.plein), cout: P, paye: pay };
-    if (A.verse) { moves.unshift(Object.assign({}, base, { t: "Achat versé tout de suite", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n + (A.plein ? " · plein" : "") })); if (A.plein) { lastPlein = todayFr(); lastLevel = 16; lastLevelDate = todayFr(); } }
+    if (A.passe) { base.verse = false; base.plein = false; base.passe = true; moves.unshift(Object.assign({}, base, { t: "Achat de la saison passée (déjà consommé)", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n })); }
+    else if (A.verse) { moves.unshift(Object.assign({}, base, { t: "Achat versé tout de suite", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n + (A.plein ? " · plein" : "") })); if (A.plein) { lastPlein = todayFr(); lastLevel = 16; lastLevelDate = todayFr(); } }
     else { for (var bi = 0; bi < B; bi++) bidons.push({ id: uid(), f: f, litres: Lt / B, cap: Lt / B, prix: P / Lt, d: todayFr() }); moves.unshift(Object.assign({}, base, { t: "Achat mis en stock", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n })); }
     // la dépense est comptée pour la famille qui a payé ; la balance essence corrige ensuite selon la consommation
     depenses.unshift({ d: todayFr(), lib: "Essence " + int0.format(Lt) + " L (" + B + " bidon" + (B > 1 ? "s" : "") + ")", cat: "Essence", m: P, payeur: f, regle: "payeur", isNew: true });
-    A.step = null; A.tfOpen = false; A.L = 0; A.P = 0; A.f = ""; A.verse = false; A.plein = true; view.essence = null; save(2); toast(savedMsg("Achat enregistré, dépense créée.")); render();
+    A.step = null; A.tfOpen = false; A.L = 0; A.P = 0; A.f = ""; A.verse = false; A.passe = false; A.plein = true; view.essence = null; save(2); toast(savedMsg("Achat enregistré, dépense créée.")); render();
   }
 
   /* ---------- Dépenses ---------- */
   var REGL = "Règlement entre familles";
   var CATS = [["Assurance", "5050"], ["Matériel bateau", "5050"], ["Entretien", "5050"], ["Réparation", "5050"], ["Adhésion", "5050"], ["Taxes", "5050"], ["Taxe / corps mort lac", "5050"], ["Essence", "payeur"], ["Matériel loisir", "payeur"], ["Recette invités", "payeur"], ["Remboursement", "5050"], [REGL, "regl"], ["Autres", "5050"]];
-  var depForm = { cat: "Matériel bateau", regle: "5050", pct: 50, payeur: "YC" };
+  var depForm = { cat: "Matériel bateau", /* « Essence » n'est plus proposé ici (v1.9.4) : l'essence passe par l'onglet Essence */ regle: "5050", pct: 50, payeur: "YC" };
   /* Part de consommation de chaque famille : temps moteur de l'année de la dépense (toutes années si inconnue). */
   function consoRatio(year) {
     var y = YEARS[year];
@@ -1053,9 +1118,13 @@
      par Olivier, et inversement. L'écart est proposé comme écriture d'équilibrage (modifiable), ajoutée à la balance des comptes.
      Départ : l'hivernage du 23/11/2026, réservoir vide. */
   var BAL_T0 = "2026-11-23T00:00:00", balForm = null;
+  /* Remise à zéro (v1.9.4) : réservoir vide et stock de bidons vidé, notée comme un mouvement (partagé, jamais écrasé).
+     La balance essence repart de la dernière remise à zéro si elle est plus récente que l'hivernage. */
+  function lastReset() { var r = moves.filter(function (m) { return m.type === "reset" && m.at; }).sort(function (a, b) { return a.at < b.at ? 1 : -1; })[0]; return r ? r.at : ""; }
+  function balT0() { var r = lastReset(); return r && r > BAL_T0 ? r : BAL_T0; }
   function sesKey(s) { return dkey(s) + "T" + (s.heureFin || "12:00") + ":00"; }
   function pourKey(m) { return m.at || ((m.date || frToIso(m.d)) + "T12:00:00"); }
-  function poursList() { return moves.filter(function (m) { return (m.type === "verse" || (isAchat(m) && m.verse)) && m.paye; }).map(function (m) { return { m: m, k: pourKey(m) }; }).sort(function (a, b) { return a.k < b.k ? -1 : 1; }); }
+  function poursList() { return moves.filter(function (m) { return ((m.type === "verse" && !m.annule) || (isAchat(m) && m.verse)) && m.paye && (Number(m.litres) || 0) > 0.05; }).map(function (m) { return { m: m, k: pourKey(m) }; }).sort(function (a, b) { return a.k < b.k ? -1 : 1; }); }
   function famSplit(s) { var y = Number(s.famMin && s.famMin.YC) || 0, o = Number(s.famMin && s.famMin.OC) || 0; if (y + o <= 0) { var e = Number(s.engineMin) || 0; return { YC: e / 2, OC: e / 2 }; } return { YC: y, OC: o }; }
   function lastPrixL() { var a = moves.filter(function (m) { return isAchat(m) && Number(m.litres) > 0 && Number(m.prix) > 0; })[0]; return a ? Number(a.prix) / Number(a.litres) : 1.8; }
   function keyFr(k) { return k ? isoToFr(k.slice(0, 10)) : ""; }
@@ -1075,13 +1144,14 @@
     return res;
   }
   function balStart() {
-    var prevs = dettes.filter(function (d) { return d.kind === "essence" && d.fin && d.fin >= BAL_T0; }).sort(function (a, b) { return a.fin < b.fin ? -1 : 1; }), last = prevs[prevs.length - 1];
+    var prevs = dettes.filter(function (d) { return d.kind === "essence" && d.fin && d.fin >= balT0(); }).sort(function (a, b) { return a.fin < b.fin ? -1 : 1; }), last = prevs[prevs.length - 1];
     if (last) {
       var r = last.detail && last.detail.reste, pool = zeroPool();
       if (r && r.L && r.E) ["YC", "OC"].forEach(function (f) { pool.L[f] = Number(r.L[f]) || 0; pool.E[f] = Number(r.E[f]) || 0; });
-      return { k: last.fin, label: "équilibrage du " + keyFr(last.fin), pool: pool };
+      if (last.fin >= balT0()) return { k: last.fin, label: "équilibrage du " + keyFr(last.fin), pool: pool };
     }
-    return { k: BAL_T0, label: "hivernage, réservoir vide", pool: zeroPool() };
+    var t0 = balT0();
+    return { k: t0, label: t0 === BAL_T0 ? "hivernage, réservoir vide" : "remise à zéro du " + keyFr(t0) + ", réservoir vide", pool: zeroPool() };
   }
   function computeBalEss() {
     var B = balStart(), cap = SPEC.reservoir || 125, conso = SPEC.conso || 13, prixRef = lastPrixL();
@@ -1298,7 +1368,7 @@
   function depFormHtml() {
     var h = "";
     {
-      h += '<div class="card"><h3>Nouvelle dépense</h3><div class="two"><div class="field"><label for="dM">Montant (€)</label><input id="dM" inputmode="decimal" value="120"></div><div class="field"><label for="dCat">Catégorie</label><select id="dCat">' + CATS.map(function (c) { return "<option" + (c[0] === depForm.cat ? " selected" : "") + ">" + esc(c[0]) + "</option>"; }).join("") + "</select></div></div>" +
+      h += '<div class="card"><h3>Nouvelle dépense</h3><div class="two"><div class="field"><label for="dM">Montant (€)</label><input id="dM" inputmode="decimal" value="120"></div><div class="field"><label for="dCat">Catégorie</label><select id="dCat">' + CATS.filter(function (c) { return c[0] !== "Essence"; }).map(function (c) { return "<option" + (c[0] === depForm.cat ? " selected" : "") + ">" + esc(c[0]) + "</option>"; }).join("") + "</select></div></div>" +
         '<div class="field"><label for="dLib">Détail</label><input id="dLib" value="Gilet de sauvetage"></div>' +
         '<div class="field"><span class="flabel">Payé par</span>' + segHtml("fam", "data-dpay", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], depForm.payeur) + "</div>";
       if (depForm.regle === "conso") h += '<div class="alert ok"><b>Selon la consommation</b>Répartie de plein à plein, au temps moteur des familles.</div>';
@@ -1614,6 +1684,19 @@
       (ppl.length ? "<span>À bord <b>" + esc(ppl.join(", ")) + "</b></span>" : "") +
       (s.bateau ? '<span class="muted">' + esc(s.bateau) + "</span>" : "") + "</div>";
     if (s.note) h += '<div class="small" style="margin-bottom:6px">' + esc(s.note) + '</div>';
+    var vs = s.vitesses || {}, vk = Object.keys(vs);
+    if (s.vitesse || vk.length) h += '<div class="ses-info">' + (s.vitesse ? "<span>Bateau (GPS) <b>moy. " + dec1.format(s.vitesse.moy) + " · max " + dec1.format(s.vitesse.max) + " km/h</b></span>" : "") +
+      vk.map(function (pid) { var q = person(pid), v = vs[pid]; return "<span>" + esc(q ? q.name : pid) + " <b>moy. " + dec1.format(v.moy) + " · max " + dec1.format(v.max) + " km/h</b></span>"; }).join("") + "</div>";
+    var sl = []; (s.tours || []).forEach(function (t, i) { if (t.act === "slalom" && t.pid) sl.push(i); });
+    if (sl.length) {
+      var ed = ui.resEdit === s.id;
+      h += '<div class="res-box"><div class="row"><b>Résultats slalom</b><button class="btn link" data-resedit="' + esc(s.id) + '">' + (ed ? "Fermer" : "Modifier les résultats") + "</button></div>";
+      sl.forEach(function (i) { var t = s.tours[i], q = person(t.pid); h += ed ? '<div class="small res-who">' + esc(q ? q.name : t.pid) + "</div>" + resFormHtml("s:" + s.id + ":" + i, t.res) : '<div class="small">' + esc(q ? q.name : t.pid) + " : " + (resSummary(t.res) || '<span class="muted">pas encore saisi</span>') + "</div>"; });
+      h += ed ? '<div class="small res-who">Plan d’eau</div>' + eauHtml("s:" + s.id, s.eau) : '<div class="small">Plan d’eau : ' + (eauLabel(s.eau) || '<span class="muted">pas encore saisi</span>') + "</div>";
+      h += "</div>";
+    }
+    var pgs = {}; (s.tours || []).forEach(function (t) { if (t.pid && t.pg && t.pg.length) pgs[t.pid] = (pgs[t.pid] || []).concat(t.pg); });
+    Object.keys(pgs).forEach(function (pid) { var q = person(pid); h += '<div class="small" style="margin-bottom:4px">Passages de ' + esc(q ? q.name : pid) + " : " + pgs[pid].map(function (x, i) { return "P" + (i + 1) + " " + dec1.format(x.moy); }).join(" · ") + " km/h</div>"; });
     return h + (photoSrc(s.photoCompteur) ? '<img class="cpt-photo" src="' + photoSrc(s.photoCompteur) + '" alt="Photo du compteur de la session">' : '<div class="small muted">Pas de photo du compteur pour cette session.</div>');
   }
   function sessionListHtml(sel, bk) {
@@ -1824,14 +1907,62 @@
     } else if (!want && wakeLock) { wakeLock.release().catch(function () {}); wakeLock = null; }
   }
   document.addEventListener("visibilitychange", keepAwake);
+  /* ---------- Vitesse GPS du bateau (v1.9.4) ----------
+     L'autorisation est demandée au lancement de l'app. Pendant une session (écran allumé), la position est suivie :
+     vitesse moyenne et maximale du bateau moteur en route, et pour chaque tour de skieur. Les mesures douteuses sont écartées
+     (précision au-delà de 30 m, plus de 90 km/h, saut de plus de 5 s compté 5 s).
+     Tours des skieurs : les 3 premières secondes après le départ ou la reprise du tour (prise de vitesse) ne comptent pas. */
+  var gpsWatch = null, gpsLast = null, gpsKmh = null, GPS_VMAX = 25, GPS_DEMARRAGE = 3000;
+  function gpsAsk() { if (navigator.geolocation) try { navigator.geolocation.getCurrentPosition(function () {}, function () {}, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }); } catch (e) { /* GPS indisponible */ } }
+  function gpsDist(a, b) { var R0 = 6371000, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lon - a.lon) * r, x = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2); return 2 * R0 * Math.asin(Math.sqrt(x)); }
+  function gpsAdd(o, v, dt) { o.sum = (o.sum || 0) + v * dt; o.dur = (o.dur || 0) + dt; if (!(o.max >= v)) o.max = v; }
+  function gpsOn(pos) {
+    if (!(sortie && sortie.active)) return;
+    var c = pos.coords, tm = pos.timestamp || Date.now(), here = { lat: c.latitude, lon: c.longitude, t: tm }, v = c.speed;
+    if (c.accuracy > 30) { gpsLast = null; return; }
+    if ((v == null || isNaN(v)) && gpsLast && tm > gpsLast.t + 500) v = gpsDist(gpsLast, here) / ((tm - gpsLast.t) / 1000);
+    gpsLast = here;
+    if (v == null || isNaN(v) || v < 0 || v > GPS_VMAX) return;
+    gpsKmh = v * 3.6;
+    var dt = sortie.gpsT ? Math.min(5, Math.max(0, (tm - sortie.gpsT) / 1000)) : 0; sortie.gpsT = tm;
+    if (dt > 0 && sortie.pas) { sortie.pas.sum += v * dt; sortie.pas.dur += dt; var pl = document.getElementById("bigPasLive"); if (pl) pl.textContent = pasLive(); }
+    if (dt > 0 && sortie.engine === "on") { gpsAdd(sortie.gps || (sortie.gps = {}), v, dt); var r = running(); if (r && r.since && tm - r.since >= GPS_DEMARRAGE) gpsAdd(r.gps || (r.gps = {}), v, dt); }
+    var el = document.getElementById("gpsV"); if (el) el.textContent = gpsTxt();
+    var bg = document.getElementById("bigGps"); if (bg) bg.innerHTML = bigGpsHtml(bigTour());
+  }
+  function gpsTxt() {
+    if (gpsWatch == null) return "GPS inactif";
+    if (gpsKmh == null) return "GPS : recherche…";
+    var r = running(), g = r && r.gps, s = "GPS " + Math.round(gpsKmh) + " km/h";
+    if (g && g.dur >= 3) s += " · tour de " + tourName(r) + " : moy. " + dec1.format(g.sum / g.dur * 3.6) + " · pointe " + dec1.format(g.max * 3.6) + " km/h";
+    return s;
+  }
+  function gpsSync() {
+    if (!navigator.geolocation) return;
+    var want = !!(sortie && sortie.active);
+    if (want && gpsWatch == null) { try { gpsWatch = navigator.geolocation.watchPosition(gpsOn, function () { gpsKmh = null; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }); } catch (e) { gpsWatch = null; } }
+    else if (!want && gpsWatch != null) { navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; gpsLast = null; gpsKmh = null; }
+  }
+  /* Résumé d'une mesure : moyenne et maximum en km/h (au dixième), seulement si au moins 10 s ont été mesurées. */
+  function gpsRes(o) { return o && o.dur >= 10 ? { moy: Math.round(o.sum / o.dur * 36) / 10, max: Math.round(o.max * 36) / 10, s: Math.round(o.dur) } : null; }
+  /* Vitesses par skieur : tous ses tours de la session réunis. */
+  function gpsBySkier(tours) {
+    var by = {};
+    tours.forEach(function (t) { if (!t.pid || !t.gps || !(t.gps.dur > 0)) return; var o = by[t.pid] || (by[t.pid] = {}); o.sum = (o.sum || 0) + t.gps.sum; o.dur = (o.dur || 0) + t.gps.dur; if (!(o.max >= t.gps.max)) o.max = t.gps.max; });
+    var out = {}; Object.keys(by).forEach(function (pid) { var r = gpsRes(by[pid]); if (r) out[pid] = r; });
+    return out;
+  }
   /* Grand affichage : tour en cours ou en pause, et boutons pause / fin du skieur et du bateau */
   function bigTour() { var r = running(); if (r) return r; for (var i = sortie.tours.length - 1; i >= 0; i--) if (sortie.tours[i].state === "pause") return sortie.tours[i]; return null; }
-  var bigEndAsk = 0;
+  var bigEndAsk = 0, bigRes = 0;
   function bigAction(a) {
     var t = bigTour();
     if (a === "tpause" && t) return act(t.id, t.state === "run" ? "pause" : "resume");
-    if (a === "tend" && t) return act(t.id, "end");
+    if (a === "tend" && t) { if (t.act === "slalom" && t.pid) bigRes = t.id; return act(t.id, "end"); } // slalom : encart des résultats
+    if (a === "resok") { bigRes = 0; bigKey = ""; return updateBig(); }
     if (a === "boat") return engineToggle();
+    if (a === "pstart") return pasStart();
+    if (a === "pend") return pasEnd();
     if (a === "end") {
       if (Date.now() - bigEndAsk > 4000) { bigEndAsk = Date.now(); bigKey = ""; updateBig(); setTimeout(function () { bigKey = ""; updateBig(); }, 4100); return; } // deuxième appui pour confirmer
       bigEndAsk = 0; var r = running(); if (r) act(r.id, "end");
@@ -1849,6 +1980,18 @@
     else { var nt = newTour(pid, "slalom"); sortie.tours.push(nt); act(nt.id, "start"); }
     toast(person(pid).name + " en tour de ski.");
   }
+  (function pasLongPress() {
+    var tm = null;
+    function stop() { if (tm) { clearTimeout(tm); tm = null; } }
+    document.addEventListener("pointerdown", function (e) {
+      var b = e.target.closest && e.target.closest("#bigView [data-bpas]"); if (!b) return;
+      stop(); var i = Number(b.dataset.bpas);
+      tm = setTimeout(function () { tm = null; var t = bigTour(); if (!t || !t.pg || !t.pg[i]) return; t.pg.splice(i, 1); bigKey = ""; render(); toast("Passage P" + (i + 1) + " supprimé (chute)."); }, 700);
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(function (n) { document.addEventListener(n, stop, true); });
+    document.addEventListener("contextmenu", function (e) { if (e.target.closest && e.target.closest("#bigView [data-bpas]")) e.preventDefault(); });
+  })();
+  document.addEventListener("change", function (e) { var el = e.target; if (el.closest && el.closest("#bigView") && el.dataset.res) resInput(el); });
   function bigLayer(id) { var el = document.getElementById(id); if (!el) { el = document.createElement("div"); el.id = id; el.hidden = true; document.body.appendChild(el); } return el; }
   function updateBig() {
     var big = bigLayer("bigView"), msg = bigLayer("rotMsg"), land = isLandscape();
@@ -1859,9 +2002,20 @@
     document.body.classList.toggle("big-on", show);
     big.hidden = !show; big.classList.toggle("rot", show && !land); // téléphone resté en portrait : la fenêtre est affichée couchée, à lire en tournant le téléphone
     if (!show) { bigKey = ""; return; }
+    var rt = bigRes ? findTour(bigRes) : null;
+    if (rt) { // résultats du skieur qui vient de finir, en gros, avant de reprendre l'écran de session
+      var rk = "res|" + rt.id + "|" + JSON.stringify(rt.res || {}) + "|" + (sortie.eau || "") + "|" + land;
+      if (rk !== bigKey) {
+        bigKey = rk;
+        big.innerHTML = '<div class="big-card big-res"><div class="big-res-h"><span class="big-who">Résultat de ' + esc(tourName(rt)) + '</span><span class="big-act">' + (rt.pg && rt.pg.length ? "Passages : " + rt.pg.map(function (x, i) { return "P" + (i + 1) + " " + dec1.format(x.moy); }).join(" · ") + " km/h" : "Slalom") + "</span></div>" +
+          resFormHtml("t:" + rt.id, rt.res) + '<div class="res-h2">Plan d’eau</div>' + eauHtml("live", sortie.eau) +
+          '<div class="big-res-a"><button class="ba-later" data-bact="resok">Plus tard</button><button class="ba-ok" data-bact="resok">Valider</button></div></div>';
+      }
+      return;
+    }
     var now = new Date(), r = running(), pil = person((r && r.pilote) || sortie.pilote), on = sortie.engine === "on";
     var t = bigTour(), ask = Date.now() - bigEndAsk < 4000;
-    var key = (r ? r.id + r.state : "-") + "|" + (t ? t.id + t.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land + "|" + ask + "|" + sortie.participants.map(function (p) { return p.pid; }).join(",");
+    var key = (r ? r.id + r.state : "-") + "|" + (t ? t.id + t.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land + "|" + ask + "|" + (sortie.pas ? 1 : 0) + "|" + (t && t.pg ? t.pg.length : 0) + "|" + sortie.participants.map(function (p) { return p.pid; }).join(",");
     if (key !== bigKey) {
       bigKey = key;
       // à droite, en gros et bien espacés : pause / fin du skieur, pause / fin de la session bateau
@@ -1869,14 +2023,18 @@
         '<button class="ba-ski" data-bact="tpause"' + (t ? "" : " disabled") + ">" + (t && t.state === "pause" ? "Reprise skieur" : "Pause skieur") + "</button>" +
         '<button class="ba-ski" data-bact="tend"' + (t ? "" : " disabled") + ">Fin skieur</button>" +
         '<button class="ba-boat" data-bact="boat">' + (on ? "Pause bateau" : "Reprise bateau") + "</button>" +
-        '<button class="ba-end' + (ask ? " ask" : "") + '" data-bact="end">' + (ask ? "Confirmer la fin ?" : "Fin session") + "</button></div>";
+        '<button class="ba-end' + (ask ? " ask" : "") + '" data-bact="end">' + (ask ? "Confirmer la fin ?" : "Fin session") + "</button>" +
+"</div>" +
+        // passages de slalom : bouton à part, sous les boutons de session, puis la liste des passages du skieur
+        '<div class="big-pas"><button class="ba-pas' + (sortie.pas ? " on" : "") + '" data-bact="' + (sortie.pas ? "pend" : "pstart") + '"' + (r || sortie.pas ? "" : " disabled") + ">" + PAS_ICON +
+        (sortie.pas ? '<span>Arrivée</span><span class="bpl" id="bigPasLive">' + pasLive() + "</span>" : "<span>Passage</span>") + '</button><div class="big-pas-l">' + pasListHtml(t) + "</div></div>";
       // en bas, les personnes à bord : toucher un médaillon lance son tour (le tour en cours d'un autre skieur se termine)
       var sk = '<div class="big-sk"><span class="label">Lancer un skieur</span><div class="big-sk-l">' + sortie.participants.map(function (p) {
         var pp = person(p.pid), st = r && r.pid === p.pid ? " on" : (t && t.pid === p.pid && t.state === "pause" ? " pz" : "");
         return '<button class="bsk f-' + famOf(p) + st + '" data-bsk="' + esc(p.pid) + '" aria-label="Lancer le tour de ' + esc(pp.name) + '">' + pilotAvatar(pp, "bsk-av") + "<span>" + esc(pp.name) + "</span></button>";
       }).join("") + "</div></div>";
       big.innerHTML = '<div class="big-card">' +
-        '<div class="big-id"><span class="big-who">' + (t ? esc(tourName(t)) : "Aucun skieur en cours") + "</span>" + (t ? '<span class="big-act">' + esc(ACTS[t.act] || "") + (t.state === "pause" ? " · en pause" : "") + "</span>" : "") + "</div>" + acts +
+        '<div class="big-id"><span class="big-who">' + (t ? esc(tourName(t)) : "Aucun skieur en cours") + "</span>" + (t ? '<span class="big-act">' + esc(ACTS[t.act] || "") + (t.state === "pause" ? " · en pause" : "") + "</span>" : "") + '<div class="big-gps" id="bigGps">' + bigGpsHtml(t) + "</div></div>" + acts +
         '<div class="big-tour' + (t && t.state === "pause" ? " paused" : "") + '"' + (t ? ' data-timer="t' + t.id + '"' : "") + ">" + (t ? fmtClock(tourMs(t, Date.now())) : "—") + "</div>" +
         '<div class="big-grid">' +
         '<div><span class="label">Temps moteur</span><b data-timer="engine">' + fmtClock(engineMs(Date.now())) + '</b><span class="big-s">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
@@ -1886,10 +2044,34 @@
     }
     var ck = document.getElementById("bigClock"); if (ck) ck.textContent = now.toTimeString().slice(0, 5);
   }
+  /* Grand affichage, sous le nom du skieur, une ligne par vitesse : moyenne et max du tour en cours (sans les 3 s de démarrage), puis vitesse instantanée. */
+  function bigGpsHtml(t) {
+    if (gpsWatch == null) return '<span class="bg-k">GPS inactif</span>';
+    var g = t && t.gps, ok = g && g.dur >= 3, row = function (k, v) { return '<span class="bg-k">' + k + ' :</span><b class="bg-v">' + v + "</b>"; };
+    return row("Vitesse moy", ok ? dec1.format(g.sum / g.dur * 3.6) + " km/h" : "—") + row("Vitesse max", ok ? dec1.format(g.max * 3.6) + " km/h" : "—") + row("Vitesse instant", gpsKmh != null ? dec1.format(gpsKmh) + " km/h" : "—");
+  }
+  /* Passages de slalom (v1.9.4) : « Départ passage » puis « Arrivée passage » mesure la vitesse moyenne GPS entre les deux appuis.
+     Les passages du skieur sont numérotés P1, P2… ; un appui long sur un passage le supprime (chute). */
+  function pasStart() { var r = running(); if (!r) return toast("Lancez d'abord un skieur."); sortie.pas = { tid: r.id, at: Date.now(), sum: 0, dur: 0 }; bigKey = ""; render(); }
+  function pasEnd() {
+    var P = sortie.pas; sortie.pas = null; bigKey = "";
+    var tr = P && findTour(P.tid);
+    if (!tr || !(P.dur >= 2)) { render(); return toast("Passage trop court ou sans mesure GPS : non enregistré."); }
+    (tr.pg = tr.pg || []).push({ moy: Math.round(P.sum / P.dur * 36) / 10, s: Math.round(P.dur) });
+    render(); toast("P" + tr.pg.length + " : " + dec1.format(tr.pg[tr.pg.length - 1].moy) + " km/h");
+  }
+  var PAS_ICON = '<svg class="bp-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5v3.5M18.5 6.5l1.5-1.5"/></svg>';
+  function pasLive() { var P = sortie.pas; return P && P.dur > 0 ? dec1.format(P.sum / P.dur * 3.6) + " km/h" : "mesure…"; }
+  function pasListHtml(t) {
+    var pg = (t && t.pg) || [];
+    if (!pg.length) return '<span class="bp-none">Aucun passage mesuré</span>';
+    return pg.map(function (x, i) { return '<button class="bp" data-bpas="' + i + '" aria-label="Passage P' + (i + 1) + ", appui long pour le supprimer\">P" + (i + 1) + " : " + dec1.format(x.moy) + " km/h</button>"; }).join("");
+  }
   if (landMq) { var onLand = function () { updateBig(); }; if (landMq.addEventListener) landMq.addEventListener("change", onLand); else if (landMq.addListener) landMq.addListener(onLand); }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("#bigClose"); if (b) { bigOpen = false; updateBig(); return; }
     var ba = e.target.closest && e.target.closest("#bigView [data-bact]"); if (ba && !ba.disabled) return bigAction(ba.dataset.bact);
+    var br = e.target.closest && e.target.closest("#bigView [data-rstar], #bigView [data-eau]"); if (br) { resInput(br); return; }
     var bs = e.target.closest && e.target.closest("#bigView [data-bsk]"); if (bs) bigSki(bs.dataset.bsk);
   });
   function render() {
@@ -1905,26 +2087,66 @@
     if (tab === "essence" && view.essence === "achat") achatPreview();
     renderHead();
     navSync();
-    applyOrientation(); updateBig(); keepAwake();
+    gpsSync(); applyOrientation(); updateBig(); keepAwake(); // GPS lancé avant le grand affichage, qui affiche son état
   }
-  /* ---------- Retour arrière : chaque écran est noté dans l'historique du navigateur ----------
-     Le geste « retour » du téléphone (Android) ou le bouton Précédent ramène à l'écran d'avant au lieu de quitter l'app. */
-  var navKey = "", navRestoring = false;
+  /* ---------- Retour arrière hiérarchique (v1.9.4) ----------
+     Le retour (geste Android, bouton Précédent, glissé depuis le bord sur iPhone) remonte toujours d'un niveau :
+     sous-menu → menu → Accueil. Jamais de boucle : l'historique du navigateur ne garde que deux entrées,
+     l'Accueil (racine) et l'écran courant, plus une entrée « garde » sous l'Accueil :
+     à l'Accueil, le retour ne fait rien (on reste sur l'Accueil, l'app ne se ferme pas). */
+  var navKey = "", navAtTop = false, navSkip = false, navGuarded = false, annUp = "accueil";
+  var NAV_GUARD = { guard: 1 };
+  var NAV_ROOT = { tab: "accueil", fin: "", pil: "", ess: "", dep: 0, up: "" };
   function navState() {
-    return { tab: tab, fin: tab === "activite" ? finView : "", pil: tab === "pilotes" ? pilotSel : "", ess: tab === "essence" ? (view.essence || "") : "", dep: tab === "activite" && finView === "dep" && view.dep ? 1 : 0 };
+    return { tab: tab, fin: tab === "activite" ? finView : "", pil: tab === "pilotes" ? pilotSel : "", ess: tab === "essence" ? (view.essence || "") : "", dep: tab === "activite" && finView === "dep" && view.dep ? 1 : 0, up: tab === "annuaire" ? annUp : "" };
+  }
+  function navIsRoot(s) { return s.tab === "accueil"; }
+  /* Niveau supérieur d'un écran. Accueil > Session, Essence, Activité (Bilan), Bateau, Journal
+     > Essence : achat, versement, correction · Activité : balance, dépenses (> nouvelle dépense) · Bateau : pilotes (> fiche pilote), annuaire. */
+  function navParent(s) {
+    var p = { tab: s.tab, fin: s.fin, pil: s.pil, ess: s.ess, dep: 0, up: s.up };
+    if (s.dep) return p;
+    if (s.tab === "activite" && s.fin && s.fin !== "bilan") { p.fin = "bilan"; return p; }
+    if (s.tab === "essence" && s.ess) { p.ess = ""; return p; }
+    if (s.tab === "pilotes" && s.pil) { p.pil = ""; return p; }
+    if (s.tab === "pilotes") return { tab: "bateau", fin: "", pil: "", ess: "", dep: 0, up: "" };
+    if (s.tab === "annuaire") return s.up === "bateau" ? { tab: "bateau", fin: "", pil: "", ess: "", dep: 0, up: "" } : NAV_ROOT; // urgence : ouvert depuis Bateau ou depuis l'Accueil
+    if (s.tab === "accueil") return null;
+    return NAV_ROOT;
   }
   function navSync() {
+    var prev = navKey ? JSON.parse(navKey) : null;
+    if (tab === "annuaire" && (!prev || prev.tab !== "annuaire")) annUp = prev && prev.tab === "bateau" ? "bateau" : "accueil";
     var s = navState(), k = JSON.stringify(s);
     if (k === navKey) return;
-    try { if (!navKey || navRestoring) history.replaceState(s, ""); else history.pushState(s, ""); } catch (e) { /* historique indisponible */ }
-    navKey = k; navRestoring = false;
+    try {
+      if (!navKey) { // premier affichage, ou retour en arrière qui vient d'être traité
+        if (navIsRoot(s)) { history.replaceState(s, ""); navAtTop = false; }
+        else { history.replaceState(NAV_ROOT, ""); history.pushState(s, ""); navAtTop = true; }
+      } else if (navIsRoot(s)) {
+        if (navAtTop) { navSkip = true; navAtTop = false; history.back(); } // retour à l'Accueil par le menu : on retire l'écran courant de l'historique
+        else history.replaceState(s, "");
+      } else if (navAtTop) history.replaceState(s, ""); // d'un écran à l'autre : on remplace, on n'empile pas
+      else { history.pushState(s, ""); navAtTop = true; }
+    } catch (e) { /* historique indisponible */ }
+    navKey = k;
   }
+  /* La garde est posée au premier appui sur l'écran : les navigateurs ignorent les entrées d'historique créées sans geste de l'utilisateur. */
+  document.addEventListener("click", function () {
+    if (navGuarded || navAtTop || !navKey) return;
+    try { history.replaceState(NAV_GUARD, ""); history.pushState(JSON.parse(navKey), ""); navGuarded = true; } catch (e) { /* historique indisponible */ }
+  }, true);
   window.addEventListener("popstate", function (e) {
-    var s = e.state; if (!s || !s.tab) return;
-    if (sortie.active && sortie.closing && tab === "sortie") sortie.closing = false; // retour depuis la clôture : on revient à la session en cours
-    tab = s.tab; finView = s.fin || "bilan"; pilotSel = s.pil || ""; view.essence = s.ess || null; view.dep = !!s.dep;
+    if (navSkip) { navSkip = false; return; }
+    if (e.state && e.state.guard) { try { history.pushState(NAV_ROOT, ""); } catch (er) { /* historique indisponible */ } navAtTop = false; return; } // retour depuis l'Accueil : on y reste
+    var cur = navKey ? JSON.parse(navKey) : null;
+    navAtTop = false;
+    if (!cur) return;
+    if (sortie.active && sortie.closing && tab === "sortie") { sortie.closing = false; navKey = ""; screen.scrollTop = 0; render(); return; } // retour depuis la clôture : on revient à la session en cours
+    var p = navParent(cur); if (!p) return; // déjà à l'Accueil
+    tab = p.tab; finView = p.fin || "bilan"; pilotSel = p.pil || ""; view.essence = p.ess || null; view.dep = !!p.dep; if (p.up) annUp = p.up;
     achatForm.step = null; view.cancelAsk = false;
-    navRestoring = true; screen.scrollTop = 0; render();
+    navKey = ""; screen.scrollTop = 0; render();
   });
   /* iPhone (app installée) : pas de geste retour natif. Glisser depuis le bord droit (ou gauche) de l'écran vers l'intérieur = retour. */
   (function edgeSwipe() {
@@ -1941,7 +2163,7 @@
     document.addEventListener("touchend", function (e) {
       if (x0 == null) return;
       var t = e.changedTouches[0], dx = (t.clientX - x0) * side, dy = Math.abs(t.clientY - y0); x0 = null;
-      if (dx > 70 && dy < 60 && history.state && navKey) history.back();
+      if (dx > 70 && dy < 60 && navAtTop) history.back(); // à l'Accueil, rien ne se passe
     }, { passive: true });
   })();
   /* ---------- Pilotes : fiche, heures, grade ---------- */
@@ -2235,8 +2457,46 @@
   var ESS_DECO = ribbonSvg("ess", [["#ffd27a", .05], ["#ffe1a6", .6], ["#ffa463", .4], ["#ff6b45", .65]], [["#ffb347", .5], ["#b8361c", .25], ["#ff7a3d", .55]], "#ffe8c2");
   var ACT_DECO = ribbonSvg("act", [["#dcbcff", .05], ["#ead2ff", .6], ["#c592ff", .4], ["#ff7fbf", .65]], [["#a874ff", .5], ["#4f1f8a", .25], ["#e14ea0", .55]], "#f4dfff");
   /* Bandeau : nom de l'écran, visuel et couleur propres à chaque menu */
+  /* Logo « Noskids Chouillou » (v1.9.4) : dessin original, en SVG, mis en page à l'affichage (nkLayout) selon la police chargée.
+     Bandeau Bateau : à la place de la photo et du titre. Accueil : au centre du bandeau, le logo Malibu en petit à gauche. */
+  var NK_SVG = '<svg class="nk-logo" viewBox="0 0 360 104" role="img" aria-label="Noskids Chouillou"><defs>' +
+    '<linearGradient id="nkW" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".38" stop-color="#e6eef2"/><stop offset=".5" stop-color="#8fa6b1"/><stop offset=".56" stop-color="#f4f8fa"/><stop offset=".8" stop-color="#c3d3da"/><stop offset="1" stop-color="#7e97a3"/></linearGradient>' +
+    '<linearGradient id="nkG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset=".38" stop-color="#f6cf55"/><stop offset=".5" stop-color="#a8730a"/><stop offset=".56" stop-color="#ffe08a"/><stop offset=".8" stop-color="#e2a923"/><stop offset="1" stop-color="#9a6a06"/></linearGradient>' +
+    '<filter id="nkRel" x="-10%" y="-15%" width="125%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="bl"/><feSpecularLighting in="bl" surfaceScale="3" specularConstant=".9" specularExponent="18" lighting-color="#ffffff" result="sp"><fePointLight x="-60" y="-80" z="120"/></feSpecularLighting><feComposite in="sp" in2="SourceAlpha" operator="in" result="spc"/><feComposite in="SourceGraphic" in2="spc" operator="arithmetic" k1="0" k2="1" k3=".55" k4="0" result="lit"/><feDropShadow in="lit" dx="1.6" dy="2.4" stdDeviation=".7" flood-color="#000" flood-opacity=".6"/></filter></defs>' +
+    '<g transform="skewX(-8)"><text class="nk-tt" x="34" y="62" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" fill="url(#nkW)" stroke="#06161d" stroke-width="1.2" paint-order="stroke" filter="url(#nkRel)"><tspan class="nk-n" font-size="68">N</tspan><tspan font-size="42" dx="-3">O</tspan><tspan font-size="42" fill="url(#nkG)">SKI</tspan><tspan font-size="42">DS</tspan></text>' +
+    '<path class="nk-trace" fill="none" stroke="#14b5c8" stroke-width="1.2" stroke-linecap="round" opacity=".85"/><g class="nk-buoys"></g><line class="nk-r1" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/><line class="nk-r2" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/><g class="nk-pal" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" fill="none"></g>' +
+    '<text class="nk-ch" x="80" y="88" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" font-size="17" fill="#9fe7f0" letter-spacing="3">CHOUILLOU</text><g class="nk-boat"></g></g></svg>';
+  function nkLayout(svg) {
+    if (!svg) return;
+    var NS = "http://www.w3.org/2000/svg", q = function (c) { return svg.querySelector("." + c); };
+    var tt = q("nk-tt"), tN = q("nk-n"), ch = q("nk-ch"), b = tt.getBBox(), nb = tN.getBBox(), x2 = b.x + b.width - 2;
+    if (!b.width) return;
+    ch.setAttribute("x", 0); var cw = ch.getComputedTextLength(), x0 = x2 - cw; ch.setAttribute("x", x0);
+    var cb = ch.getBBox(), yr = cb.y + cb.height * 0.55;
+    var base = Number(tt.getAttribute("y")), fs = 68, top = base - fs * 0.70, L = nb.x + fs * 0.05, R = nb.x + nb.width - fs * 0.07;
+    var B = [[L + 3, base - 3], [L + 3, top + 3], [R - 3, base - 3], [R - 3, top + 3]], o = 5, bz = q("nk-buoys"); bz.innerHTML = "";
+    B.forEach(function (p) { var c = document.createElementNS(NS, "circle"); c.setAttribute("cx", p[0]); c.setAttribute("cy", p[1]); c.setAttribute("r", 3.2); c.setAttribute("fill", "#f0a46a"); c.setAttribute("opacity", ".85"); bz.appendChild(c); });
+    var P = [[L - 26, (top + base) / 2], [B[0][0], base + o], [B[1][0], top - o], [B[2][0], base + o], [B[3][0], top - o]], d = "M" + P[0][0] + " " + P[0][1];
+    for (var i = 0; i < P.length - 1; i++) { var k = Math.max(10, (P[i + 1][0] - P[i][0]) * 0.55); d += " C" + (P[i][0] + k) + " " + P[i][1] + " " + (P[i + 1][0] - k) + " " + P[i + 1][1] + " " + P[i + 1][0] + " " + P[i + 1][1]; }
+    q("nk-trace").setAttribute("d", d);
+    var pa = x0 - 26, r1 = q("nk-r1"), r2 = q("nk-r2"), bx = x2 + 26, by = yr + 4;
+    r1.setAttribute("x1", pa + 6); r1.setAttribute("y1", yr); r1.setAttribute("x2", x0 - 5); r1.setAttribute("y2", yr);
+    r2.setAttribute("x1", cb.x + cb.width + 5); r2.setAttribute("y1", yr); r2.setAttribute("x2", bx + 2.5); r2.setAttribute("y2", yr);
+    q("nk-pal").innerHTML = '<line x1="' + pa + '" y1="' + (yr - 7) + '" x2="' + pa + '" y2="' + (yr + 7) + '"/><path d="M' + pa + " " + (yr - 6) + " L" + (pa + 6) + " " + yr + " L" + pa + " " + (yr + 6) + '"/>';
+    var s = "";
+    s+='<path d="M'+(bx+2)+' '+(by-6)+' L'+(bx+46)+' '+(by-7)+' Q'+(bx+66)+' '+(by-6.5)+' '+(bx+82)+' '+(by-4)+' L'+(bx+66)+' '+(by+2)+' Q'+(bx+32)+' '+(by+3.6)+' '+(bx+6)+' '+(by+3)+' L'+(bx+2)+' '+(by+1)+' Z" fill="#ffffff"/>';
+    s+='<path d="M'+(bx-4)+' '+(by+1.4)+' L'+(bx+4)+' '+(by+1.4)+'" stroke="#d9e7ee" stroke-width="1.8" stroke-linecap="round"/>';
+    s+='<path d="M'+(bx+6)+' '+(by-3)+' L'+(bx+58)+' '+(by-4.2)+' Q'+(bx+66)+' '+(by-4)+' '+(bx+72)+' '+(by-4.6)+' Q'+(bx+64)+' '+(by-2.2)+' '+(bx+56)+' '+(by-1.2)+' L'+(bx+8)+' '+(by-0.6)+' Z" fill="#3b5561"/>';
+    s+='<path d="M'+(bx+10)+' '+(by+0.8)+' L'+(bx+54)+' '+(by+0.2)+'" stroke="#f4c542" stroke-width="1.2" stroke-linecap="round"/>';
+    s+='<path d="M'+(bx+42)+' '+(by-7)+' L'+(bx+50)+' '+(by-12.5)+' L'+(bx+57)+' '+(by-12)+' L'+(bx+63)+' '+(by-6.4)+' Z" fill="#9fe7f0" stroke="#ffffff" stroke-width="0.9" stroke-linejoin="round"/>';
+    s+='<path d="M'+(bx+19)+' '+(by-6.6)+' L'+(bx+28)+' '+(by-22)+' M'+(bx+25)+' '+(by-6.8)+' L'+(bx+34)+' '+(by-22)+'" stroke="#d9e7ee" stroke-width="2" stroke-linecap="round"/>';
+    s+='<path d="M'+(bx+18)+' '+(by-23)+' Q'+(bx+20)+' '+(by-26.5)+' '+(bx+30)+' '+(by-26.5)+' L'+(bx+42)+' '+(by-26)+' Q'+(bx+46)+' '+(by-25.5)+' '+(bx+44)+' '+(by-22.5)+' L'+(bx+20)+' '+(by-22)+' Z" fill="#d9e7ee"/>';
+    s+='<path d="M'+(bx-22)+' '+(by+7)+' Q'+(bx+30)+' '+(by+10)+' '+(bx+80)+' '+(by+5)+'" fill="none" stroke="#14b5c8" stroke-width="1.4" stroke-linecap="round" opacity=".75"/>';
+    q("nk-boat").innerHTML = s;
+    svg.setAttribute("viewBox", "0 0 " + Math.max(360, bx + 86) + " 104");
+  }
   var HEADS = {
-    accueil: { t: "", v: '<span class="head-deco" aria-hidden="true">' + HEAD_DECO + '</span><span class="logo img-logo" role="img" aria-label="Malibu"></span>' },
+    accueil: { t: "", v: '<span class="head-deco" aria-hidden="true">' + HEAD_DECO + '</span><span class="logo logo-sm img-logo" role="img" aria-label="Malibu"></span><span class="nk-wrap nk-home">' + NK_SVG + "</span>" },
     sortie: { t: "Session", v: '<span class="head-deco" aria-hidden="true">' + SES_DECO + "</span>", th: '<span class="thumb img-ski" aria-hidden="true"></span>' },
     essence: { t: "Essence", v: '<span class="head-deco" aria-hidden="true">' + ESS_DECO + '</span><span class="hv img-pump" aria-hidden="true"></span>' },
     activite: { t: "Activité", v: '<span class="head-deco" aria-hidden="true">' + ACT_DECO + '</span><span class="hv" style="background:#1f2a33;color:#d6dade" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg></span>' },
@@ -2245,12 +2505,13 @@
     pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + WHEEL_ICON + "</span>" },
     journal: { t: "Journal - Notes", v: '<span class="hv" style="background:#ffffff;color:#1e4d6b" aria-hidden="true">' + QI.journal + "</span>" },
     annuaire: { t: "Urgence - Dépannage", v: '<span class="hv urg-ic" aria-hidden="true">' + URG_ICON + "</span>" },
-    bateau: { t: "Bateau", v: '<span class="thumb img-boat" style="background-position:45% 60%" aria-hidden="true"></span>' }
+    bateau: { t: "", v: '<span class="nk-wrap">' + NK_SVG + "</span>" } // le logo suffit : pas de titre « Bateau »
   };
   function renderHead() {
     var key = tab === "activite" ? (finView === "dep" ? "depenses" : finView === "balance" ? "balance" : "activite") : tab, H = HEADS[key];
     document.getElementById("appHead").className = "app-head h-" + (key === "activite" ? "bilan" : key === "balance" ? "depenses" : key);
     document.getElementById("hVis").innerHTML = H.v || "";
+    var nks = document.querySelector("#hVis .nk-logo"); if (nks) { nkLayout(nks); if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { nkLayout(nks); }); }
     document.getElementById("hTitle").textContent = H.t;
     // Session sans chrono en cours : bouton « Saisie manuelle » en haut à droite, à la place de la vignette
     document.getElementById("hThumb").innerHTML = key === "sortie" && !sortie.active ? '<button class="hd-btn" id="manOpen" aria-pressed="' + !!view.manuel + '">Saisie manuelle</button>' : (H.th || "");
@@ -2287,6 +2548,8 @@
     if (tr) { ui.sesOpen = ui.sesOpen === tr.dataset.ses ? "" : tr.dataset.ses; return render(); } // liste des sessions : ouvrir / fermer le détail
     var b = e.target.closest("button"); if (!b || b.disabled || b.matches(":disabled")) return;
     var ds = b.dataset, k, t;
+    if (ds.resedit) { ui.resEdit = ui.resEdit === ds.resedit ? "" : ds.resedit; return render(); }
+    if ((ds.rstar || ds.eau) && resInput(b)) return;
     if (ds.go) return goTab(ds.go);
     if (ds.demo) return setDemo(ds.demo === "1");
     if (ds.essyear) { essYear = ds.essyear; return render(); }
@@ -2431,7 +2694,9 @@
         engineMin: Math.round(R.eMin * 10) / 10, famMin: { YC: Math.round(R.b.YC * 10) / 10, OC: Math.round(R.b.OC * 10) / 10 }, factMin: { YC: Math.round(R.fact.YC), OC: Math.round(R.fact.OC) },
         minutes: perPid, commun: Math.round((R.libre + R.balade) * 10) / 10, meca: Math.round(R.meca * 10) / 10,
         participants: sortie.participants.map(function (p) { return { pid: p.pid, role: p.role, host: p.host, fact: p.fact }; }),
-        tours: sortie.tours.map(function (t) { return { pid: t.pid, act: t.act, min: Math.round(tourMs(t, Date.now()) / 600) / 100, pauses: t.pauses, laps: t.laps, speed: t.speed, passes: t.passes, pilote: t.pilote, orig: t.orig }; }) });
+        tours: sortie.tours.map(function (t) { return { pid: t.pid, act: t.act, min: Math.round(tourMs(t, Date.now()) / 600) / 100, pauses: t.pauses, laps: t.laps, speed: t.speed, passes: t.passes, pilote: t.pilote, orig: t.orig, gps: gpsRes(t.gps), pg: t.pg && t.pg.length ? t.pg : undefined, res: t.res && (t.res.v || t.res.c || t.res.b != null || t.res.note) ? t.res : undefined }; }),
+        eau: sortie.eau || undefined,
+        vitesse: gpsRes(sortie.gps), vitesses: gpsBySkier(sortie.tours) });
       ["YC", "OC"].forEach(function (f) { var mn = Math.round(R.fact[f]); if (mn > 0) depenses.unshift({ id: uid(), d: todayFr(), lib: "Invités facturés (" + mn + " min)", cat: "Recette invités", m: -mn * SPEC.tarif, payeur: f, regle: f }); });
       if (sortie.plein && bidons.length) { applyPrelevement(planPrelevement(sortie.bidonsPlein, sortie.pleinF), sortie.pleinF, "pour le plein", true); lastPlein = todayFr(); msg = "Session et plein enregistrés."; }
       lastLevel = sortie.plein ? 16 : sortie.jaugeFin; lastLevelDate = todayFr();
@@ -2442,10 +2707,11 @@
     if (ds.grat) { gap.rat = ds.grat; return render(); }
     if (b.id === "gapSave") {
       var gpp = findGaps().filter(function (x) { return x.key === gap.key; })[0]; gap.open = false;
-      if (gap.rat === "search") { if (ETAT.gapsRecherche.indexOf(gap.key) < 0) ETAT.gapsRecherche.push(gap.key); toast(savedMsg("Trou noté « à rechercher ».")); return render(); }
-      var c1 = parseNum(document.getElementById("gC1").value), c2 = parseNum(document.getElementById("gC2").value), mm = parseNum(document.getElementById("gM").value) || Math.round((c2 - c1) * 60), fm = { YC: 0, OC: 0 };
-      fm[gap.rat] = mm;
-      sessionsArr.push({ id: uid(), mode: "rattrapage", bateau: gpp ? (gpp.from.bateau || "") : SPEC.devise, date: document.getElementById("gD").value || todayIso(), compteurDeb: c1, compteurFin: c2, engineMin: mm, famMin: fm, minutes: {}, commun: 0, meca: 0 });
+      if (!gpp) { toast("Ce trou a déjà été traité."); return render(); }
+      if (gap.rat === "search") { gpp.from.gapRech = gpp.to.id; gap.rat = "auto"; toast(savedMsg("Trou noté « à rechercher ».")); return render(); }
+      var c1 = parseNum(document.getElementById("gC1").value), c2 = parseNum(document.getElementById("gC2").value), mm = parseNum(document.getElementById("gM").value) || Math.round((c2 - c1) * 60), gf = gapFam(gpp.from), fm = { YC: Math.round(mm * gf.YC * 10) / 10, OC: Math.round(mm * gf.OC * 10) / 10 };
+      gpp.from.gapOk = gpp.to.id; delete gpp.from.gapRech; gap.rat = "auto";
+      sessionsArr.push({ id: uid(), mode: "rattrapage", gapKey: gpp.key, bateau: gpp.from.bateau || "", date: document.getElementById("gD").value || dkey(gpp.from), compteurDeb: c1, compteurFin: c2, engineMin: mm, famMin: fm, minutes: {}, commun: 0, meca: 0 });
       toast(savedMsg("Session rattrapée enregistrée.")); return render();
     }
     if (ds.ev === "achat" || ds.ev === "mise") { view.essence = ds.ev; return render(); }
@@ -2459,7 +2725,7 @@
     if (b.id === "saveAchat") {
       achatForm.L = parseNum(document.getElementById("aL").value); achatForm.P = parseNum(document.getElementById("aP").value);
       if (achatForm.L <= 0 || achatForm.P <= 0) return toast("Indiquez les litres et le prix."); if (!achatForm.f) return toast("Indiquez la famille qui a payé.");
-      if (!bidons.length) return commitAchat();
+      if (!bidons.length || achatForm.passe) return commitAchat();
       achatForm.step = "check"; achatForm.tfOpen = false; achatForm.tf = achatForm.f; achatForm.tn = Math.max(achatNeed(), 1); return render();
     }
     if (b.id === "achYes") { achatForm.tfOpen = true; return render(); }
@@ -2467,6 +2733,13 @@
     if (b.id === "achBack") { achatForm.step = null; return render(); }
     if (ds.tf) { achatForm.tf = ds.tf; return render(); }
     if (ds.tnstep) { achatForm.tn = Math.max(Math.max(achatNeed(), 1), Math.min(bidons.length, achatForm.tn + Number(ds.tnstep))); return render(); }
+    if (b.id === "resetGo") {
+      if (!ui.resetAsk) { ui.resetAsk = true; return render(); } // deuxième appui pour confirmer
+      ui.resetAsk = false; var rn = bidons.length, rl = stockL();
+      bidons = []; lastLevel = 0; lastLevelDate = "remise à zéro du " + todayFr(); startJauge = 0;
+      moves.unshift({ type: "reset", at: stamp(), date: todayIso(), d: todayFr(), t: "Remise à zéro : réservoir vide, stock de bidons vidé", v: rn + " bidon(s) retiré(s) · " + int0.format(rl) + " L", who: (person(CONF.moi) || {}).name || "" });
+      save(2); toast(savedMsg("Remise à zéro faite : réservoir vide, stock vidé.")); return render();
+    }
     if (b.id === "corrOpen") { view.essence = "corr"; corrForm.sel = {}; corrForm.ach = ""; corrForm.motif = "erreur"; return render(); }
     if (ds.cach) { corrForm.ach = corrForm.ach === ds.cach ? "" : ds.cach; return render(); }
     if (b.id === "extSave") {
@@ -2481,7 +2754,18 @@
     if (ds.cpick) { corrForm.sel[ds.cpick] = !corrForm.sel[ds.cpick]; corrForm.qty = null; return render(); }
     if (ds.cunit) { corrForm.unit = ds.cunit; corrForm.qty = null; return render(); }
     if (ds.cqstep) { var nsel = corrSel().length, q0 = corrForm.qty != null ? corrForm.qty : nsel; corrForm.qty = Math.max(0.5, Math.min(nsel, q0 + Number(ds.cqstep))); return render(); }
-    if (ds.cmotif) { corrForm.motif = ds.cmotif; return render(); }
+    if (ds.cmotif) { corrForm.motif = ds.cmotif; corrForm.vf = ""; corrForm.vfL = null; return render(); }
+    if (ds.cvf) { corrForm.vf = corrForm.vf === ds.cvf ? "" : ds.cvf; corrForm.vfL = null; return render(); }
+    if (b.id === "vfSave") {
+      var vm = moves.filter(function (x) { return x.id === corrForm.vf && x.type === "verse" && !x.annule; })[0]; if (!vm) return toast("Choisissez le versement à annuler.");
+      var vL0 = Number(vm.litres) || 0, vi = document.getElementById("vfL"), vq = Math.max(0, Math.min(vL0, vi ? parseNum(vi.value) : vL0)); if (!(vq > 0)) return toast("Indiquez les litres à retirer.");
+      var vk = vL0 > 0 ? (vL0 - vq) / vL0 : 0;
+      ["YC", "OC"].forEach(function (f) { if (vm.paye) vm.paye[f] = Math.round((Number(vm.paye[f]) || 0) * vk * 100) / 100; });
+      vm.cout = Math.round((Number(vm.cout) || 0) * vk * 100) / 100; vm.litres = Math.round((vL0 - vq) * 10) / 10;
+      if (vm.litres <= 0.05) vm.annule = todayFr(); else vm.corrige = todayFr();
+      moves.unshift({ type: "vfictif", ref: vm.id, at: stamp(), date: todayIso(), d: todayFr(), t: "Versement fictif annulé", v: "− " + int0.format(vq) + " L", who: "versement du " + (vm.d || isoToFr(vm.date)) });
+      view.essence = null; corrForm.vf = ""; corrForm.vfL = null; save(2); toast(savedMsg("Versement corrigé : " + int0.format(vq) + " L retirés de la balance essence.")); return render();
+    }
     if (ds.cusage) { corrForm.usage = ds.cusage; return render(); }
     if (ds.caff) { corrForm.aff = ds.caff; return render(); }
     if (b.id === "corrSave") {
@@ -2532,7 +2816,7 @@
     if (b.id === "dCancel") { view.dep = false; return render(); }
     if (ds.dpay) { depForm.payeur = ds.dpay; return render(); }
     if (ds.r) { depForm.regle = ds.r; return render(); }
-    if (b.id === "dSave") { var m = parseNum(document.getElementById("dM").value); if (!m) return toast("Indiquez un montant."); depenses.unshift({ d: todayFr(), lib: document.getElementById("dLib").value || "Dépense", cat: depForm.cat, m: m, payeur: depForm.payeur, regle: depForm.regle, pct: depForm.pct, isNew: true }); view.dep = false; save(1); toast(savedMsg("Dépense enregistrée.")); return render(); }
+    if (b.id === "dSave") { var m = parseNum(document.getElementById("dM").value); if (!m) return toast("Indiquez un montant."); if (depForm.cat === "Essence") return toast("L’essence se saisit dans l’onglet Essence (achat de bidons), pour que la balance reste juste."); depenses.unshift({ d: todayFr(), lib: document.getElementById("dLib").value || "Dépense", cat: depForm.cat, m: m, payeur: depForm.payeur, regle: depForm.regle, pct: depForm.pct, isNew: true }); view.dep = false; save(1); toast(savedMsg("Dépense enregistrée.")); return render(); }
     if (ds.year) { bilanYear = ds.year; bilanYearUser = true; return render(); }
     if (ds.boat) { bilanBoat = ds.boat; bilanYearUser = false; return render(); }
     if (b.id === "cfSave") {
@@ -2567,6 +2851,7 @@
   });
   screen.addEventListener("change", function (e) {
     var el = e.target;
+    if (el.dataset.res && resInput(el)) return;
     if (el.dataset.f && el.tagName === "SELECT") { var t = findTour(Number(el.dataset.id)); t[el.dataset.f] = el.value; if (el.dataset.f === "act") { t.speed = ""; t.passes = ""; } save(1); return render(); }
     if (el.dataset.f && el.tagName === "INPUT") { save(1); return; }
     if (el.dataset.spec) { save(1); toast("Fiche technique mise à jour."); return; }
@@ -2685,6 +2970,7 @@
     startJauge = lastLevel; // la jauge de départ part du niveau estimé (réservoir vide après l'hivernage)
   })();
   if (CONF.moi) { startPilote = CONF.moi; corrForm.who = CONF.moi; }
+  gpsAsk(); // autorisation du GPS demandée dès le lancement (vitesse du bateau pendant les sessions)
   window.addEventListener("online", function () { updateNet(); Sync.run(); });
   window.addEventListener("offline", updateNet);
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") Sync.run(); });

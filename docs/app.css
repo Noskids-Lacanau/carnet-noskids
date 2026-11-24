@@ -1002,3 +1002,84 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .stepper button:disabled { opacity: .35; cursor: default; }#bigView.rot .big-card { grid-template-areas: "id acts" "tour acts" "grid acts" "sk cl"; }
 #bigView.rot .big-close { align-self: center; justify-self: end; }
 #bigView.rot .big-tour { font-size: min(22vw, 14vh); }
+/* v1.9.4 : grand affichage, vitesses GPS alignées sous le nom du skieur, boutons remontés, chrono centré, passages de slalom */
+.big-gps { display: grid; grid-template-columns: auto auto; justify-content: start; column-gap: 8px; row-gap: 1px; margin-top: 4px; }
+.big-gps .bg-k { font: 500 clamp(14px, 3.6vw, 20px)/1.2 var(--f-body); color: #d9e7ee; white-space: nowrap; }
+.big-gps .bg-v { font: 700 clamp(14px, 3.6vw, 20px)/1.2 var(--f-body); color: #6fe0b8; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
+.big-card { grid-template-areas: "id acts" "tour tour" "grid grid" "sk sk" "cl cl"; }
+.big-acts { align-self: start; align-content: start; }
+.big-tour { justify-self: center; align-self: start; }
+/* Passages : sur la ligne du chrono, en haut à droite (même hauteur que le haut du chrono), centrés sous les boutons de session */
+.big-pas { grid-area: tour; grid-column: 2 / 3; display: grid; justify-items: center; align-content: start; gap: 8px; align-self: start; z-index: 1; }
+.big-pas .ba-pas { display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px 8px 14px; border-radius: 999px; border: 2px solid #ff6b5e; background: rgba(255, 107, 94, .12); color: #ffd9d5; font: 700 16px/1.1 var(--f-body); cursor: pointer; touch-action: manipulation; }
+.big-pas .ba-pas:disabled { opacity: .35; cursor: default; }
+.big-pas .ba-pas.on { background: #c62828; border-color: #ffb3ab; color: #fff; }
+.big-pas .bp-ic { width: 22px; height: 22px; fill: none; stroke: #ff5a4f; stroke-width: 2.2; stroke-linecap: round; flex: none; }
+.big-pas .ba-pas.on .bp-ic { stroke: #fff; }
+.big-pas .bpl { font-variant-numeric: tabular-nums; font-weight: 600; }
+.big-pas-l { display: grid; grid-template-columns: repeat(2, auto); justify-content: center; gap: 2px 16px; }
+.big-pas .bp { all: unset; font: 500 13px/1.3 var(--f-body); color: #d9e7ee; white-space: nowrap; font-variant-numeric: tabular-nums; cursor: pointer; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+.big-pas .bp-none { grid-column: 1 / -1; font-size: 12px; color: #9fb6c2; }
+@media (orientation: landscape) and (max-height: 600px) { .big-acts { gap: 8px 10px; } .big-acts button { min-height: 44px; padding: 6px 10px; font-size: 15px; } }
+#bigView.rot .big-gps .bg-k, #bigView.rot .big-gps .bg-v { font-size: min(4vw, 2.8vh); }
+/* v1.9.4 : téléphone couché de faible hauteur : tout tient dans l'écran (chrono toujours le plus gros élément) */
+@media (orientation: landscape) and (max-height: 440px) {
+  .big-card { gap: 4px; row-gap: 4px; padding: 8px 16px; }
+  .big-who { font-size: 30px; }
+  .big-act { font-size: 12px; }
+  .big-gps { margin-top: 2px; }
+  .big-gps .bg-k, .big-gps .bg-v { font-size: 15px; }
+  .big-tour { font-size: min(26vh, 110px); }
+  .big-grid > div { padding: 3px 8px; }
+  .big-grid b { font-size: 17px; }
+  .big-grid .big-s { display: none; }
+  .big-acts { gap: 6px 8px; }
+  .big-acts button { min-height: 36px; padding: 4px 8px; font-size: 14px; border-width: 2px; }
+  .big-pas { gap: 5px; }
+  .big-pas .ba-pas { padding: 4px 14px 4px 10px; font-size: 14px; }
+  .big-pas .bp-ic { width: 18px; height: 18px; }
+  .big-pas .bp { font-size: 12px; }
+  .big-sk { padding-top: 3px; }
+  .big-sk-l { padding: 2px; }
+  .bsk { font-size: 11px; gap: 2px; }
+  .bsk-av { width: 32px; height: 32px; font-size: 15px; }
+}
+@media (orientation: landscape) and (max-height: 370px) { .big-tour { font-size: 21vh; } .big-who { font-size: 24px; } .big-gps .bg-k, .big-gps .bg-v { font-size: 13px; } .big-acts button { min-height: 32px; font-size: 13px; } }
+/* v1.9.4 : résultats de slalom (meilleure vitesse, corde, bouées, note) et plan d'eau */
+.res-h { margin-top: 10px; }
+.res-g { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.res-s { display: grid; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+.res-s select { width: 100%; }
+.res-st { display: flex; gap: 2px; }
+.res-st .st { border: 0; background: none; padding: 0 2px; font-size: 28px; line-height: 1; color: var(--line); cursor: pointer; }
+.res-st .st.on { color: #f0a92a; }
+.res-eau { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.res-eau .eau { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: 500 13px/1.2 var(--f-body); text-align: left; cursor: pointer; }
+.res-eau .eau svg { width: 34px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.res-eau .eau.on { border: 2px solid var(--accent); background: var(--accent-soft); color: var(--accent); }
+.res-box { display: grid; gap: 4px; margin: 6px 0 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2, rgba(0, 0, 0, .03)); }
+.res-who { font-weight: 600; margin-top: 6px; }
+/* écran horizontal : encart des résultats après « Fin skieur » */
+.big-res { grid-template-columns: 1fr; grid-template-areas: none; gap: 8px; }
+.big-res-h { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.big-res .res-g { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.big-res .res-s { color: #9fb6c2; font-size: 13px; }
+.big-res .res-s select { background: rgba(255, 255, 255, .08); color: #fff; border: 1px solid rgba(255, 255, 255, .25); border-radius: 10px; padding: 8px; font: 700 17px var(--f-body); }
+.big-res .res-s select option { color: #0f2a36; }
+.big-res .res-st .st { font-size: 34px; color: rgba(255, 255, 255, .25); }
+.big-res .res-st .st.on { color: #ffd84d; }
+.big-res .res-h2 { color: #9fb6c2; font-size: 13px; }
+.big-res .res-eau { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.big-res .res-eau .eau { background: rgba(255, 255, 255, .06); border-color: rgba(255, 255, 255, .2); color: #d9e7ee; }
+.big-res .res-eau .eau.on { background: rgba(111, 224, 184, .16); border-color: #6fe0b8; color: #b9f3dd; }
+.big-res-a { display: flex; justify-content: flex-end; gap: 12px; }
+.big-res-a button { border-radius: 999px; padding: 8px 22px; font: 700 16px var(--f-body); border: 2px solid; cursor: pointer; }
+.big-res-a .ba-later { background: none; border-color: rgba(255, 255, 255, .3); color: #d9e7ee; }
+.big-res-a .ba-ok { background: #1f7a5a; border-color: #6fe0b8; color: #fff; }
+@media (orientation: landscape) and (max-height: 440px) { .big-res { gap: 5px; } .big-res .res-s select { padding: 5px 8px; font-size: 15px; } .big-res .res-st .st { font-size: 28px; } .big-res .res-eau .eau { padding: 4px 6px; font-size: 12px; } .big-res-a button { padding: 5px 18px; font-size: 14px; } }
+/* v1.9.4 : logo Noskids Chouillou dans les bandeaux */
+.nk-wrap { flex: none; display: block; position: relative; }
+.nk-wrap .nk-logo { display: block; height: 46px; width: auto; aspect-ratio: 400 / 104; }
+.nk-home { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; }
+.nk-home .nk-logo { height: 52px; }
+.app-head .logo.logo-sm { width: 62px; height: 18px; position: relative; z-index: 1; top: 17px; left: -6px; } /* en bas à gauche, sur la partie sombre du bandeau, hors des vagues */

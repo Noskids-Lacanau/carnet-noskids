@@ -1,5 +1,16 @@
 # Journal des versions
 
+## 1.9.4 — 2026-11-24
+
+- Retour arrière hiérarchique : sous-menu → menu → Accueil, plus de boucle ; à l'Accueil, le retour ne fait rien
+- Vitesse GPS du bateau pendant les sessions, par skieur (moyenne et max), passages de slalom chronométrés
+- Versement fictif : correction d'un versement d'essence qui n'a pas eu lieu
+- Plus de dépense Essence dans le menu Dépenses
+- Remise à zéro (réservoir vide, stock vidé), la balance essence repart de là ; achat de la saison passée
+- Trous de compteur notés sur la session (ne reviennent plus), attribués à la session d'avant
+- Résultats de slalom par skieur (meilleure vitesse, corde, bouées, note 1 à 4 étoiles) et état du plan d'eau, saisis pendant le tour, en fin de skieur, à la clôture ou plus tard
+- Nouveau logo Noskids Chouillou dans les bandeaux de l'accueil et du bateau
+
 ## 1.9.3 — 2026-11-24
 
 - Bidons pas pleins coloriés au prorata ; versement limité au stock (pas de bidon négatif)
