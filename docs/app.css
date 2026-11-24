@@ -957,3 +957,9 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .bal-amt input { width: 110px; text-align: right; font: 600 20px var(--f-mono); color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px; }
 .bal-how p { margin: 6px 0; line-height: 1.45; }
 .bal-s .bal-x { color: var(--accent); font-weight: 600; max-width: 190px; }
+
+/* v1.9.2 : frise de la balance, défilement au doigt */
+.bal-frise { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; margin: 0 -4px; padding: 0 4px; }
+.bal-frise svg { max-width: none; }
+.bal-fhint { text-align: right; margin: -2px 0 6px; font-size: 11.5px; }
+.bal-head .row h3 { margin: 0; }

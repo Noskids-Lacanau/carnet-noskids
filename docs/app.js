@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.1", SCHEMA = 1;
+  var APP_VERSION = "1.9.2", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -1060,10 +1060,78 @@
     var Bc = balance(), v = (Bc.net.YC - Bc.net.OC) / 2, nv = v + (dir === "OC" ? amt : -amt);
     return "Balance des comptes : " + balVTxt(v) + " → <b>" + balVTxt(nv) + "</b>";
   }
+  /* Frise « à régulariser » : versements (gouttes, couleur du payeur) et sessions (bleu Yann, rouge Olivier, mixte = partagée au temps, contour orange),
+     dans l'ordre chronologique depuis le dernier équilibrage ; litres consommés entre deux versements. */
+  function balFriseHtml(R) {
+    var col = { YC: "var(--yc)", OC: "var(--oc)" }, drop = "M0,-12 C5,-5 8,-1 8,3 A8,8 0 0 1 -8,3 C-8,-1 -5,-5 0,-12 Z";
+    var payer = function (m) { return (Number(m.paye.OC) || 0) > (Number(m.paye.YC) || 0) ? "OC" : "YC"; };
+    var famOf = function (x) { return x.tY >= 0.999 ? "YC" : x.tY <= 0.001 ? "OC" : "MIX"; };
+    var litF = function (v) { return (v >= 9.95 ? int0.format(v) : dec1.format(v)) + " L"; };
+    var ev = R.P.map(function (p) { return { k: p.k, o: 1, p: p }; }).concat(R.S.map(function (x) { return { k: x.k, o: 0, x: x }; }));
+    ev.sort(function (a, b) { return a.k < b.k ? -1 : a.k > b.k ? 1 : a.o - b.o; });
+    // au-delà de ~9 éléments, chaque élément garde 24 de large : la frise dépasse l'écran et se fait défiler au doigt
+    var n = ev.length, SLOT = 24, X0 = 84, W = Math.max(340, X0 + n * SLOT + 42), X1 = W - 42, slot = (X1 - X0) / Math.max(n, 1), w = Math.max(4, Math.min(18, slot - 3)), sc = Math.min(1, slot / 18), wide = W > 340;
+    ev.forEach(function (e, i) { e.cx = X0 + slot * (i + 0.5); });
+    var s = (wide ? '<div class="bal-frise" data-fx="1">' : "") + '<svg viewBox="0 0 ' + W + ' 150" width="' + (wide ? (W / 3.4).toFixed(1) : 100) + '%" role="img" aria-label="Frise : ' + R.P.length + " versement(s) et " + R.S.length + ' session(s) depuis le dernier équilibrage" style="display:block;margin:6px 0 2px">';
+    // litres consommés entre deux versements (et avant le premier, s'il y a déjà eu des sessions)
+    var cuts = [{ x: 66, i: -1 }].concat(ev.map(function (e, i) { return e.p ? { x: e.cx, i: i } : null; }).filter(Boolean)).concat([{ x: W - 14, i: n }]);
+    for (var c = 0; c < cuts.length - 1; c++) {
+      var L = 0; for (var j = cuts[c].i + 1; j < cuts[c + 1].i; j++) if (ev[j].x) L += ev[j].x.L || 0;
+      var a = cuts[c].x + (c ? 10 * sc : 0), b = cuts[c + 1].x - (c + 1 < cuts.length - 1 ? 10 * sc : 0);
+      if (L < 0.05 || b - a < 8) continue;
+      s += '<line x1="' + a + '" y1="34" x2="' + b + '" y2="34" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3"/>';
+      if (b - a >= 26) s += '<text x="' + ((a + b) / 2) + '" y="24" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">' + litF(L) + "</text>";
+    }
+    ev.forEach(function (e) { if (e.p) { var m = e.p.m, f = payer(m); s += '<path d="' + drop + '" transform="translate(' + e.cx + ',36) scale(' + sc + ')" fill="' + col[f] + '"><title>' + esc(keyFr(e.k)) + " · " + int0.format(Number(m.litres) || 0) + " L versés par " + FAM[f].s + (m.plein ? " (plein)" : "") + "</title></path>"; } });
+    var ah = W - 36, at = W - 6;
+    s += '<polygon points="64,58 ' + ah + ",58 " + ah + ",48 " + at + ",71 " + ah + ",94 " + ah + ',84 64,84 75,71" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>' +
+      '<polygon points="4,58 50,58 63,71 50,84 4,84 15,71" fill="var(--ok)"/>' +
+      '<text x="35" y="75.5" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--surface)" font-family="var(--f-display)">' + keyFr(R.start).slice(0, 5) + "</text>";
+    var lastLab = -99;
+    ev.forEach(function (e) {
+      if (!e.x) return;
+      var x = e.x, f = famOf(x), x0 = e.cx - w / 2, tip = "<title>" + esc(keyFr(x.k)) + " · " + Math.round(x.eMin) + " min · " + dec1.format(x.L || 0) + " L</title>";
+      if (f === "MIX") {
+        var wo = Math.round(w * (1 - x.tY) * 10) / 10;
+        s += '<g><rect x="' + x0 + '" y="63" width="' + wo + '" height="16" fill="var(--oc)"/><rect x="' + (x0 + wo) + '" y="63" width="' + (w - wo) + '" height="16" fill="var(--yc)"/>' +
+          '<rect x="' + x0 + '" y="63" width="' + w + '" height="16" rx="3" fill="none" stroke="var(--run)" stroke-width="2"/>' + tip + "</g>";
+        if (e.cx - lastLab >= 34) { s += '<text x="' + e.cx + '" y="104" text-anchor="middle" font-size="11" fill="var(--muted)">' + keyFr(x.k).slice(0, 5) + "</text>"; lastLab = e.cx; }
+      } else s += '<rect x="' + x0 + '" y="63" width="' + w + '" height="16" rx="3" fill="' + col[f] + '">' + tip + "</rect>";
+    });
+    if (!n) s += '<text x="190" y="75.5" text-anchor="middle" font-size="12" fill="var(--muted)">rien depuis</text>';
+    s += '<text x="4" y="122" font-size="11" fill="var(--muted)">Dernier équilibrage</text><text x="4" y="136" font-size="11" fill="var(--muted)">' + esc(R.label.indexOf("hivernage") === 0 ? "hivernage, réservoir vide" : "comptes à 0") + "</text>" +
+      '<text x="' + (W - 4) + '" y="122" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink)">Aujourd’hui</text><text x="' + (W - 4) + '" y="136" text-anchor="end" font-size="11" fill="var(--muted)">' + todayFr().slice(0, 5) + "</text></svg>" +
+      (wide ? '</div><div class="small muted bal-fhint">← Glisser la frise du doigt pour remonter le temps</div>' : "");
+    var dropIc = function (f) { return '<svg width="10" height="13" viewBox="-8 -12 16 23" style="vertical-align:-2px;margin-right:4px" aria-hidden="true"><path d="' + drop + '" fill="' + col[f] + '"/></svg>'; };
+    var h = '<div class="card bal-head"><div class="row"><h3>Balance essence</h3><span class="small muted">' + litF(R.litres) + " consommés</span></div>" +
+      '<div class="small muted">Depuis le dernier équilibrage : ' + keyFr(R.start) + " (" + esc(R.label) + ")</div>" + s +
+      '<div class="legend"><span>' + dropIc("YC") + "Versé par Yann</span><span>" + dropIc("OC") + 'Versé par Olivier</span><span><i style="display:inline-block;width:12px;height:9px;border:2px solid var(--run);border-radius:2px;margin-right:4px;vertical-align:-1px"></i>Session mixte</span></div>';
+    var nP = { YC: 0, OC: 0 }; R.P.forEach(function (p) { nP[payer(p.m)]++; });
+    h += '<div class="kpis" style="margin-top:10px">' + ["YC", "OC"].map(function (f) { var m = R.mis[f]; return '<div class="kpi"><span class="label">Versé · ' + FAM[f].s + '</span><span class="v" style="color:' + col[f] + '">' + int0.format(m.L) + ' <small>L</small></span><span class="s">' + nP[f] + " versement" + (nP[f] > 1 ? "s" : "") + " · " + eur.format(m.E) + "</span></div>"; }).join("") + "</div>";
+    // sessions mixtes : seules elles croisent l'essence d'une famille avec le temps de l'autre
+    var mix = R.S.filter(function (x) { return famOf(x) === "MIX"; }), solo = { YC: 0, OC: 0 }, T = { YC: 0, OC: 0 }, D = { YC: 0, OC: 0 }, LL = { YC: 0, OC: 0 };
+    R.S.forEach(function (x) { var f = famOf(x), t = x.fam.YC + x.fam.OC; if (f !== "MIX") solo[f] += t; T.YC += x.fam.YC; T.OC += x.fam.OC; D.YC += x.due.YC; D.OC += x.due.OC; LL.YC += (x.L || 0) * x.tY; LL.OC += (x.L || 0) * (1 - x.tY); });
+    h += '<div class="label" style="margin-top:12px">Sessions mixtes à régulariser</div>';
+    if (!mix.length) h += '<div class="small muted">Aucune session mixte' + (R.S.length ? " : chaque famille a navigué seule (" + Math.round(solo.YC) + " min Yann, " + Math.round(solo.OC) + " min Olivier)." : ".") + "</div>";
+    else h += '<table class="rtable"><thead><tr><th>Date</th><th style="color:var(--oc)">Olivier</th><th style="color:var(--yc)">Yann</th></tr></thead><tbody>' +
+      mix.map(function (x) { return "<tr><td>" + keyFr(x.k).slice(0, 5) + "</td><td>" + Math.round(x.fam.OC) + " min · " + dec1.format((x.L || 0) * (1 - x.tY)) + " L</td><td>" + Math.round(x.fam.YC) + " min · " + dec1.format((x.L || 0) * x.tY) + " L</td></tr>"; }).join("") +
+      (solo.YC + solo.OC > 0.5 ? '<tr><td class="muted">+ seuls</td><td class="muted">' + Math.round(solo.OC) + ' min</td><td class="muted">' + Math.round(solo.YC) + " min</td></tr>" : "") + "</tbody></table>";
+    // totaux depuis l'équilibrage : seul le croisement (essence payée par l'autre) donne lieu à l'ajustement
+    var net = R.yForO - R.oForY, oDoit = net > 0.005, yDoit = net < -0.005, ec = Math.abs(net);
+    var ecTd = function (neg) { return '<td style="color:var(' + (ec < 0.005 ? "--muted" : neg ? "--bad" : "--ok") + ')"><b>' + (ec < 0.005 ? "0,00 €" : (neg ? "− " : "+ ") + eur.format(ec)) + "</b></td>"; };
+    if (R.S.length) h += '<div class="label" style="margin-top:12px">Total depuis l’équilibrage</div><table class="rtable"><thead><tr><th></th><th style="color:var(--oc)">Olivier</th><th style="color:var(--yc)">Yann</th></tr></thead><tbody>' +
+      "<tr><td>Temps</td><td>" + Math.round(T.OC) + " min</td><td>" + Math.round(T.YC) + " min</td></tr>" +
+      "<tr><td>Consommé</td><td>" + eur.format(D.OC) + '<span class="sub">' + dec1.format(LL.OC) + " L</span></td><td>" + eur.format(D.YC) + '<span class="sub">' + dec1.format(LL.YC) + " L</span></td></tr>" +
+      "<tr><td>dont essence payée par l’autre</td><td>" + eur.format(R.yForO) + "</td><td>" + eur.format(R.oForY) + "</td></tr>" +
+      "<tr><td><b>Écart</b></td>" + ecTd(oDoit) + ecTd(yDoit) + "</tr></tbody></table>";
+    var bid = (SPEC.bidon || 20) * lastPrixL();
+    h += '<div class="alert' + (R.amount < 0.5 ? " ok" : "") + '"><b>' + balResultText(R) + "</b>" + (R.amount >= 0.5 ? "≈ " + dec1.format(R.amount / bid) + " bidon. " : "") + "Les comptes repartent à 0 une fois l’équilibrage validé (étape 4).</div></div>";
+    return h;
+  }
   function renderBalance() {
     var R = computeBalEss(), dot = function (f) { return famDot(f); }, h = '<button class="btn link" data-fin="bilan">← Retour à l’activité</button>';
     var endFr = R.end > R.start ? keyFr(R.end) : todayFr();
-    h += '<div class="card bal-head"><h3>Balance essence</h3><div class="small muted">Depuis le dernier équilibrage : ' + keyFr(R.start) + " (" + esc(R.label) + ")</div></div>";
+    h += balFriseHtml(R);
     // 1. essence mise dans le bateau
     var r0 = R.pool0.L.YC + R.pool0.L.OC, stY = 0, stO = 0;
     bidons.forEach(function (b) { if (b.f === "OC") stO += b.litres; else stY += b.litres; });
@@ -1722,6 +1790,8 @@
     computeYears();
     var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau };
     screen.innerHTML = map[tab]();
+    var fr = screen.querySelector(".bal-frise"); // frise de la balance : on garde la position de défilement, sinon on s'ouvre sur « Aujourd'hui »
+    if (fr) { fr.scrollLeft = ui.friseX != null ? ui.friseX : fr.scrollWidth; fr.addEventListener("scroll", function () { ui.friseX = fr.scrollLeft; }, { passive: true }); } else ui.friseX = null;
     setTimeout(function () { persistAll(); updateNet(); }, 0);
     var navTab = tab === "pilotes" || tab === "annuaire" ? "bateau" : tab === "journal" ? "accueil" : tab; // Pilotes et Annuaire sont des sous-menus de Bateau
     document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === navTab)); });
@@ -1757,7 +1827,7 @@
     if (!installed) return; // dans Safari, le geste retour existe déjà (il ferait doublon)
     var x0 = null, y0 = 0, side = 0, EDGE = 28;
     document.addEventListener("touchstart", function (e) {
-      if (e.touches.length !== 1) { x0 = null; return; }
+      if (e.touches.length !== 1 || (e.target.closest && e.target.closest(".bal-frise"))) { x0 = null; return; } // la frise de la balance se fait glisser : pas de retour
       var t = e.touches[0], w = window.innerWidth;
       side = t.clientX <= EDGE ? 1 : t.clientX >= w - EDGE ? -1 : 0;
       x0 = side ? t.clientX : null; y0 = t.clientY;

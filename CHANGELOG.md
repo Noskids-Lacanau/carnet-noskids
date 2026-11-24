@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 1.9.2 — 2026-11-24
+
+- Balance essence : frise depuis le dernier équilibrage (versements par payeur, sessions Yann / Olivier / mixtes, litres consommés), versé par famille, sessions mixtes, totaux et conclusion
+- Frise qui défile au doigt quand la période est longue, ouverte sur Aujourd'hui
+
 ## 1.9.1 — 2026-11-23
 
 - Nouvelle balance essence : équilibrage depuis le dernier équilibrage (départ hivernage 23/11/2026, réservoir vide) ; consommation entre deux pleins, sinon baisse de jauge, sinon temps moteur ; réservoir suivi par payeur ; passagers non comptés ; ajustement modifiable ajouté à la balance des comptes
