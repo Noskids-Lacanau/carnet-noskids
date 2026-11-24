@@ -1083,3 +1083,54 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .nk-home { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 1; }
 .nk-home .nk-logo { height: 52px; }
 .app-head .logo.logo-sm { width: 62px; height: 18px; position: relative; z-index: 1; top: 17px; left: -6px; } /* en bas à gauche, sur la partie sombre du bandeau, hors des vagues */
+
+/* v1.9.5 : grand affichage en trois lignes (haut : skieur, vignettes, boutons ; milieu : plan d'eau, chrono, passages ; bas : infos et Fermer) */
+.big-card.bv { display: flex; flex-direction: column; gap: 8px; }
+.bv-top { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
+.bv-top .big-id { flex: 0 1 auto; min-width: 0; }
+.bv-top .big-acts { flex: none; margin-left: auto; align-self: start; grid-template-columns: repeat(2, minmax(110px, 1fr)); gap: 10px; }
+.bv-top .big-acts button { min-height: 50px; padding: 6px 10px; font-size: 16px; border-width: 3px; }
+.bv-sk { flex: 1 1 0; min-width: 0; align-self: center; border-top: 0; padding-top: 0; justify-content: center; }
+.bv-sk .big-sk-l { gap: 10px; }
+.bv-sk .bsk { min-width: 50px; font-size: 12px; }
+.bv-sk .bsk-av { width: 42px; height: 42px; font-size: 19px; }
+.big-actb { all: unset; justify-self: start; cursor: pointer; font: 600 15px/1.3 var(--f-body); color: #9fe7f0; border-bottom: 1px dashed rgba(159, 231, 240, .6); touch-action: manipulation; }
+.big-actl { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0; }
+.big-actl .bal-a { border-radius: 999px; padding: 5px 12px; border: 2px solid #14b5c8; background: rgba(20, 181, 200, .12); color: #9fe7f0; font: 700 14px/1.1 var(--f-body); cursor: pointer; touch-action: manipulation; }
+.big-actl .bal-a.on { background: #14b5c8; color: #06161d; }
+.bv-mid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: start; gap: 10px; margin-top: 6px; }
+.bv-mid .big-tour { grid-area: auto; justify-self: center; }
+.bv-mid .big-pas { grid-area: auto; justify-self: center; margin-top: 16px; }
+.bv-eau { justify-self: start; display: grid; gap: 4px; margin-top: 10px; }
+.bv-eau .label { color: #9fb6c2; }
+.bv-eau-l { display: grid; grid-template-columns: repeat(2, 46px); gap: 6px; }
+.bv-eau .eau { width: 46px; height: 34px; padding: 0; display: grid; place-items: center; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .06); color: #d9e7ee; cursor: pointer; touch-action: manipulation; }
+.bv-eau .eau svg { width: 30px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.bv-eau .eau.on { background: rgba(111, 224, 184, .18); border: 2px solid #6fe0b8; color: #b9f3dd; }
+.bv-eau-t { font-size: 12px; color: #9fb6c2; }
+.bv-bot { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bv-bot .big-close { grid-area: auto; align-self: center; justify-self: end; }
+#bigView.rot .bv-bot { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+#bigView.rot .bv-top .big-acts button { min-height: min(12vw, 8vh); font-size: min(4vw, 2.6vh); }
+#bigView.rot .bv-sk .bsk-av { width: min(11vw, 6.5vh); height: min(11vw, 6.5vh); }
+@media (orientation: landscape) and (max-height: 440px) {
+  .bv-top .big-acts button { min-height: 44px; font-size: 14px; border-width: 2px; }
+  .bv-sk .bsk-av { width: 36px; height: 36px; font-size: 16px; }
+  .bv-mid { margin-top: 2px; }
+  .bv-mid .big-pas { margin-top: 10px; }
+  .bv-eau { margin-top: 4px; }
+  .bv-eau .eau { width: 40px; height: 28px; }
+  .bv-eau-l { grid-template-columns: repeat(2, 40px); }
+}
+/* v1.9.5 : clôture, photo du compteur en petite vignette */
+.meter-card.clo-photo { display: flex; align-items: center; gap: 12px; padding-top: 10px; padding-bottom: 10px; }
+.cpt-photo.cpt-mini { width: 64px; height: 48px; max-width: none; object-fit: cover; border-radius: 8px; }
+.clo-ph-t { font-weight: 600; }
+.clo-photo .photo-btn { margin-left: auto; }
+#bigView.rot .big-card.bv { gap: 4px; }
+#bigView.rot .bv-mid { margin-top: 0; }
+#bigView.rot .bv-bot > div { padding: 4px 10px; }
+.big-actl .bal-a { padding: 3px 10px; font-size: 13px; }
+.big-card.bv { align-items: stretch; }
+@media (orientation: landscape) and (max-height: 440px) { .bv-mid .big-tour { font-size: min(30vh, 124px); } }
+@media (orientation: landscape) and (max-height: 370px) { .bv-mid .big-tour { font-size: 25vh; } }

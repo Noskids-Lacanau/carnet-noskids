@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.9.5 — 2026-11-24
+
+- Grand affichage réorganisé : vignettes des skieurs en haut, plan d'eau à gauche du chrono, Passage descendu, bouton Fermer toujours visible
+- Grand affichage : l'activité du skieur (Slalom, Wake…) se change en touchant son nom d'activité
+- Clôture allégée : plan d'eau sous le premier encart, petite vignette de la photo du compteur, compteur et jauge seulement (le plein se note dans l'onglet Essence)
+
 ## 1.9.4 — 2026-11-24
 
 - Retour arrière hiérarchique : sous-menu → menu → Accueil, plus de boucle ; à l'Accueil, le retour ne fait rien

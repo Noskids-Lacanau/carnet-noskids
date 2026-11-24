@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.4", SCHEMA = 1;
+  var APP_VERSION = "1.9.5", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -469,7 +469,7 @@
       '<div class="field"><label for="pil' + t.id + '">Pilote</label><select id="pil' + t.id + '" data-f="pilote" data-id="' + t.id + '">' + piloteOpts(t.pilote) + "</select></div></div>";
     if (t.act === "slalom") h += '<div class="two"><div class="field"><label for="sp' + t.id + '">Vitesse</label><select id="sp' + t.id + '" data-f="speed" data-id="' + t.id + '"><option value="">—</option>' + SLALOM_SPEEDS.map(function (v) { return '<option value="' + v + '"' + (Number(t.speed) === v ? " selected" : "") + ">" + v + " km/h</option>"; }).join("") + '</select></div><div class="field"><label for="ps' + t.id + '">Passages</label><input id="ps' + t.id + '" inputmode="numeric" data-f="passes" data-id="' + t.id + '" value="' + esc(t.passes) + '" placeholder="ex. 4"></div></div>';
     if (t.act === "wake" || t.act === "ski") h += '<div class="field"><label for="sp' + t.id + '">Vitesse (km/h)</label><input id="sp' + t.id + '" inputmode="numeric" data-f="speed" data-id="' + t.id + '" value="' + esc(t.speed) + '" placeholder="ex. 30"></div>';
-    if (t.act === "slalom" && t.pid) h += '<div class="flabel res-h">Résultat du tour</div>' + resFormHtml("t:" + t.id, t.res) + '<div class="flabel res-h">Plan d’eau (pour toute la session)</div>' + eauHtml("live", sortie.eau);
+    if (t.act === "slalom" && t.pid) h += '<div class="flabel res-h">Résultat du tour</div>' + resFormHtml("t:" + t.id, t.res) + (sortie.closing ? "" : '<div class="flabel res-h">Plan d’eau (pour toute la session)</div>' + eauHtml("live", sortie.eau)); // à la clôture, le plan d'eau a son propre encart
     if (t.act === "balade") h += '<div class="small muted">Temps partagé entre toutes les personnes à bord.</div>';
     if (t.act === "meca") h += '<div class="small muted">Essai ou réglage : partagé à 50/50 entre les familles.</div>';
     return h + '<div class="small muted">Optionnel : peut être complété à la clôture.</div></div>';
@@ -489,7 +489,9 @@
     if (sortie.closing) { // fin de session : moteur arrêté, chrono figé, plus de bouton moteur
       h += '<div class="card engine closing-head"><div class="row"><div><div class="label">Session terminée · départ ' + dec1.format(sortie.compteurDeb) + " h</div>" +
         '<div class="clock">' + fmtClock(engineMs(now)) + '</div></div><span class="pill off">moteur arrêté</span></div>' +
-        sumSesHtml(now) + '<div class="small muted">Complétez la clôture ci-dessous puis enregistrez la session. « Retour » permet de reprendre la session.</div></div>';
+        sumSesHtml(now) + "</div>";
+      // v1.9.5 : plan d'eau de la session juste sous le premier encart
+      h += '<div class="card clo-eau"><h3>Plan d’eau</h3>' + eauHtml("live", sortie.eau) + "</div>";
       return h + renderClosing(now);
     }
     h += '<div class="card engine"><div class="row"><div><div class="label">Temps moteur · départ ' + dec1.format(sortie.compteurDeb) + " h · jauge " + fracLabel(sortie.jaugeDeb) + ' · <span id="gpsV">' + gpsTxt() + "</span></div>" +
@@ -706,21 +708,14 @@
   function renderClosing(now) {
     if (sortie.compteurFin == null) sortie.compteurFin = Math.round((sortie.compteurDeb + engineMs(now) / 3600000) * 10) / 10;
     var hasPh = !!photoSrc(sortie.photoCompteur);
-    var h = '<div class="card meter-card"><h3>Photo du compteur</h3>' +
-      (hasPh ? '<img class="cpt-photo" src="' + photoSrc(sortie.photoCompteur) + '" alt="Photo du compteur moteur">' : '<div class="small muted">Photographiez le compteur moteur : la photo est jointe à la session et consultable dans l’historique.</div>') +
-      '<label class="btn ' + (hasPh ? "ghost " : "") + 'sm photo-btn">' + (hasPh ? "Reprendre la photo" : "Prendre la photo du compteur") + '<input type="file" accept="image/*" capture="environment" id="cPhoto" hidden></label></div>';
+    // v1.9.5 : photo du compteur en petite vignette, sur une ligne avec son bouton
+    var h = '<div class="card meter-card clo-photo">' +
+      (hasPh ? '<img class="cpt-photo cpt-mini" src="' + photoSrc(sortie.photoCompteur) + '" alt="Photo du compteur moteur">' : '<span class="clo-ph-t">Photo du compteur</span>') +
+      '<label class="btn ' + (hasPh ? "ghost " : "") + 'sm photo-btn">' + (hasPh ? "Reprendre la photo" : "Prendre la photo") + '<input type="file" accept="image/*" capture="environment" id="cPhoto" hidden></label></div>';
+    // v1.9.5 : clôture réduite au compteur et à la jauge ; le plein se note dans l'onglet Essence (« J'ai versé des bidons »)
+    sortie.plein = false;
     h += '<div class="card"><h3>Clôture</h3><div class="field"><label for="cFin">Compteur moteur (h)</label><input id="cFin" inputmode="decimal" value="' + dec1.format(sortie.compteurFin) + '"></div>' +
-      '<div class="field gauge-sm">' + gHead("Jauge à l’arrivée, avant le plein", "fin", sortie.jaugeFin) + gaugeHtml("fin", sortie.jaugeFin) + "</div>" +
-      '<div class="small" id="consoEst">' + consoEstHtml() + "</div>" +
-      '<div class="toggle"><span>Plein refait avec les bidons en partant</span><button id="tPlein" aria-pressed="' + sortie.plein + '" aria-label="Plein refait"></button></div>';
-    if (sortie.plein) {
-      var cMax = stockCans(); if (cMax) sortie.bidonsPlein = Math.max(0.5, Math.min(sortie.bidonsPlein, cMax)); // pas plus que le stock
-      var plan = planPrelevement(sortie.bidonsPlein, sortie.pleinF);
-      h += '<div class="field"><span class="flabel">Qui verse ?</span>' + segHtml("fam", "data-pleinf", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], sortie.pleinF) + "</div>" +
-        '<div class="field"><span class="flabel">Bidons versés</span><div class="stepper"><button data-cstep="-0.5" aria-label="Un demi-bidon de moins"' + (sortie.bidonsPlein <= 0.5 ? " disabled" : "") + '>−</button><span class="val">' + half(sortie.bidonsPlein) + '</span><button data-cstep="0.5" aria-label="Un demi-bidon de plus"' + (sortie.bidonsPlein >= cMax ? " disabled" : "") + ">+</button></div>" + stockMaxTxt(sortie.bidonsPlein) + "</div>" +
-        '<div class="small muted">' + esc(planText(plan, sortie.pleinF)) + "</div>";
-    }
-    h += "</div>";
+      '<div class="field gauge-sm">' + gHead("Jauge à l’arrivée", "fin", sortie.jaugeFin) + gaugeHtml("fin", sortie.jaugeFin) + "</div></div>";
     h += '<div class="card"><h3>Passages</h3><div class="small muted">Complétez les détails ou corrigez un temps si besoin (optionnel).</div><div class="list small">';
     sortie.tours.forEach(function (t) {
       h += '<div class="item"><span>' + esc(tourName(t)) + " · " + esc(summary(t)) + '</span><span class="num">' + Math.round(tourMs(t, now) / 60000) + ' min</span><span class="d"><button class="btn link" data-det="' + t.id + '">' + (t.open ? "Fermer" : (needsDetails(t) ? "Compléter" : "Détails")) + "</button> · " +
@@ -1954,9 +1949,11 @@
   }
   /* Grand affichage : tour en cours ou en pause, et boutons pause / fin du skieur et du bateau */
   function bigTour() { var r = running(); if (r) return r; for (var i = sortie.tours.length - 1; i >= 0; i--) if (sortie.tours[i].state === "pause") return sortie.tours[i]; return null; }
-  var bigEndAsk = 0, bigRes = 0;
+  var bigEndAsk = 0, bigRes = 0, bigActOpen = false;
   function bigAction(a) {
     var t = bigTour();
+    if (a === "actmenu") { bigActOpen = !bigActOpen; return updateBig(); } // v1.9.5 : changer l'activité du skieur (slalom, wake…)
+    if (a.indexOf("act:") === 0) { bigActOpen = false; if (t && t.pid && t.act !== a.slice(4)) { t.act = a.slice(4); t.speed = ""; t.passes = ""; save(1); toast(tourName(t) + " : " + ACTS[t.act] + "."); } bigKey = ""; return render(); }
     if (a === "tpause" && t) return act(t.id, t.state === "run" ? "pause" : "resume");
     if (a === "tend" && t) { if (t.act === "slalom" && t.pid) bigRes = t.id; return act(t.id, "end"); } // slalom : encart des résultats
     if (a === "resok") { bigRes = 0; bigKey = ""; return updateBig(); }
@@ -1998,7 +1995,7 @@
     var show = sortie.active && !sortie.closing && ((land && rotOn()) || bigOpen); // à la clôture, retour à l'affichage classique
     msg.hidden = !(land && !show);
     var mk = sortie.active && sortie.closing ? "close" : "std";
-    if (!msg.hidden && msg.dataset.k !== mk) { msg.dataset.k = mk; msg.innerHTML = '<div class="rot-in"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg><b>Tournez le téléphone en portrait</b><span>' + (mk === "close" ? "Fin de la session : la clôture (photo du compteur, jauge, plein) se fait en portrait." : "La rotation n’est possible que pendant une session.") + "</span></div>"; }
+    if (!msg.hidden && msg.dataset.k !== mk) { msg.dataset.k = mk; msg.innerHTML = '<div class="rot-in"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></svg><b>Tournez le téléphone en portrait</b><span>' + (mk === "close" ? "Fin de la session : la clôture (photo du compteur, jauge) se fait en portrait." : "La rotation n’est possible que pendant une session.") + "</span></div>"; }
     document.body.classList.toggle("big-on", show);
     big.hidden = !show; big.classList.toggle("rot", show && !land); // téléphone resté en portrait : la fenêtre est affichée couchée, à lire en tournant le téléphone
     if (!show) { bigKey = ""; return; }
@@ -2015,32 +2012,35 @@
     }
     var now = new Date(), r = running(), pil = person((r && r.pilote) || sortie.pilote), on = sortie.engine === "on";
     var t = bigTour(), ask = Date.now() - bigEndAsk < 4000;
-    var key = (r ? r.id + r.state : "-") + "|" + (t ? t.id + t.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land + "|" + ask + "|" + (sortie.pas ? 1 : 0) + "|" + (t && t.pg ? t.pg.length : 0) + "|" + sortie.participants.map(function (p) { return p.pid; }).join(",");
+    var key = (r ? r.id + r.state : "-") + "|" + (t ? t.id + t.state + t.act : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land + "|" + ask + "|" + (sortie.pas ? 1 : 0) + "|" + (t && t.pg ? t.pg.length : 0) + "|" + bigActOpen + "|" + (sortie.eau || "") + "|" + sortie.participants.map(function (p) { return p.pid; }).join(",");
     if (key !== bigKey) {
       bigKey = key;
-      // à droite, en gros et bien espacés : pause / fin du skieur, pause / fin de la session bateau
-      var acts = '<div class="big-acts">' +
-        '<button class="ba-ski" data-bact="tpause"' + (t ? "" : " disabled") + ">" + (t && t.state === "pause" ? "Reprise skieur" : "Pause skieur") + "</button>" +
-        '<button class="ba-ski" data-bact="tend"' + (t ? "" : " disabled") + ">Fin skieur</button>" +
-        '<button class="ba-boat" data-bact="boat">' + (on ? "Pause bateau" : "Reprise bateau") + "</button>" +
-        '<button class="ba-end' + (ask ? " ask" : "") + '" data-bact="end">' + (ask ? "Confirmer la fin ?" : "Fin session") + "</button>" +
-"</div>" +
-        // passages de slalom : bouton à part, sous les boutons de session, puis la liste des passages du skieur
-        '<div class="big-pas"><button class="ba-pas' + (sortie.pas ? " on" : "") + '" data-bact="' + (sortie.pas ? "pend" : "pstart") + '"' + (r || sortie.pas ? "" : " disabled") + ">" + PAS_ICON +
-        (sortie.pas ? '<span>Arrivée</span><span class="bpl" id="bigPasLive">' + pasLive() + "</span>" : "<span>Passage</span>") + '</button><div class="big-pas-l">' + pasListHtml(t) + "</div></div>";
-      // en bas, les personnes à bord : toucher un médaillon lance son tour (le tour en cours d'un autre skieur se termine)
-      var sk = '<div class="big-sk"><span class="label">Lancer un skieur</span><div class="big-sk-l">' + sortie.participants.map(function (p) {
+      // v1.9.5 : trois lignes. En haut : skieur (activité modifiable), vignettes des personnes à bord, boutons de session.
+      // Au milieu : plan d'eau à gauche, chrono au centre, passages à droite. En bas : temps moteur, pilote, heure (et Fermer).
+      var actLine = !t ? "" : !t.pid ? '<span class="big-act">' + esc(ACTS[t.act] || "") + (t.state === "pause" ? " · en pause" : "") + "</span>" :
+        bigActOpen ? '<div class="big-actl">' + PERSO_ACTS.map(function (a) { return '<button class="bal-a' + (a === t.act ? " on" : "") + '" data-bact="act:' + a + '">' + esc(ACTS[a]) + "</button>"; }).join("") + "</div>" :
+        '<button class="big-act big-actb" data-bact="actmenu">' + esc(ACTS[t.act] || "") + ' <span aria-hidden="true">▾</span></button>' + (t.state === "pause" ? '<span class="big-act"> · en pause</span>' : "");
+      var skTop = '<div class="big-sk bv-sk"><div class="big-sk-l">' + sortie.participants.map(function (p) {
         var pp = person(p.pid), st = r && r.pid === p.pid ? " on" : (t && t.pid === p.pid && t.state === "pause" ? " pz" : "");
         return '<button class="bsk f-' + famOf(p) + st + '" data-bsk="' + esc(p.pid) + '" aria-label="Lancer le tour de ' + esc(pp.name) + '">' + pilotAvatar(pp, "bsk-av") + "<span>" + esc(pp.name) + "</span></button>";
       }).join("") + "</div></div>";
-      big.innerHTML = '<div class="big-card">' +
-        '<div class="big-id"><span class="big-who">' + (t ? esc(tourName(t)) : "Aucun skieur en cours") + "</span>" + (t ? '<span class="big-act">' + esc(ACTS[t.act] || "") + (t.state === "pause" ? " · en pause" : "") + "</span>" : "") + '<div class="big-gps" id="bigGps">' + bigGpsHtml(t) + "</div></div>" + acts +
-        '<div class="big-tour' + (t && t.state === "pause" ? " paused" : "") + '"' + (t ? ' data-timer="t' + t.id + '"' : "") + ">" + (t ? fmtClock(tourMs(t, Date.now())) : "—") + "</div>" +
-        '<div class="big-grid">' +
+      var eauSm = '<div class="bv-eau"><span class="label">Plan d’eau</span><div class="bv-eau-l">' + EAUX.map(function (e) { return '<button type="button" class="eau' + (sortie.eau === e[0] ? " on" : "") + '" data-eau="live|' + e[0] + '" aria-label="' + esc(e[1]) + '" title="' + esc(e[1]) + '">' + e[2] + "</button>"; }).join("") + "</div>" +
+        '<span class="bv-eau-t">' + esc(eauLabel(sortie.eau) || "à choisir") + "</span></div>";
+      var actsB = '<div class="big-acts">' +
+        '<button class="ba-ski" data-bact="tpause"' + (t ? "" : " disabled") + ">" + (t && t.state === "pause" ? "Reprise skieur" : "Pause skieur") + "</button>" +
+        '<button class="ba-ski" data-bact="tend"' + (t ? "" : " disabled") + ">Fin skieur</button>" +
+        '<button class="ba-boat" data-bact="boat">' + (on ? "Pause bateau" : "Reprise bateau") + "</button>" +
+        '<button class="ba-end' + (ask ? " ask" : "") + '" data-bact="end">' + (ask ? "Confirmer la fin ?" : "Fin session") + "</button></div>";
+      var pasB = '<div class="big-pas"><button class="ba-pas' + (sortie.pas ? " on" : "") + '" data-bact="' + (sortie.pas ? "pend" : "pstart") + '"' + (r || sortie.pas ? "" : " disabled") + ">" + PAS_ICON +
+        (sortie.pas ? '<span>Arrivée</span><span class="bpl" id="bigPasLive">' + pasLive() + "</span>" : "<span>Passage</span>") + '</button><div class="big-pas-l">' + pasListHtml(t) + "</div></div>";
+      big.innerHTML = '<div class="big-card bv">' +
+        '<div class="bv-top"><div class="big-id"><span class="big-who">' + (t ? esc(tourName(t)) : "Aucun skieur en cours") + "</span>" + actLine + '<div class="big-gps" id="bigGps">' + bigGpsHtml(t) + "</div></div>" + skTop + actsB + "</div>" +
+        '<div class="bv-mid">' + eauSm + '<div class="big-tour' + (t && t.state === "pause" ? " paused" : "") + '"' + (t ? ' data-timer="t' + t.id + '"' : "") + ">" + (t ? fmtClock(tourMs(t, Date.now())) : "—") + "</div>" + pasB + "</div>" +
+        '<div class="big-grid bv-bot">' +
         '<div><span class="label">Temps moteur</span><b data-timer="engine">' + fmtClock(engineMs(Date.now())) + '</b><span class="big-s">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
         '<div><span class="label">Pilote</span><b>' + esc(pil ? pil.name : "—") + "</b></div>" +
-        '<div><span class="label">Heure</span><b id="bigClock">' + now.toTimeString().slice(0, 5) + "</b></div></div>" + sk +
-        (land ? "" : '<button class="btn ghost sm big-close" id="bigClose">Fermer</button>') + "</div>";
+        '<div><span class="label">Heure</span><b id="bigClock">' + now.toTimeString().slice(0, 5) + "</b></div>" +
+        (land ? "" : '<button class="btn ghost sm big-close" id="bigClose">Fermer</button>') + "</div></div>";
     }
     var ck = document.getElementById("bigClock"); if (ck) ck.textContent = now.toTimeString().slice(0, 5);
   }
@@ -2605,7 +2605,7 @@
       if (!startList.length) return toast("Ajoutez au moins une personne à bord avec les boutons +.");
       var cd0 = parseNum(document.getElementById("cDeb").value); if (!cptConfirm("deb:" + cd0, cptStartCheck(cd0))) return;
       var now = Date.now();
-      sortie = { active: true, closing: false, compteurDeb: parseNum(document.getElementById("cDeb").value), jaugeDeb: startJauge, compteurFin: null, jaugeFin: startJauge, plein: true, bidonsPlein: 1, pleinF: "YC",
+      sortie = { active: true, closing: false, compteurDeb: parseNum(document.getElementById("cDeb").value), jaugeDeb: startJauge, compteurFin: null, jaugeFin: startJauge, plein: false, bidonsPlein: 1, pleinF: "YC",
         pilote: inListStart(startPilote) ? startPilote : startList[0].pid, engine: "on", engAcc: 0, engSince: now, startedAt: now, participants: startList, tours: [] };
       sortie.pleinF = famOf(participant(sortie.pilote)) || "YC";
       sortie.checks = startChecks; startChecks = {};
