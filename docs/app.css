@@ -963,3 +963,42 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .bal-frise svg { max-width: none; }
 .bal-fhint { text-align: right; margin: -2px 0 6px; font-size: 11.5px; }
 .bal-head .row h3 { margin: 0; }
+
+/* v1.9.3 : grand affichage, gros boutons espacés, médaillons des skieurs */
+.big-card { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "id acts" "tour acts" "grid acts" "sk sk" "cl cl"; column-gap: 18px; row-gap: 8px; align-items: center; }
+.big-id { grid-area: id; display: grid; gap: 2px; min-width: 0; }
+.big-tour { grid-area: tour; }
+.big-grid { grid-area: grid; }
+.big-close { grid-area: cl; justify-self: center; }
+.big-acts { grid-area: acts; align-self: stretch; align-content: center; grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 18px 12px; }
+.big-acts button { min-height: 68px; padding: 10px 14px; border-radius: 14px; border-width: 3px; font: 800 18px/1.1 var(--f-body); white-space: normal; touch-action: manipulation; }
+.big-acts button:active { transform: scale(.97); }
+.big-sk { grid-area: sk; display: flex; align-items: center; gap: 12px; min-width: 0; border-top: 1px solid rgba(255, 255, 255, .12); padding-top: 8px; }
+.big-sk .label { color: #9fb6c2; flex: none; max-width: 70px; line-height: 1.25; }
+.big-sk-l { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px; min-width: 0; scrollbar-width: none; }
+.bsk { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 58px; padding: 2px; border: 0; background: none; color: #e4eef1; font: 600 12.5px/1.1 var(--f-body); cursor: pointer; touch-action: manipulation; }
+.bsk-av { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; display: grid; place-items: center; font: 700 22px var(--f-display); color: #fff; background: rgba(255, 255, 255, .12); box-shadow: 0 0 0 3px var(--yc); }
+.bsk.f-OC .bsk-av { box-shadow: 0 0 0 3px var(--oc); }
+.bsk.on .bsk-av { box-shadow: 0 0 0 3px #0f2a36, 0 0 0 7px #ffd84d; }
+.bsk.on span { color: #ffd84d; font-weight: 800; }
+.bsk.pz .bsk-av { box-shadow: 0 0 0 3px #0f2a36, 0 0 0 6px #9fb6c2; }
+@media (orientation: landscape) and (max-height: 600px) {
+  .big-card { row-gap: 6px; }
+  .big-tour { font-size: min(24vh, 120px); }
+  .big-grid b { font-size: min(5.2vh, 26px); }
+  .big-grid > div { padding: 4px 8px; }
+  .big-acts button { min-height: min(17vh, 70px); font-size: min(4.6vh, 18px); padding: 8px 12px; }
+  .bsk-av { width: min(12vh, 50px); height: min(12vh, 50px); }
+}
+#bigView.rot .big-acts { gap: min(4vw, 2.6vh) min(3vw, 2vh); }
+#bigView.rot .big-acts button { font-size: min(4.4vw, 2.8vh); min-height: min(16vw, 10vh); padding: 6px 10px; }
+#bigView.rot .big-tour { font-size: min(24vw, 16vh); }
+#bigView.rot .bsk-av { width: min(12vw, 7vh); height: min(12vw, 7vh); }.ses-sum { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 4px; font-size: 14px; }
+.ses-sum .ss-p b { font-variant-numeric: tabular-nums; margin-left: 2px; }
+.ses-cost { font-size: 14px; margin-bottom: 6px; }
+.ses-cost b { font-family: var(--f-display); font-size: 20px; }
+.ses-cost span { font-size: 12px; color: var(--muted); }
+.j-incoh { display: block; margin-top: 4px; color: var(--warn); font-weight: 600; }
+.stepper button:disabled { opacity: .35; cursor: default; }#bigView.rot .big-card { grid-template-areas: "id acts" "tour acts" "grid acts" "sk cl"; }
+#bigView.rot .big-close { align-self: center; justify-self: end; }
+#bigView.rot .big-tour { font-size: min(22vw, 14vh); }

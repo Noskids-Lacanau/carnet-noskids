@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.2", SCHEMA = 1;
+  var APP_VERSION = "1.9.3", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "YC", key: "" };
@@ -268,7 +268,32 @@
   function hasNum(v) { return v != null && v !== "" && !isNaN(Number(v)); }
   function sessionEnd(s) { return hasNum(s.compteurFin) ? Number(s.compteurFin) : Number(s.compteurDeb) + (Number(s.engineMin) || 0) / 60; }
   function lastCompteur() { var v = SPEC.hAchat || 0; sessionsArr.forEach(function (s) { if ((s.bateau || SPEC.devise) === SPEC.devise && hasNum(s.compteurDeb) && sessionEnd(s) > v) v = sessionEnd(s); }); return Math.round(v * 10) / 10; }
+  /* Compteur moteur au départ : une session peut manquer (trou signalé), mais un écart de plus de 100 h (virgule oubliée…) est refusé ; un compteur plus bas ou un écart de plus de 10 h demande une vérification. */
+  var CPT_MAX = 100;
+  function cptStartCheck(v) {
+    var last = lastCompteur(), d = v - last;
+    if (!(v > 0)) return { block: "Saisissez le compteur moteur constaté au bateau." };
+    if (Math.abs(d) > CPT_MAX) return { block: "Compteur refusé : " + dec1.format(v) + " h, soit " + int0.format(Math.abs(d)) + " h d’écart avec la dernière session (" + dec1.format(last) + " h). Virgule oubliée ? (ex. 1952,4 et non 19524)" };
+    if (d < -GAP_TOL - 0.001) return { ask: "Compteur plus bas que la fin de la dernière session (" + dec1.format(last) + " h) : vérifiez la saisie." };
+    if (d > 10) return { ask: "Écart de " + int0.format(d) + " h avec la dernière session (" + dec1.format(last) + " h) : vérifiez la saisie." };
+    return {};
+  }
+  /* Compteur de fin d'une session : refusé s'il est plus bas que le départ ou s'il donne plus de 24 h ; vérification s'il s'écarte de plus de 30 min du temps moteur de l'app. */
+  function cptEndCheck(c1, c2, eMin) {
+    var d = c2 - c1;
+    if (d < 0) return { block: "Compteur de fin (" + dec1.format(c2) + " h) plus petit que le départ (" + dec1.format(c1) + " h) : saisie refusée." };
+    if (d > 24) return { block: "Compteur de fin refusé : " + int0.format(d) + " h pour une seule session. Virgule oubliée ? (ex. 1952,4 et non 19524)" };
+    if (eMin != null && Math.abs(d * 60 - eMin) > 30) return { ask: "Le compteur donne " + hm(d * 60) + " de moteur, l’app " + hm(eMin) + " : vérifiez le compteur de fin." };
+    return {};
+  }
+  /* Saisie douteuse : premier appui = avertissement, deuxième appui sur la même valeur = confirmation. */
+  function cptConfirm(key, chk) {
+    if (chk.block) { toast(chk.block); return false; }
+    if (!chk.ask || ui.cptOk === key) return true;
+    ui.cptOk = key; toast(chk.ask + " Appuyez de nouveau pour confirmer."); return false;
+  }
   function startWarnHtml(val) {
+    var c0 = cptStartCheck(val); if (c0.block && val > 0) return '<div class="alert bad"><b>' + esc(c0.block) + "</b></div>";
     var last = lastCompteur(), d = (val - last) * 60;
     if (!sessionsArr.some(function (s) { return (s.bateau || SPEC.devise) === SPEC.devise && hasNum(s.compteurDeb); }) || Math.abs(d) <= GAP_TOL * 60 + 0.01) return "";
     return d > 0 ? '<div class="alert"><b>Écart de ' + hm(d) + " avec la fin de la dernière session (" + dec1.format(last) + " h).</b>Une session a-t-elle été oubliée ? Vous pouvez démarrer quand même : le trou sera signalé sur l’accueil et dans la liste des sessions, et pourra être rattrapé.</div>"
@@ -300,7 +325,7 @@
 
   /* ---------- Bidons ---------- */
   function canSvg(b, i) {
-    var cap = b ? (b.cap || Math.max(SPEC.bidon, b.litres)) : SPEC.bidon; // un bidon peut contenir plus de 20 L (jusqu'à 25 L)
+    var cap = b ? Math.max(SPEC.bidon, Number(b.cap) || 0, b.litres) : SPEC.bidon; // un bidon de 20 L (jusqu'à 25 L) : un bidon pas plein est colorié à proportion de son remplissage
     var lvl = b ? Math.max(0, Math.min(1, b.litres / cap)) : 0, h = 44 * lvl, id = "cc" + i + Math.random().toString(36).slice(2, 6);
     var body = "M8 16 h28 l12 12 v30 a4 4 0 0 1 -4 4 h-36 a4 4 0 0 1 -4 -4 v-38 a4 4 0 0 1 4 -4 z";
     return '<span class="can ' + (b ? b.f : "empty") + '"><svg viewBox="0 0 52 66" aria-hidden="true"><defs><clipPath id="' + id + '"><path d="' + body + '"/></clipPath></defs>' +
@@ -318,6 +343,9 @@
   function stockL() { return bidons.reduce(function (a, b) { return a + b.litres; }, 0); }
   function stockEur() { return bidons.reduce(function (a, b) { return a + b.litres * b.prix; }, 0); }
   function stockN() { return bidons.length; }
+  /* Bidons disponibles pour un versement, au demi-bidon : un bidon entamé de moitié compte pour ½. On ne peut pas verser plus que le stock. */
+  function stockCans() { return bidons.reduce(function (a, b) { var c = Number(b.cap) || Math.max(SPEC.bidon, b.litres); return a + Math.min(1, Math.ceil(b.litres / c * 2 - 0.02) / 2); }, 0); }
+  function stockMaxTxt(n) { var m = stockCans(); return n >= m ? '<div class="small muted">' + (m ? "C’est tout le stock (" + half(m) + " bidon" + (m > 1 ? "s" : "") + ")." : "Le stock est vide.") + "</div>" : ""; }
   /* Horodatage local (AAAA-MM-JJTHH:MM:SS) : sert à remettre sessions et versements dans l'ordre pour la balance essence */
   function stamp(d) { d = d || new Date(); var p = function (n) { return String(n).padStart(2, "0"); }; return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + "T" + p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds()); }
   /* Prélève n bidons (entiers, ou un demi) pour la famille f : ses bidons d'abord, du plus ancien au plus récent, puis ceux de l'autre famille.
@@ -423,7 +451,7 @@
     if (sortie.closing) { // fin de session : moteur arrêté, chrono figé, plus de bouton moteur
       h += '<div class="card engine closing-head"><div class="row"><div><div class="label">Session terminée · départ ' + dec1.format(sortie.compteurDeb) + " h</div>" +
         '<div class="clock">' + fmtClock(engineMs(now)) + '</div></div><span class="pill off">moteur arrêté</span></div>' +
-        '<div class="small muted">Complétez la clôture ci-dessous puis enregistrez la session. « Retour » permet de reprendre la session.</div></div>';
+        sumSesHtml(now) + '<div class="small muted">Complétez la clôture ci-dessous puis enregistrez la session. « Retour » permet de reprendre la session.</div></div>';
       return h + renderClosing(now);
     }
     h += '<div class="card engine"><div class="row"><div><div class="label">Temps moteur · départ ' + dec1.format(sortie.compteurDeb) + " h · jauge " + fracLabel(sortie.jaugeDeb) + "</div>" +
@@ -455,6 +483,20 @@
     h += '<button class="btn big" id="goClose"' + (r ? " disabled" : "") + ">Clôturer la session</button>";
     if (r) h += '<p class="small muted m0" style="text-align:center">Terminez le tour en cours pour clôturer.</p>';
     return h + cancelHtml();
+  }
+  /* Coût de revient moyen par minute moteur, à date : bilan de l'année en cours du bateau actuel (toutes ses années si l'année n'a pas encore de minutes). */
+  function coutMinNow() {
+    try { var y = String(new Date().getFullYear()), bk = boatOf(y), D = bilanData(bk, y); if (!(D.min > 0)) D = bilanData(bk, "Toutes"); return D.min > 0 ? { v: D.total / D.min, per: D.ys.length === 1 ? D.ys[0] : "toutes saisons" } : null; } catch (e) { return null; }
+  }
+  /* Résumé en haut de la clôture : temps de ski par personne, moteur sans skieur, coût de revient estimé de la session. */
+  function sumSesHtml(now) {
+    var eMin = engineMs(now) / 60000, ski = {}, tot = 0;
+    sortie.tours.forEach(function (t) { if (!t.pid || t.act === "balade" || t.act === "meca") return; var m = tourMs(t, now) / 60000; ski[t.pid] = (ski[t.pid] || 0) + m; tot += m; });
+    var C = coutMinNow(), sans = Math.max(0, eMin - tot), pids = Object.keys(ski).sort(function (a, b) { return ski[b] - ski[a]; });
+    var h = '<div class="ses-sum">' + (pids.length ? pids.map(function (pid) { var p = participant(pid); return '<span class="ss-p">' + (p ? famDot(famOf(p)) : "") + esc(person(pid).name) + " <b>" + hm(ski[pid]) + "</b></span>"; }).join("") : '<span class="ss-p muted">Aucun tour de ski</span>') +
+      '<span class="ss-p muted">Moteur sans skieur <b>' + hm(sans) + "</b></span></div>";
+    if (C) h += '<div class="ses-cost">Coût de revient ≈ <b>' + eur0.format(eMin * C.v) + "</b><span> " + Math.round(eMin) + " min × " + dec2.format(C.v) + " €/min (moyenne " + esc(C.per) + " à ce jour)</span></div>";
+    return h;
   }
   /* Annuler une session : rien n'est enregistré, après confirmation. */
   function cancelHtml() {
@@ -545,6 +587,11 @@
     var M = manForm, R = manCalc();
     if (!M.date) { toast("Indiquez la date de la session."); return false; }
     if (!(R.c2 > R.c1)) { toast("Le compteur de fin doit être plus grand que celui du départ."); return false; }
+    // compteurs : refus au-delà de 100 h d'écart avec le dernier compteur connu ou de 24 h pour la session ; vérification au-delà de 8 h
+    var lc = lastCompteur(), mk = "man:" + R.c1 + ">" + R.c2;
+    if (Math.abs(R.c1 - lc) > CPT_MAX) { toast("Compteur de départ refusé : " + int0.format(Math.abs(R.c1 - lc)) + " h d’écart avec le dernier compteur connu (" + dec1.format(lc) + " h). Virgule oubliée ?"); return false; }
+    var ce1 = cptEndCheck(R.c1, R.c2, null); if (!ce1.block && R.c2 - R.c1 > 8) ce1 = { ask: hm((R.c2 - R.c1) * 60) + " de moteur pour une session : vérifiez les compteurs." };
+    if (!cptConfirm(mk, ce1)) return false;
     if (!M.list.length) { toast("Ajoutez au moins une personne à bord avec les boutons +."); return false; }
     if (R.perso > R.eMin + 0.5) { toast("Les temps saisis dépassent le temps moteur : vérifiez."); return false; }
     var pil = M.pilote && manRow(M.pilote) ? M.pilote : (M.list.filter(function (r) { return person(r.pid).c !== "EXT"; })[0] || M.list[0]).pid;
@@ -609,9 +656,12 @@
     var cMin = sortie.compteurFin != null ? (sortie.compteurFin - sortie.compteurDeb) * 60 : null;
     return { eMin: eMin, tMin: tMin, libre: libre, balade: balade, meca: meca, rows: rows, b: b, fact: fact, cMin: cMin };
   }
+  /* Cohérence jauge / temps moteur : la jauge se lit au 1/16 (≈ 8 L), d'où une tolérance de 12 L plus la moitié de l'estimation au temps. */
+  function jaugeAnormale(gL, eMin) { var est = eMin / 60 * (SPEC.conso || 13); return eMin > 0 && (gL < -0.5 || Math.abs(gL - est) > Math.max(12, est * 0.5)); }
   function consoEstHtml() {
-    var d = sortie.jaugeDeb - sortie.jaugeFin, refill = (16 - sortie.jaugeFin) / 16 * SPEC.reservoir;
-    var h = d >= 0 ? "Jauge " + fracLabel(sortie.jaugeDeb) + " → " + fracLabel(sortie.jaugeFin) + " : ≈ <b>" + Math.round(d / 16 * SPEC.reservoir) + " L</b> consommés." : "La jauge d’arrivée est plus haute qu’au départ : plein fait pendant la session ?";
+    var d = sortie.jaugeDeb - sortie.jaugeFin, refill = (16 - sortie.jaugeFin) / 16 * SPEC.reservoir, eMin = engineMs(Date.now()) / 60000, gL = d / 16 * SPEC.reservoir;
+    var h = d >= 0 ? "Jauge " + fracLabel(sortie.jaugeDeb) + " → " + fracLabel(sortie.jaugeFin) + " : ≈ <b>" + Math.round(gL) + " L</b> consommés." : "La jauge d’arrivée est plus haute qu’au départ : plein fait pendant la session ?";
+    if (jaugeAnormale(gL, eMin)) h += ' <span class="j-incoh">Écart avec le temps moteur (' + Math.round(eMin) + " min, soit ≈ " + Math.round(eMin / 60 * (SPEC.conso || 13)) + " L attendus) : vérifiez la jauge. Sinon, la balance retiendra l’estimation au temps.</span>";
     if (sortie.plein) h += refill < 4 ? " Le réservoir est déjà plein." : " Pour refaire le plein : ≈ " + Math.round(refill) + " L, soit environ " + half(Math.max(0.5, Math.round(refill / SPEC.bidon * 2) / 2)) + " bidons de " + SPEC.bidon + " L.";
     return h;
   }
@@ -626,10 +676,11 @@
       '<div class="small" id="consoEst">' + consoEstHtml() + "</div>" +
       '<div class="toggle"><span>Plein refait avec les bidons en partant</span><button id="tPlein" aria-pressed="' + sortie.plein + '" aria-label="Plein refait"></button></div>';
     if (sortie.plein) {
+      var cMax = stockCans(); if (cMax) sortie.bidonsPlein = Math.max(0.5, Math.min(sortie.bidonsPlein, cMax)); // pas plus que le stock
       var plan = planPrelevement(sortie.bidonsPlein, sortie.pleinF);
       h += '<div class="field"><span class="flabel">Qui verse ?</span>' + segHtml("fam", "data-pleinf", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], sortie.pleinF) + "</div>" +
-        '<div class="field"><span class="flabel">Bidons versés</span><div class="stepper"><button data-cstep="-0.5" aria-label="Un demi-bidon de moins">−</button><span class="val">' + half(sortie.bidonsPlein) + '</span><button data-cstep="0.5" aria-label="Un demi-bidon de plus">+</button></div></div>' +
-        '<div class="small muted">' + esc(planText(plan, sortie.pleinF)) + (plan.manque > 0.01 ? " Il manque " + int0.format(plan.manque) + " L dans le stock." : "") + "</div>";
+        '<div class="field"><span class="flabel">Bidons versés</span><div class="stepper"><button data-cstep="-0.5" aria-label="Un demi-bidon de moins"' + (sortie.bidonsPlein <= 0.5 ? " disabled" : "") + '>−</button><span class="val">' + half(sortie.bidonsPlein) + '</span><button data-cstep="0.5" aria-label="Un demi-bidon de plus"' + (sortie.bidonsPlein >= cMax ? " disabled" : "") + ">+</button></div>" + stockMaxTxt(sortie.bidonsPlein) + "</div>" +
+        '<div class="small muted">' + esc(planText(plan, sortie.pleinF)) + "</div>";
     }
     h += "</div>";
     h += '<div class="card"><h3>Passages</h3><div class="small muted">Complétez les détails ou corrigez un temps si besoin (optionnel).</div><div class="list small">';
@@ -645,7 +696,9 @@
   function recapHtml(now) {
     var R = computeRecap(now), h = "<h3>Répartition du temps moteur</h3>";
     h += '<div class="small muted">Moteur : ' + Math.round(R.eMin) + " min · tours : " + Math.round(R.tMin) + " min · moteur en route sans tour : " + Math.round(R.libre) + " min" + (R.balade ? " · balade : " + Math.round(R.balade) + " min" : "") + ". Le temps commun est partagé entre les " + R.rows.length + " personnes à bord.</div>";
-    if (R.cMin != null && Math.abs(R.cMin - R.eMin) > 6) h += '<div class="alert">Le compteur indique ' + Math.round(R.cMin) + " min, l’app " + Math.round(R.eMin) + " min. Vérifiez le compteur (il est précis à 6 min près).</div>";
+    var ce0 = sortie.compteurFin != null ? cptEndCheck(sortie.compteurDeb, sortie.compteurFin, null) : {};
+    if (ce0.block) h += '<div class="alert bad"><b>' + esc(ce0.block) + "</b>Corrigez le compteur moteur avant d’enregistrer.</div>";
+    else if (R.cMin != null && Math.abs(R.cMin - R.eMin) > 6) h += '<div class="alert">Le compteur indique ' + Math.round(R.cMin) + " min, l’app " + Math.round(R.eMin) + " min. Vérifiez le compteur (il est précis à 6 min près)" + (Math.abs(R.cMin - R.eMin) > 30 ? " : une confirmation sera demandée à l’enregistrement" : "") + ".</div>";
     h += '<table class="rtable"><thead><tr><th>Personne</th><th>Perso</th><th>Commun</th><th>Total</th></tr></thead><tbody>';
     R.rows.forEach(function (x) { h += "<tr><td>" + famDot(x.f) + esc(x.name) + (x.role === "pass" ? " (passager)" : "") + (x.fact ? " (invité facturé)" : "") + "</td><td>" + Math.round(x.perso) + "</td><td>" + Math.round(x.commun) + "</td><td>" + Math.round(x.tot) + "</td></tr>"; });
     h += "</tbody></table>";
@@ -786,10 +839,11 @@
     else if (view.essence === "achat" && achatForm.step === "check") h += achatCheckHtml();
     else if (view.essence === "achat") h += achatFormHtml();
     else if (view.essence === "mise") {
+      var mMax = stockCans(); miseForm.n = Math.max(0.5, Math.min(miseForm.n, mMax || 0.5)); // jamais plus que le stock : pas de bidon négatif
       var plan = planPrelevement(miseForm.n, miseForm.f);
       h += '<div class="card"><h3>J’ai versé des bidons</h3>' +
         '<div class="field"><span class="flabel">Qui verse ?</span>' + segHtml("fam", "data-mf", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], miseForm.f) + "</div>" +
-        '<div class="field"><span class="flabel">Bidons versés</span><div class="stepper"><button data-mstep="-0.5" aria-label="Un demi-bidon de moins">−</button><span class="val">' + half(miseForm.n) + '</span><button data-mstep="0.5" aria-label="Un demi-bidon de plus">+</button></div></div>' +
+        '<div class="field"><span class="flabel">Bidons versés</span><div class="stepper"><button data-mstep="-0.5" aria-label="Un demi-bidon de moins"' + (miseForm.n <= 0.5 ? " disabled" : "") + '>−</button><span class="val">' + half(miseForm.n) + '</span><button data-mstep="0.5" aria-label="Un demi-bidon de plus"' + (miseForm.n >= mMax ? " disabled" : "") + ">+</button></div>" + stockMaxTxt(miseForm.n) + "</div>" +
         '<div class="alert ok">' + esc(planText(plan)) + "</div>" +
         '<div class="toggle"><span>Le réservoir est plein</span><button data-mtog="plein" aria-pressed="' + miseForm.plein + '" aria-label="Réservoir plein"></button></div>' +
         '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="saveMise">Enregistrer</button></div></div>';
@@ -819,7 +873,7 @@
     var row = function (f) {
       var t = T[f], op = ui.achF === f, its = ach.filter(function (m) { return (m.f === "OC" ? "OC" : "YC") === f && (essYear === "Toutes" || yearOf(m) === essYear); });
       return '<tr class="det-click' + (op ? " open" : "") + '" data-achf="' + f + '" aria-expanded="' + op + '"><td>' + TRI + famDot(f) + FAM[f].n + '<span class="sub">' + t.n + " achat" + (t.n > 1 ? "s" : "") + (t.l ? " · " + dec2.format(t.e / t.l) + " €/L" : "") + "</span></td><td>" + int0.format(t.l) + " L</td><td>" + eur.format(t.e) + "</td></tr>" +
-        (op ? '<tr class="det-row"><td colspan="3">' + (its.length ? its.map(function (m) { var l = Number(m.litres) || 0, p = Number(m.prix) || 0; return '<div class="det-it"><span>' + esc(m.d || isoToFr(m.date)) + '<span class="sub">' + (m.bidons ? m.bidons + " bidon" + (m.bidons > 1 ? "s" : "") + " · " : "") + int0.format(l) + " L" + (l ? " · " + dec2.format(p / l) + " €/L" : "") + (m.verse ? " · versé tout de suite" : "") + '</span></span><b>' + eur.format(p) + "</b></div>"; }).join("") : '<div class="small muted">Aucun achat.</div>') + "</td></tr>" : "");
+        (op ? '<tr class="det-row"><td colspan="3">' + (its.length ? its.map(function (m) { var l = Number(m.litres) || 0, p = Number(m.prix) || 0; return '<div class="det-it"><span>' + esc(m.d || isoToFr(m.date)) + '<span class="sub">' + (m.bidons ? m.bidons + " bidon" + (m.bidons > 1 ? "s" : "") + " · " : "") + int0.format(l) + " L" + (l ? " · " + dec2.format(p / l) + " €/L" : "") + (m.verse ? " · versé tout de suite" : "") + (m.retire ? " · " + esc(m.retire) : "") + '</span></span><b>' + eur.format(p) + "</b></div>"; }).join("") : '<div class="small muted">Aucun achat.</div>') + "</td></tr>" : "");
     };
     return '<div class="card"><h3>Total des achats</h3><div class="chips small-chips">' + yrs.map(function (y) { return '<button class="chip" data-essyear="' + y + '" aria-pressed="' + (y === essYear) + '">' + y + "</button>"; }).join("") + "</div>" +
       '<table class="rtable" style="margin-top:8px"><thead><tr><th>Famille</th><th>Volume</th><th>Montant</th></tr></thead><tbody>' + row("YC") + row("OC") +
@@ -851,18 +905,36 @@
     return h + "</div>";
   }
   /* Correction du stock : vol, perte ou autre usage de bidons. */
-  var corrForm = { sel: {}, who: "yann", motif: "erreur", usage: "Voiture", aff: "5050", ach: "" };
+  var corrForm = { sel: {}, who: "yann", motif: "erreur", usage: "Voiture", aff: "5050", ach: "", unit: "bidons", qty: null };
   function corrSel() { return Object.keys(corrForm.sel).filter(function (k) { return corrForm.sel[k]; }).map(Number).filter(function (i) { return i < bidons.length; }); }
-  function corrEffects(sel) {
-    var C = corrForm, byP = { YC: 0, OC: 0 }, lit = 0, lines = [], dt = [], lab = C.motif === "autre" ? C.usage.toLowerCase() : C.motif;
-    sel.forEach(function (i) { var b = bidons[i]; byP[b.f] += b.litres * b.prix; lit += b.litres; });
+  /* Quantité réellement retirée du stock : tous les bidons touchés par défaut, ou le nombre de bidons (au demi) ou de litres indiqué. */
+  function corrTakes(sel) {
+    var C = corrForm, tot = 0; sel.forEach(function (i) { tot += bidons[i].litres; });
+    var leftL = C.qty != null && C.unit === "litres" ? Math.min(C.qty, tot) : null, leftC = C.qty != null && C.unit === "bidons" ? C.qty : null, takes = [];
+    sel.forEach(function (i) {
+      var b = bidons[i], lit = b.litres;
+      if (leftL != null) { lit = Math.min(b.litres, leftL); leftL -= lit; }
+      else if (leftC != null) { var part = Math.min(1, leftC); lit = part >= 1 ? b.litres : Math.min(b.litres, (Number(b.cap) || SPEC.bidon) * part); leftC = Math.max(0, leftC - part); }
+      if (lit > 0.01) takes.push({ i: i, litres: lit, f: b.f === "OC" ? "OC" : "YC", eur: lit * b.prix, d: b.d });
+    });
+    return takes;
+  }
+  /* Achat d'origine d'un bidon (même famille, même date) : sa dépense et son mouvement, pour sortir l'essence utilisée ailleurs des comptes du bateau. */
+  function achatOf(f, d) {
+    return { dep: depenses.filter(function (x) { return x.cat === "Essence" && (x.payeur === "OC" ? "OC" : "YC") === f && x.d === d && Number(x.m) > 0 && /^Essence/.test(x.lib || ""); })[0] || null,
+      mv: moves.filter(function (m) { return isAchat(m) && (m.f === "OC" ? "OC" : "YC") === f && m.d === d && !m.verse; })[0] || null };
+  }
+  function corrEffects(takes) {
+    var C = corrForm, byP = { YC: 0, OC: 0 }, lit = 0, lines = [], dt = [], red = [], lab = C.motif === "autre" ? C.usage.toLowerCase() : C.motif, grp = {};
+    takes.forEach(function (t) { byP[t.f] += t.eur; lit += t.litres; var k = t.f + "|" + (t.d || ""); (grp[k] = grp[k] || { f: t.f, d: t.d, L: 0, E: 0 }).L += t.litres; grp[k].E += t.eur; });
+    if (C.motif === "autre") // autre usage (moto, voiture…) : l'essence n'est plus une dépense du bateau, l'achat d'origine est réduit d'autant
+      Object.keys(grp).forEach(function (k) { var g = grp[k], a = achatOf(g.f, g.d); if (a.dep) red.push({ g: g, dep: a.dep, mv: a.mv }); else lines.push({ lib: "Essence sortie du stock (" + lab + ")", cat: "Essence", m: -g.E, payeur: g.f, regle: "payeur" }); });
     ["YC", "OC"].forEach(function (p) {
       var v = byP[p], o = p === "YC" ? "OC" : "YC"; if (v < 0.005) return;
-      lines.push({ lib: "Essence retirée du stock (" + lab + ")", cat: "Essence", m: -v, payeur: p, regle: "conso" });
-      if (C.motif !== "autre") lines.push({ lib: "Perte d’essence (" + lab + ")", cat: "Essence", m: v, payeur: p, regle: C.aff });
+      if (C.motif !== "autre") { lines.push({ lib: "Essence retirée du stock (" + lab + ")", cat: "Essence", m: -v, payeur: p, regle: "conso" }); lines.push({ lib: "Perte d’essence (" + lab + ")", cat: "Essence", m: v, payeur: p, regle: C.aff }); }
       else if (C.aff !== p) dt.push({ from: o, to: p, eur: C.aff === "5050" ? v / 2 : v, note: "essence prise pour " + lab });
     });
-    return { lit: lit, byP: byP, lines: lines, dettes: dt };
+    return { lit: lit, byP: byP, lines: lines, dettes: dt, red: red };
   }
   /* Extourne d'un achat saisi par erreur ou en double : bidons encore en stock retirés, écriture inverse, dépense négative. */
   function extCans(m) {
@@ -884,6 +956,15 @@
     if (idx.length) h += cansHtml(idx.map(function (i) { return bidons[i]; }), "mini");
     return h;
   }
+  function corrEffText(takes) {
+    if (!takes.length) return "Indiquez une quantité à retirer.";
+    var C = corrForm, e = corrEffects(takes), parts = [];
+    ["YC", "OC"].forEach(function (p) { if (e.byP[p] > 0.005) parts.push(eur.format(e.byP[p]) + " payés par " + FAM[p].s); });
+    var s = dec1.format(e.lit) + " L retirés du stock (" + parts.join(", ") + ").";
+    if (C.motif !== "autre") return s + " Leur valeur est retirée des dépenses d’essence du bateau, puis comptée comme perte à la charge de " + (C.aff === "5050" ? "Yann et Olivier (50/50)" : FAM[C.aff].s) + ".";
+    s += " Cette essence n’a pas servi au bateau : elle sort de ses dépenses" + (e.red.length ? " (" + e.red.map(function (r) { return "achat du " + esc(r.dep.d) + " : " + eur.format(Number(r.dep.m)) + " → " + eur.format(Math.max(0, Number(r.dep.m) - r.g.E)); }).join(" ; ") + ")" : "") + ".";
+    return s + (e.dettes.length ? " " + e.dettes.map(function (d) { return FAM[d.from].s + " devra " + eur.format(d.eur) + " à " + FAM[d.to].s; }).join(" ; ") + "." : " Chacun a utilisé sa propre essence : rien d’autre à régler.");
+  }
   function corrHtml() {
     var C = corrForm;
     if (C.motif === "erreur") return '<div class="card"><h3>Correction du stock</h3><div class="field"><span class="flabel">Motif</span>' + segHtml("", "data-cmotif", [["erreur", "Saisie erronée ou en double"], ["vol", "Vol"], ["perte", "Perte"], ["autre", "Autre usage"]], C.motif) + "</div>" + extHtml() +
@@ -895,16 +976,19 @@
       '<div class="field"><label for="cWho">Correction faite par</label><select id="cWho">' + PEOPLE.filter(function (p) { return p.c !== "EXT"; }).map(function (p) { return '<option value="' + p.id + '"' + (p.id === C.who ? " selected" : "") + ">" + esc(p.name) + "</option>"; }).join("") + "</select></div>";
     if (C.motif === "autre") h += '<div class="field"><span class="flabel">Usage</span><div class="chips">' + ["Voiture", "Moto", "Dépannage", "Autre"].map(function (u) { return '<button class="chip" data-cusage="' + u + '" aria-pressed="' + (u === C.usage) + '">' + u + "</button>"; }).join("") + "</div></div>";
     h += '<div class="field"><span class="flabel">' + (C.motif === "autre" ? "Utilisé par" : "Perte à la charge de") + "</span>" + segHtml("fam", "data-caff", [["YC", "Yann"], ["OC", "Olivier"], ["5050", "Commun"]], C.aff) + "</div>";
-    if (!sel.length) h += '<div class="small muted">Touchez les bidons à retirer du stock.</div>';
+    var takes = [];
+    if (!sel.length) h += '<div class="small muted">Touchez les bidons concernés, puis indiquez combien on retire du stock.</div>';
     else {
-      var e = corrEffects(sel), parts = [];
-      ["YC", "OC"].forEach(function (p) { if (e.byP[p] > 0.005) parts.push(eur.format(e.byP[p]) + " payés par " + FAM[p].s); });
-      var s = sel.length + " bidon(s), " + int0.format(e.lit) + " L (" + parts.join(", ") + "). Leur valeur est retirée des dépenses d’essence du bateau";
-      if (C.motif !== "autre") s += ", puis comptée comme perte à la charge de " + (C.aff === "5050" ? "Yann et Olivier (50/50)" : FAM[C.aff].s) + ".";
-      else s += (e.dettes.length ? ". " + e.dettes.map(function (d) { return FAM[d.from].s + " devra " + eur.format(d.eur) + " à " + FAM[d.to].s; }).join(" ; ") + "." : " : chacun a utilisé sa propre essence, rien d’autre à régler.");
-      h += '<div class="alert ok">' + s + "</div>";
+      // combien retire-t-on du stock ? en bidons (au demi) ou en litres ; par défaut, les bidons touchés en entier
+      var selL = sel.reduce(function (a, i) { return a + bidons[i].litres; }, 0), qv = C.qty != null ? C.qty : (C.unit === "litres" ? Math.round(selL * 10) / 10 : sel.length);
+      h += '<div class="field"><span class="flabel">Quantité retirée du stock</span>' + segHtml("mini", "data-cunit", [["bidons", "En bidons"], ["litres", "En litres"]], C.unit) +
+        (C.unit === "bidons" ? '<div class="stepper"><button data-cqstep="-0.5" aria-label="Un demi-bidon de moins"' + (qv <= 0.5 ? " disabled" : "") + '>−</button><span class="val">' + half(qv) + '</span><button data-cqstep="0.5" aria-label="Un demi-bidon de plus"' + (qv >= sel.length ? " disabled" : "") + ">+</button></div>"
+          : '<div class="bal-amt"><input id="cQty" inputmode="decimal" value="' + dec1.format(qv) + '" aria-label="Litres retirés du stock"><span>L</span></div>') +
+        '<div class="small muted">Sur ' + sel.length + " bidon(s) touché(s), " + dec1.format(selL) + " L.</div></div>";
+      takes = corrTakes(sel);
+      h += '<div class="alert ok" id="corrEff">' + corrEffText(takes) + "</div>";
     }
-    return h + '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="corrSave"' + (sel.length ? "" : " disabled") + ">Enregistrer la correction</button></div></div>";
+    return h + '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="corrSave"' + (takes.length ? "" : " disabled") + ">Enregistrer la correction</button></div></div>";
   }
   function commitAchat() {
     var A = achatForm, f = A.f, B = A.b, Lt = A.L, P = A.P, pay = { YC: 0, OC: 0 }; pay[f] = P;
@@ -1024,8 +1108,14 @@
     });
     S.forEach(function (x) {
       if (x.how) return;
-      if (hasNum(x.s.jaugeDeb) && hasNum(x.s.jaugeFin)) { x.L = Math.max(0, (Number(x.s.jaugeDeb) - Number(x.s.jaugeFin)) / 16 * cap); x.how = "jauge"; x.howTxt = "jauge " + fracLabel(Number(x.s.jaugeDeb)) + " → " + fracLabel(Number(x.s.jaugeFin)); }
-      else { x.L = x.eMin / 60 * conso; x.how = "temps"; x.howTxt = "estimé : " + Math.round(x.eMin) + " min × " + int0.format(conso) + " L/h"; }
+      var est = x.eMin / 60 * conso, estTxt = Math.round(x.eMin) + " min × " + int0.format(conso) + " L/h";
+      if (hasNum(x.s.jaugeDeb) && hasNum(x.s.jaugeFin)) {
+        var gL = (Number(x.s.jaugeDeb) - Number(x.s.jaugeFin)) / 16 * cap, jTxt = "jauge " + fracLabel(Number(x.s.jaugeDeb)) + " → " + fracLabel(Number(x.s.jaugeFin));
+        // la jauge est imprécise : si elle s'écarte trop du temps moteur, l'estimation au temps a la priorité
+        if (jaugeAnormale(gL, x.eMin)) { x.L = est; x.how = "temps"; x.howTxt = jTxt + " (≈ " + int0.format(gL) + " L) incohérente avec le temps moteur : estimé " + estTxt; x.jIncoh = true; }
+        else { x.L = Math.max(0, gL); x.how = "jauge"; x.howTxt = jTxt; }
+      }
+      else { x.L = est; x.how = "temps"; x.howTxt = "estimé : " + estTxt; }
     });
     // 2. réservoir suivi dans l'ordre : versements et sessions (à égalité, la session passe avant le plein qui la suit)
     var pool = JSON.parse(JSON.stringify(B.pool)), ev = P.map(function (p) { return { k: p.k, o: 1, p: p }; }).concat(S.map(function (x) { return { k: x.k, o: 0, x: x }; }));
@@ -1749,6 +1839,16 @@
       var cp = document.getElementById("cPhoto"); if (cp && !sortie.photoCompteur) cp.click();
     }
   }
+  /* Grand affichage : toucher le médaillon d'une personne la met en tour de ski (son tour en pause reprend, sinon nouveau passage ou nouveau tour). */
+  function bigSki(pid) {
+    var r = running(); if (r && r.pid === pid) return;
+    if (r) act(r.id, "end");
+    var mine = sortie.tours.filter(function (x) { return x.pid === pid; }), open = mine.filter(function (x) { return x.state !== "done"; }).pop(), last = mine[mine.length - 1];
+    if (open) act(open.id, open.state === "wait" ? "start" : "resume");
+    else if (last) act(last.id, "again");
+    else { var nt = newTour(pid, "slalom"); sortie.tours.push(nt); act(nt.id, "start"); }
+    toast(person(pid).name + " en tour de ski.");
+  }
   function bigLayer(id) { var el = document.getElementById(id); if (!el) { el = document.createElement("div"); el.id = id; el.hidden = true; document.body.appendChild(el); } return el; }
   function updateBig() {
     var big = bigLayer("bigView"), msg = bigLayer("rotMsg"), land = isLandscape();
@@ -1761,22 +1861,27 @@
     if (!show) { bigKey = ""; return; }
     var now = new Date(), r = running(), pil = person((r && r.pilote) || sortie.pilote), on = sortie.engine === "on";
     var t = bigTour(), ask = Date.now() - bigEndAsk < 4000;
-    var key = (r ? r.id + r.state : "-") + "|" + (t ? t.id + t.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land + "|" + ask;
+    var key = (r ? r.id + r.state : "-") + "|" + (t ? t.id + t.state : "-") + "|" + (pil ? pil.id : "") + "|" + on + "|" + land + "|" + ask + "|" + sortie.participants.map(function (p) { return p.pid; }).join(",");
     if (key !== bigKey) {
       bigKey = key;
-      // en haut à droite : pause / fin du skieur, pause / fin de la session bateau
+      // à droite, en gros et bien espacés : pause / fin du skieur, pause / fin de la session bateau
       var acts = '<div class="big-acts">' +
         '<button class="ba-ski" data-bact="tpause"' + (t ? "" : " disabled") + ">" + (t && t.state === "pause" ? "Reprise skieur" : "Pause skieur") + "</button>" +
         '<button class="ba-ski" data-bact="tend"' + (t ? "" : " disabled") + ">Fin skieur</button>" +
         '<button class="ba-boat" data-bact="boat">' + (on ? "Pause bateau" : "Reprise bateau") + "</button>" +
         '<button class="ba-end' + (ask ? " ask" : "") + '" data-bact="end">' + (ask ? "Confirmer la fin ?" : "Fin session") + "</button></div>";
+      // en bas, les personnes à bord : toucher un médaillon lance son tour (le tour en cours d'un autre skieur se termine)
+      var sk = '<div class="big-sk"><span class="label">Lancer un skieur</span><div class="big-sk-l">' + sortie.participants.map(function (p) {
+        var pp = person(p.pid), st = r && r.pid === p.pid ? " on" : (t && t.pid === p.pid && t.state === "pause" ? " pz" : "");
+        return '<button class="bsk f-' + famOf(p) + st + '" data-bsk="' + esc(p.pid) + '" aria-label="Lancer le tour de ' + esc(pp.name) + '">' + pilotAvatar(pp, "bsk-av") + "<span>" + esc(pp.name) + "</span></button>";
+      }).join("") + "</div></div>";
       big.innerHTML = '<div class="big-card">' +
-        '<div class="big-top"><div class="big-id"><span class="big-who">' + (t ? esc(tourName(t)) : "Aucun skieur en cours") + "</span>" + (t ? '<span class="big-act">' + esc(ACTS[t.act] || "") + (t.state === "pause" ? " · en pause" : "") + "</span>" : "") + "</div>" + acts + "</div>" +
+        '<div class="big-id"><span class="big-who">' + (t ? esc(tourName(t)) : "Aucun skieur en cours") + "</span>" + (t ? '<span class="big-act">' + esc(ACTS[t.act] || "") + (t.state === "pause" ? " · en pause" : "") + "</span>" : "") + "</div>" + acts +
         '<div class="big-tour' + (t && t.state === "pause" ? " paused" : "") + '"' + (t ? ' data-timer="t' + t.id + '"' : "") + ">" + (t ? fmtClock(tourMs(t, Date.now())) : "—") + "</div>" +
         '<div class="big-grid">' +
         '<div><span class="label">Temps moteur</span><b data-timer="engine">' + fmtClock(engineMs(Date.now())) + '</b><span class="big-s">' + (on ? "moteur en route" : "moteur arrêté") + "</span></div>" +
         '<div><span class="label">Pilote</span><b>' + esc(pil ? pil.name : "—") + "</b></div>" +
-        '<div><span class="label">Heure</span><b id="bigClock">' + now.toTimeString().slice(0, 5) + "</b></div></div>" +
+        '<div><span class="label">Heure</span><b id="bigClock">' + now.toTimeString().slice(0, 5) + "</b></div></div>" + sk +
         (land ? "" : '<button class="btn ghost sm big-close" id="bigClose">Fermer</button>') + "</div>";
     }
     var ck = document.getElementById("bigClock"); if (ck) ck.textContent = now.toTimeString().slice(0, 5);
@@ -1784,7 +1889,8 @@
   if (landMq) { var onLand = function () { updateBig(); }; if (landMq.addEventListener) landMq.addEventListener("change", onLand); else if (landMq.addListener) landMq.addListener(onLand); }
   document.addEventListener("click", function (e) {
     var b = e.target.closest && e.target.closest("#bigClose"); if (b) { bigOpen = false; updateBig(); return; }
-    var ba = e.target.closest && e.target.closest("#bigView [data-bact]"); if (ba && !ba.disabled) bigAction(ba.dataset.bact);
+    var ba = e.target.closest && e.target.closest("#bigView [data-bact]"); if (ba && !ba.disabled) return bigAction(ba.dataset.bact);
+    var bs = e.target.closest && e.target.closest("#bigView [data-bsk]"); if (bs) bigSki(bs.dataset.bsk);
   });
   function render() {
     computeYears();
@@ -2234,6 +2340,7 @@
     if (b.id === "manSaveNext") { if (manSave()) { manForm = manNew(manForm); screen.scrollTop = 0; render(); } return; }
     if (b.id === "goStart") {
       if (!startList.length) return toast("Ajoutez au moins une personne à bord avec les boutons +.");
+      var cd0 = parseNum(document.getElementById("cDeb").value); if (!cptConfirm("deb:" + cd0, cptStartCheck(cd0))) return;
       var now = Date.now();
       sortie = { active: true, closing: false, compteurDeb: parseNum(document.getElementById("cDeb").value), jaugeDeb: startJauge, compteurFin: null, jaugeFin: startJauge, plein: true, bidonsPlein: 1, pleinF: "YC",
         pilote: inListStart(startPilote) ? startPilote : startList[0].pid, engine: "on", engAcc: 0, engSince: now, startedAt: now, participants: startList, tours: [] };
@@ -2311,8 +2418,10 @@
     if (b.id === "backClose") { sortie.closing = false; toast("Session reprise : moteur arrêté, redémarrez-le pour continuer."); return render(); }
     if (b.id === "tPlein") { sortie.plein = !sortie.plein; return render(); }
     if (ds.pleinf) { sortie.pleinF = ds.pleinf; return render(); }
-    if (ds.cstep) { sortie.bidonsPlein = Math.max(0.5, Math.min(5, sortie.bidonsPlein + Number(ds.cstep))); return render(); }
+    if (ds.cstep) { sortie.bidonsPlein = Math.max(0.5, Math.min(stockCans() || 0.5, sortie.bidonsPlein + Number(ds.cstep))); return render(); }
     if (b.id === "saveSortie") {
+      var cf0 = document.getElementById("cFin"); if (cf0) sortie.compteurFin = parseNum(cf0.value);
+      if (!cptConfirm("fin:" + sortie.compteurFin, cptEndCheck(sortie.compteurDeb, sortie.compteurFin, engineMs(Date.now()) / 60000))) return;
       if (sortie.engine === "on") { sortie.engAcc += Date.now() - sortie.engSince; sortie.engine = "off"; }
       var mins = Math.round(totalMs(Date.now()) / 60000), endC = sortie.compteurFin, msg = "Session enregistrée : " + mins + " min de tours.";
       var R = computeRecap(Date.now()), perPid = {};
@@ -2346,7 +2455,7 @@
     if (ds.atog) { achatForm[ds.atog] = !achatForm[ds.atog]; return render(); }
     if (ds.mtog) { miseForm.plein = !miseForm.plein; b.setAttribute("aria-pressed", String(miseForm.plein)); return; }
     if (ds.astep) { achatForm.b = Math.max(1, Math.min(5, achatForm.b + Number(ds.astep))); return render(); }
-    if (ds.mstep) { miseForm.n = Math.max(0.5, Math.min(5, miseForm.n + Number(ds.mstep))); return render(); }
+    if (ds.mstep) { miseForm.n = Math.max(0.5, Math.min(stockCans(), miseForm.n + Number(ds.mstep))); return render(); }
     if (b.id === "saveAchat") {
       achatForm.L = parseNum(document.getElementById("aL").value); achatForm.P = parseNum(document.getElementById("aP").value);
       if (achatForm.L <= 0 || achatForm.P <= 0) return toast("Indiquez les litres et le prix."); if (!achatForm.f) return toast("Indiquez la famille qui a payé.");
@@ -2369,25 +2478,36 @@
       depenses.unshift({ d: todayFr(), lib: "Extourne essence " + int0.format(eL) + " L (achat du " + (em.d || isoToFr(em.date)) + ", saisie erronée ou en double)", cat: "Essence", m: -eP, payeur: ef, regle: "payeur", isNew: true });
       view.essence = null; corrForm.ach = ""; save(2); toast(savedMsg("Achat extourné : dépense inverse créée" + (eidx.length ? ", " + eidx.length + " bidon(s) retiré(s) du stock." : "."))); return render();
     }
-    if (ds.cpick) { corrForm.sel[ds.cpick] = !corrForm.sel[ds.cpick]; return render(); }
+    if (ds.cpick) { corrForm.sel[ds.cpick] = !corrForm.sel[ds.cpick]; corrForm.qty = null; return render(); }
+    if (ds.cunit) { corrForm.unit = ds.cunit; corrForm.qty = null; return render(); }
+    if (ds.cqstep) { var nsel = corrSel().length, q0 = corrForm.qty != null ? corrForm.qty : nsel; corrForm.qty = Math.max(0.5, Math.min(nsel, q0 + Number(ds.cqstep))); return render(); }
     if (ds.cmotif) { corrForm.motif = ds.cmotif; return render(); }
     if (ds.cusage) { corrForm.usage = ds.cusage; return render(); }
     if (ds.caff) { corrForm.aff = ds.caff; return render(); }
     if (b.id === "corrSave") {
       var sel = corrSel(); if (!sel.length) return toast("Touchez les bidons à retirer du stock.");
-      var eff = corrEffects(sel), n = sel.length, lab = corrForm.motif === "autre" ? corrForm.usage.toLowerCase() : corrForm.motif;
+      var cq = document.getElementById("cQty"); if (cq) corrForm.qty = Math.max(0, parseNum(cq.value));
+      var tk = corrTakes(sel); if (!tk.length) return toast("Indiquez la quantité retirée du stock.");
+      var eff = corrEffects(tk), lab = corrForm.motif === "autre" ? corrForm.usage.toLowerCase() : corrForm.motif, nC = 0;
       eff.lines.forEach(function (l) { l.d = todayFr(); l.isNew = true; depenses.unshift(l); });
+      eff.red.forEach(function (r) { // autre usage : l'achat d'origine est réduit (dépense et mouvement) ; à zéro, la dépense sort de la liste
+        var nm = Math.round((Number(r.dep.m) - r.g.E) * 100) / 100, note = dec1.format(r.g.L) + " L sortis le " + todayFr() + " (" + lab + ")";
+        if (nm < 0.005) depenses = depenses.filter(function (x) { return x !== r.dep; }); else { r.dep.m = nm; r.dep.lib = r.dep.lib + " · " + note; }
+        if (r.mv) { r.mv.litres = Math.max(0, Math.round((Number(r.mv.litres) - r.g.L) * 10) / 10); r.mv.prix = Math.max(0, Math.round((Number(r.mv.prix) - r.g.E) * 100) / 100); r.mv.cout = r.mv.prix; r.mv.v = (r.mv.bidons || "?") + " bidon(s) · " + int0.format(r.mv.litres) + " L · " + eur.format(r.mv.prix) + " (après sortie)"; r.mv.retire = (r.mv.retire ? r.mv.retire + " ; " : "") + note; }
+      });
       eff.dettes.forEach(function (d) { dettes.push(d); });
-      bidons = bidons.filter(function (x, i) { return sel.indexOf(i) < 0; });
-      moves.unshift({ d: todayFr(), t: "Correction du stock (" + lab + ")", v: n + " bidon(s) · " + int0.format(eff.lit) + " L", who: person(corrForm.who).name + " · " + (corrForm.aff === "5050" ? "commun" : FAM[corrForm.aff].s) });
-      view.essence = null; corrForm.sel = {}; save(2); toast(savedMsg("Correction du stock enregistrée.")); return render();
+      tk.forEach(function (t) { var b0 = bidons[t.i], c0 = Number(b0.cap) || SPEC.bidon; nC += t.litres >= b0.litres - 0.01 ? Math.ceil(b0.litres / c0 * 2 - 0.02) / 2 : Math.round(t.litres / c0 * 2) / 2; b0.litres -= t.litres; });
+      bidons = bidons.filter(function (x) { return x.litres > 0.01; });
+      if (corrForm.unit === "litres") nC = 0; // retrait en litres : on l'indique en litres seulement
+      moves.unshift({ d: todayFr(), t: "Correction du stock (" + lab + ")", v: (nC ? half(nC) + " bidon(s) · " : "") + dec1.format(eff.lit) + " L", who: person(corrForm.who).name + " · " + (corrForm.aff === "5050" ? "commun" : FAM[corrForm.aff].s) });
+      view.essence = null; corrForm.sel = {}; corrForm.qty = null; save(2); toast(savedMsg(corrForm.motif === "autre" ? "Correction enregistrée : l’essence sort des dépenses du bateau." : "Correction du stock enregistrée.")); return render();
     }
     if (b.id === "achBoth") {
       var pl = planPrelevement(achatForm.tn, achatForm.tf), left = cansAfter(pl);
       if (left + achatForm.b > 5) return toast("Il resterait " + left + " bidon(s) plein(s) : impossible d’en remplir " + achatForm.b + " de plus. Augmentez le nombre de bidons versés.");
       applyPrelevement(pl, achatForm.tf, "oublié, noté à l’achat", false); return commitAchat();
     }
-    if (b.id === "saveMise") { applyPrelevement(planPrelevement(miseForm.n, miseForm.f), miseForm.f, "", miseForm.plein); if (miseForm.plein) lastPlein = todayFr(); view.essence = null; save(1); toast(savedMsg("Versement enregistré.")); return render(); }
+    if (b.id === "saveMise") { var mp0 = planPrelevement(miseForm.n, miseForm.f); if (mp0.manque > 0.01) return toast("Il n’y a que " + half(stockCans()) + " bidon(s) en stock : impossible d’en verser " + half(miseForm.n) + "."); applyPrelevement(planPrelevement(miseForm.n, miseForm.f), miseForm.f, "", miseForm.plein); if (miseForm.plein) lastPlein = todayFr(); view.essence = null; save(1); toast(savedMsg("Versement enregistré.")); return render(); }
     if (b.id === "dNew") { view.dep = true; return render(); }
     if (ds.bip) { balForm = balForm || {}; balForm.payeur = ds.bip; return render(); }
     if (ds.baldir) { var ba0 = document.getElementById("balAmt"); if (ba0) ui.balAmt = Math.max(0, parseNum(ba0.value)); ui.balDir = ds.baldir; return render(); }
@@ -2435,6 +2555,7 @@
 
   screen.addEventListener("input", function (e) {
     var el = e.target;
+    if (el.id === "cQty") { corrForm.qty = Math.max(0, parseNum(el.value)); var ce = document.getElementById("corrEff"), cs = document.getElementById("corrSave"), tk0 = corrTakes(corrSel()); if (ce) ce.innerHTML = corrEffText(tk0); if (cs) cs.disabled = !tk0.length; return; } // litres retirés du stock (correction)
     if (el.dataset.f && el.tagName === "INPUT") { findTour(Number(el.dataset.id))[el.dataset.f] = el.value.replace(/\D/g, ""); return; }
     if (el.dataset.spec) { var key = el.dataset.spec; SPEC[key] = el.classList.contains("txt") ? el.value : parseNum(el.value); return; }
     if (el.id === "cDeb") { sortie.compteurDeb = parseNum(el.value); sortie.debEdited = true; var wd = document.getElementById("cDebWarn"); if (wd) wd.innerHTML = startWarnHtml(parseNum(el.value)); return; }

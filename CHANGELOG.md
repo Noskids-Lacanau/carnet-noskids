@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 1.9.3 — 2026-11-24
+
+- Bidons pas pleins coloriés au prorata ; versement limité au stock (pas de bidon négatif)
+- Correction du stock : quantité retirée en bidons ou en litres ; autre usage (moto, voiture) sorti des dépenses du bateau
+- Grand affichage : gros boutons espacés, médaillons des personnes à bord pour lancer un skieur
+- Clôture : résumé (ski par personne, moteur sans skieur, coût de revient estimé)
+- Contrôles : jauge incohérente avec le temps moteur = estimation au temps ; compteur moteur refusé au-delà de 100 h d'écart ou 24 h par session, vérification demandée si douteux
+
 ## 1.9.2 — 2026-11-24
 
 - Balance essence : frise depuis le dernier équilibrage (versements par payeur, sessions Yann / Olivier / mixtes, litres consommés), versé par famille, sessions mixtes, totaux et conclusion
