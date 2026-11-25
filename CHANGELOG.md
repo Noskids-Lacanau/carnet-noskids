@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.9.7 — 2026-11-25
+
+- Trous de compteur : l'historique importé de l'ancien bateau (été 2025) n'est plus contrôlé, le bandeau ne revient plus
+- Page Balance : retraits alignés, « Graphique dépenses Essence », conclusion courte, montant centré, encart 5 en violet avec bouton centré
+- Écran Session : compteur et jauge décalés et titrés en gras, niveau de jauge en rouge, orange ou vert, bouton Démarrer plus étroit
+
 ## 1.9.6 — 2026-11-25
 
 - Page Balance : frise repliable, textes raccourcis, prénoms en couleur, détail du calcul replié, et nouvel encart pour noter un règlement des dépenses communes

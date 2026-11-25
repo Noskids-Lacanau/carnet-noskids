@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.6", SCHEMA = 1;
+  var APP_VERSION = "1.9.7", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -307,7 +307,8 @@
   function fracLabel(v) { if (v <= 0) return "Vide"; if (v >= 16) return "Plein"; var n = v, d = 16; while (n % 2 === 0) { n /= 2; d /= 2; } return n + "/" + d; }
   function gPt(v, r) { var a = (G0 - v / 16 * GSWEEP) * Math.PI / 180; return [GC.x + r * Math.cos(a), GC.y - r * Math.sin(a)]; }
   function gaugeRead(v, eq) {
-    if (eq) return "<b>" + fracLabel(v) + "</b> = " + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir + " L"; // v1.9.6 : écran Session, « 3/4 = 94 L sur 125 L »
+    // v1.9.6 : écran Session, « 3/4 = 94 L sur 125 L » ; v1.9.7 : rouge jusqu'à 1/8, orange à 3/16, vert au-delà
+    if (eq) return '<span class="gq ' + (v <= 2 ? "gq-r" : v <= 3 ? "gq-o" : "gq-g") + '"><b>' + fracLabel(v) + "</b> = " + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir + " L</span>";
     return "<b>" + fracLabel(v) + '</b><span class="gr-sep"> · </span>≈ ' + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir;
   }
   function gHead(label, key, v) { return '<div class="g-head"><span class="flabel">' + label + '</span><span class="g-read" data-gread="' + key + '">' + gaugeRead(v) + '</span></div>'; }
@@ -551,7 +552,7 @@
     if (!sortie.debEdited) sortie.compteurDeb = lastCompteur(); // suit les sessions arrivées par synchronisation
     // 1 : compteur (champ étroit) et lecture de la jauge à gauche, jauge à droite
     var h = '<div class="card p1"><div class="step"><b>1</b>Saisissez le compteur constaté au bateau et positionnez la jauge.</div>' +
-      '<div class="p1-grid"><div class="p1-left"><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" class="cpt-in" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
+      '<div class="p1-grid"><div class="p1-left"><div class="field"><label for="cDeb" class="flabel p1-lab">Compteur moteur (h)</label><input id="cDeb" class="cpt-in" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
       '<div class="g-side"><span class="flabel">Jauge au départ</span><span class="g-read" data-gread="start">' + gaugeRead(startJauge, true) + "</span></div></div>" +
       '<div class="gauge-sm p1-g">' + gaugeHtml("start", startJauge) + "</div></div>" +
       '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div></div>";
@@ -750,7 +751,8 @@
   /* Trous de compteur : écart entre la fin d'une session et le début de la suivante, sur le même bateau. */
   function findGaps() {
     var out = [], by = {};
-    sessionsArr.forEach(function (s) { if (hasNum(s.compteurDeb) && (hasNum(s.compteurFin) || Number(s.engineMin) > 0)) (by[s.bateau || ""] = by[s.bateau || ""] || []).push(s); });
+    // v1.9.7 : l'historique importé de l'ancien bateau (mode « historique », été 2025) n'est plus contrôlé : ses écarts ne peuvent plus être rattrapés
+    sessionsArr.forEach(function (s) { if (s.mode !== "historique" && hasNum(s.compteurDeb) && (hasNum(s.compteurFin) || Number(s.engineMin) > 0)) (by[s.bateau || ""] = by[s.bateau || ""] || []).push(s); });
     Object.keys(by).forEach(function (k) {
       var list = by[k].sort(function (a, b) { return Number(a.compteurDeb) - Number(b.compteurDeb); });
       for (var i = 1; i < list.length; i++) {
@@ -1220,7 +1222,7 @@
     R.ready = S.length > 0 || P.length > 0;
     return R;
   }
-  function balResultText(R) { return R.amount < 0.5 ? "Rien à équilibrer : chacun a consommé l’essence qu’il a payée." : FAM[R.from].s + " doit " + eur.format(R.amount) + " à " + FAM[R.to].s + "."; }
+  function balResultText(R) { return R.amount < 0.5 ? "Équilibre fait, pas de régularisation." : FAM[R.from].s + " doit " + eur.format(R.amount) + " à " + FAM[R.to].s + "."; }
   function balVTxt(v) { return Math.abs(v) < 0.5 ? "équilibrée" : (v > 0 ? "Olivier doit " + eur.format(v) + " à Yann" : "Yann doit " + eur.format(-v) + " à Olivier"); }
   function balEffHtml(R, amt, dir) {
     var Bc = balance(), v = (Bc.net.YC - Bc.net.OC) / 2, nv = v + (dir === "OC" ? amt : -amt);
@@ -1238,9 +1240,9 @@
      elle augmente la part payée de la famille qui verse et diminue celle de la famille qui reçoit, ce qui solde la balance des comptes. */
   var reglForm = null;
   function reglHtml() {
-    var Bc = balance(), v = (Bc.net.YC - Bc.net.OC) / 2, h = '<div class="card bal-regl"><div class="step"><b>5</b>Équilibrage des dépenses communes</div>' +
+    var Bc = balance(), v = (Bc.net.YC - Bc.net.OC) / 2, h = '<div class="card bal-card bal-regl"><div class="step"><b>5</b>Équilibrage des dépenses communes</div>' +
       '<div class="small">' + (Math.abs(v) < 0.5 ? "Balance des comptes : équilibrée." : "Balance des comptes : <b>" + balVTxt(v) + "</b>.") + "</div>";
-    if (!reglForm) return h + '<button class="btn ghost" id="reglOpen"' + (canValidate() ? "" : " disabled") + ">Noter un règlement</button>" + (canValidate() ? "" : RESERVE_TXT) + "</div>";
+    if (!reglForm) return h + '<button class="btn regl-btn" id="reglOpen"' + (canValidate() ? "" : " disabled") + ">Noter un règlement</button>" + (canValidate() ? "" : RESERVE_TXT) + "</div>";
     var F = reglForm;
     h += '<div class="field"><span class="flabel">Qui a payé qui ?</span>' + segHtml("fam mini", "data-reglp", [["OC", "Olivier a payé Yann"], ["YC", "Yann a payé Olivier"]], F.p) + "</div>" +
       '<div class="two"><div class="field"><label for="rgM">Montant réglé (€)</label><input id="rgM" inputmode="decimal" value="' + (F.m ? dec2.format(F.m) : "") + '"></div>' +
@@ -1294,7 +1296,7 @@
       (wide ? '</div><div class="small muted bal-fhint">← Glisser la frise du doigt pour remonter le temps</div>' : "");
     var dropIc = function (f) { return '<svg width="10" height="13" viewBox="-8 -12 16 23" style="vertical-align:-2px;margin-right:4px" aria-hidden="true"><path d="' + drop + '" fill="' + col[f] + '"/></svg>'; };
     // v1.9.6 : encart repliable (ouvert par défaut), sous-titre réduit à la date du dernier équilibrage
-    var h = '<div class="card bal-head">' + collHead("balFriseOff", "Balance essence", "Dernier équilibrage : " + keyFr(R.start) + " · " + litF(R.litres) + " consommés").replace('aria-expanded="' + !!ui.balFriseOff + '"', 'aria-expanded="' + !ui.balFriseOff + '"');
+    var h = '<div class="card bal-head">' + collHead("balFriseOff", "Graphique dépenses Essence", "Dernier équilibrage : " + keyFr(R.start) + " · " + litF(R.litres) + " consommés").replace('aria-expanded="' + !!ui.balFriseOff + '"', 'aria-expanded="' + !ui.balFriseOff + '"');
     if (ui.balFriseOff) return h + '<div class="small" style="margin-top:6px"><b>' + balResultText(R) + "</b></div></div>";
     h += s +
       '<div class="legend"><span>' + dropIc("YC") + "Versé par Yann</span><span>" + dropIc("OC") + 'Versé par Olivier</span><span><i style="display:inline-block;width:12px;height:9px;border:2px solid var(--run);border-radius:2px;margin-right:4px;vertical-align:-1px"></i>Session mixte</span></div>';
@@ -1317,7 +1319,7 @@
       "<tr><td>dont essence payée par l’autre</td><td>" + eur.format(R.yForO) + "</td><td>" + eur.format(R.oForY) + "</td></tr>" +
       "<tr><td><b>Écart</b></td>" + ecTd(oDoit) + ecTd(yDoit) + "</tr></tbody></table>";
     var bid = (SPEC.bidon || 20) * lastPrixL();
-    h += '<div class="alert' + (R.amount < 0.5 ? " ok" : "") + '"><b>' + balResultText(R) + "</b>" + (R.amount >= 0.5 ? "≈ " + dec1.format(R.amount / bid) + " bidon. " : "") + "Les comptes repartent à 0 une fois l’équilibrage validé (étape 4).</div></div>";
+    h += '<div class="alert' + (R.amount < 0.5 ? " ok" : "") + '"><b>' + balResultText(R) + "</b>" + (R.amount >= 0.5 ? "≈ " + dec1.format(R.amount / bid) + " bidon. Les comptes repartent à 0 une fois l’équilibrage validé (étape 4)." : "") + "</div></div>";
     return h;
   }
   function renderBalance() {
@@ -1327,12 +1329,12 @@
     // 1. essence mise dans le bateau
     var r0 = R.pool0.L.YC + R.pool0.L.OC, stY = 0, stO = 0;
     bidons.forEach(function (b) { if (b.f === "OC") stO += b.litres; else stY += b.litres; });
-    h += '<div class="card"><div class="step"><b>1</b>Essence mise dans le bateau</div>' +
+    h += '<div class="card bal-card"><div class="step"><b>1</b>Essence mise dans le bateau</div>' +
       (r0 > 0.05 ? '<div class="bal-l small muted"><span>Déjà dans le réservoir au départ</span><span>' + int0.format(r0) + " L · " + eur.format(R.pool0.E.YC + R.pool0.E.OC) + "</span></div>" : "") +
       ["YC", "OC"].map(function (f) { var m = R.mis[f]; return '<div class="bal-l"><span>' + dot(f) + FAM[f].n + '</span><span>' + int0.format(m.L) + " L · " + eur.format(m.E) + (m.L > 0.05 ? ' <span class="muted">(' + dec2.format(m.E / m.L) + " €/L)</span>" : "") + "</span></div>"; }).join("") +
       (stY + stO > 0.05 ? '<div class="small muted bal-sep">Bidons encore en stock : ' + [stY > 0.05 ? int0.format(stY) + " L payés par Yann" : "", stO > 0.05 ? int0.format(stO) + " L payés par Olivier" : ""].filter(Boolean).join(", ") + ". Ils compteront quand ils seront versés.</div>" : "") + "</div>";
     // 2. essence consommée, session par session
-    h += '<div class="card"><div class="step"><b>2</b>Essence consommée, session par session</div>';
+    h += '<div class="card bal-card"><div class="step"><b>2</b>Essence consommée, session par session</div>';
     if (!R.S.length) h += '<div class="small muted">Aucune session depuis le dernier équilibrage.</div>';
     R.S.forEach(function (x, i) {
       var cross = (x.yForO || 0) + (x.oForY || 0), one = cross < 0.005, s = x.s; // rien à équilibrer : aucune essence payée par l'autre famille
@@ -1349,18 +1351,18 @@
     h += "</div>";
     // 3. qui a payé l'essence de qui
     var net = R.yForO - R.oForY;
-    h += '<div class="card"><div class="step"><b>3</b>Qui a payé l’essence de qui</div>' +
-      // v1.9.6 : prénoms en couleur (sans pastille) pour tenir sur une ligne ; « Écart = … » aligné à droite
-      '<div class="bal-l"><span>Payée par <b class="n-yc">Yann</b>, consommée par <b class="n-oc">Olivier</b></span><b>' + eur.format(R.yForO) + "</b></div>" +
-      '<div class="bal-l"><span>Payée par <b class="n-oc">Olivier</b>, consommée par <b class="n-yc">Yann</b></span><b>' + eur.format(R.oForY) + "</b></div>" +
+    h += '<div class="card bal-card"><div class="step"><b>3</b>Qui a payé l’essence de qui</div>' +
+      // v1.9.7 : prénoms en couleur, sans « par », pour tenir sur une ligne ; « Écart = … » aligné à droite
+      '<div class="bal-l"><span>Payée <b class="n-yc">Yann</b>, consommée <b class="n-oc">Olivier</b></span><b>' + eur.format(R.yForO) + "</b></div>" +
+      '<div class="bal-l"><span>Payée <b class="n-oc">Olivier</b>, consommée <b class="n-yc">Yann</b></span><b>' + eur.format(R.oForY) + "</b></div>" +
       '<div class="bal-ec bal-sep">Écart = <b>' + (Math.abs(net) < 0.005 ? "0,00 €" : eur.format(Math.abs(net))) + "</b>" + (Math.abs(net) < 0.005 ? "" : '<span class="small muted">en faveur ' + (net > 0 ? "de Yann" : "d’Olivier") + "</span>") + "</div></div>";
     // 4. ajustement proposé (modifiable)
     var dir = ui.balDir || R.from, amt = ui.balAmt != null ? ui.balAmt : R.amount;
-    h += '<div class="card bal-prop"><div class="step"><b>4</b>Ajustement proposé</div>' +
+    h += '<div class="card bal-card bal-prop"><div class="step"><b>4</b>Ajustement proposé</div>' +
       '<div class="small muted">Équilibrage essence du ' + keyFr(R.start) + " au " + endFr + "</div>" +
       segHtml("fam mini", "data-baldir", [["OC", "Olivier doit à Yann"], ["YC", "Yann doit à Olivier"]], dir) +
       '<div class="bal-amt"><input id="balAmt" inputmode="decimal" value="' + dec2.format(amt) + '" aria-label="Montant de l’équilibrage"><span>€</span>' + (ui.balAmt != null || ui.balDir ? '<button class="btn link" id="balReset">Revenir au calcul (' + eur.format(R.amount) + ")</button>" : "") + "</div>" +
-      '<div class="small bal-sep" id="balEff">' + balEffHtml(R, amt, dir) + "</div>" +
+      // v1.9.7 : la phrase « Balance des comptes » est retirée ici, elle figure à l'étape 5
       '<button class="btn" id="balValider"' + (canValidate() ? "" : " disabled") + ">Valider l’équilibrage</button>" + (canValidate() ? "" : RESERVE_TXT) +
       '<div class="small muted">' + balResteTxt(R) + "</div></div>";
     h += reglHtml();

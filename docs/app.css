@@ -1150,3 +1150,22 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .bal-ec b { font-size: 16px; }
 .coll.bal-sub { padding-top: 6px; padding-bottom: 2px; }
 .bal-regl .btn { justify-self: start; margin-top: 8px; }
+/* v1.9.7 : page Balance, retraits alignés sous le titre de chaque étape */
+.bal-card > .bal-l, .bal-card > .bal-s, .bal-card > .small, .bal-card > .bal-ec, .bal-card > .coll, .bal-card > .bal-warn, .bal-card > .field, .bal-card > .two, .bal-card > .reserve { margin-left: 30px; }
+.bal-prop .bal-amt { justify-content: center; }
+.bal-card.bal-regl { background: rgba(124, 77, 214, .10); border: 1px solid rgba(124, 77, 214, .35); }
+.bal-regl .step b { background: #7c4dd6; }
+.bal-regl .btn.regl-btn { display: block; justify-self: center; margin: 10px auto 0; background: #7c4dd6; border-color: #7c4dd6; color: #fff; padding-left: 22px; padding-right: 22px; }
+.bal-regl #reglSave { background: #7c4dd6; border-color: #7c4dd6; color: #fff; }
+/* v1.9.7 : écran Session, valeurs décalées vers la droite, titres en gras, couleur du niveau de jauge */
+.p1-left .p1-lab, .g-side .flabel { font-weight: 700; color: var(--ink); }
+.p1-left .cpt-in { margin-left: 12px; }
+.g-side .g-read { padding-left: 12px; }
+.g-side .gq b { color: inherit; }
+.gq-r { color: var(--bad); }
+.gq-o { color: #e07b00; }
+.gq-g { color: var(--ok); }
+.board .fam-heads { margin-left: 10px; }
+.checks.three { margin-left: 10px; }
+#goStart { display: block; width: 80%; margin-left: auto; margin-right: auto; }
+.p1-left .field label.p1-lab { font-size: 15px; }
