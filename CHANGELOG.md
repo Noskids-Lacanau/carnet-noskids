@@ -1,5 +1,13 @@
 # Journal des versions
 
+## 1.9.6 — 2026-11-25
+
+- Page Balance : frise repliable, textes raccourcis, prénoms en couleur, détail du calcul replié, et nouvel encart pour noter un règlement des dépenses communes
+- Nouveau N du logo, posé droit, avec un slalom régulier autour de quatre bouées
+- Trou de compteur : le bandeau disparaît une fois la session rattrapée (y compris pour les rattrapages faits avec une ancienne version), encart Session rattrapée repliable
+- Écran Session : jauge de départ plus petite, « 3/4 = 94 L sur 125 L » sur une ligne
+- Accueil : bandeau de la saison 2026 réduit ; Essence : encart Total des achats repliable
+
 ## 1.9.5 — 2026-11-24
 
 - Grand affichage réorganisé : vignettes des skieurs en haut, plan d'eau à gauche du chrono, Passage descendu, bouton Fermer toujours visible

@@ -1134,3 +1134,19 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .big-card.bv { align-items: stretch; }
 @media (orientation: landscape) and (max-height: 440px) { .bv-mid .big-tour { font-size: min(30vh, 124px); } }
 @media (orientation: landscape) and (max-height: 370px) { .bv-mid .big-tour { font-size: 25vh; } }
+/* v1.9.6 : écran Session, jauge de départ 20 % plus petite, titre en gras, « 3/4 = 94 L sur 125 L » sur une ligne */
+.p1-grid { grid-template-columns: minmax(0, 1fr) 138px; }
+.p1-g .gauge svg { max-width: 138px !important; }
+.g-side .flabel { font-weight: 700; color: var(--ink); }
+.g-side .g-read { font: 500 13px/1.3 var(--f-body); color: var(--muted); }
+.g-side .g-read b { display: inline; font: 700 20px/1.1 var(--f-display); color: var(--ink); }
+/* v1.9.6 : bandeau réduit (saison saisie en un bloc) */
+.alert.alert-sm { padding: 6px 10px; font-size: 12.5px; }
+.alert.alert-sm b { font-weight: 600; }
+/* v1.9.6 : page Balance */
+.n-yc { color: var(--yc); font-weight: 700; }
+.n-oc { color: var(--oc); font-weight: 700; }
+.bal-ec { display: flex; justify-content: flex-end; align-items: baseline; gap: 6px; flex-wrap: wrap; padding-top: 6px; }
+.bal-ec b { font-size: 16px; }
+.coll.bal-sub { padding-top: 6px; padding-bottom: 2px; }
+.bal-regl .btn { justify-self: start; margin-top: 8px; }

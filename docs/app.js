@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.5", SCHEMA = 1;
+  var APP_VERSION = "1.9.6", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -306,7 +306,10 @@
   var GC = { x: 120, y: 118 }, G0 = 210, GSWEEP = 240;
   function fracLabel(v) { if (v <= 0) return "Vide"; if (v >= 16) return "Plein"; var n = v, d = 16; while (n % 2 === 0) { n /= 2; d /= 2; } return n + "/" + d; }
   function gPt(v, r) { var a = (G0 - v / 16 * GSWEEP) * Math.PI / 180; return [GC.x + r * Math.cos(a), GC.y - r * Math.sin(a)]; }
-  function gaugeRead(v) { return "<b>" + fracLabel(v) + '</b><span class="gr-sep"> · </span>≈ ' + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir; }
+  function gaugeRead(v, eq) {
+    if (eq) return "<b>" + fracLabel(v) + "</b> = " + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir + " L"; // v1.9.6 : écran Session, « 3/4 = 94 L sur 125 L »
+    return "<b>" + fracLabel(v) + '</b><span class="gr-sep"> · </span>≈ ' + Math.round(v / 16 * SPEC.reservoir) + " L sur " + SPEC.reservoir;
+  }
   function gHead(label, key, v) { return '<div class="g-head"><span class="flabel">' + label + '</span><span class="g-read" data-gread="' + key + '">' + gaugeRead(v) + '</span></div>'; }
   function gaugeHtml(key, v, ro) {
     var s = '<div class="gauge"><svg viewBox="0 0 240 236" data-gauge="' + key + '"' + (ro ? ' data-ro="1" role="img" aria-label="Niveau théorique : ' + fracLabel(v) + '"' : ' role="slider" tabindex="0" aria-label="Jauge d’essence"') + ' aria-valuemin="0" aria-valuemax="16" aria-valuenow="' + v + '" aria-valuetext="' + fracLabel(v) + '">';
@@ -549,7 +552,7 @@
     // 1 : compteur (champ étroit) et lecture de la jauge à gauche, jauge à droite
     var h = '<div class="card p1"><div class="step"><b>1</b>Saisissez le compteur constaté au bateau et positionnez la jauge.</div>' +
       '<div class="p1-grid"><div class="p1-left"><div class="field"><label for="cDeb">Compteur moteur (h)</label><input id="cDeb" class="cpt-in" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
-      '<div class="g-side"><span class="flabel">Jauge au départ</span><span class="g-read" data-gread="start">' + gaugeRead(startJauge) + "</span></div></div>" +
+      '<div class="g-side"><span class="flabel">Jauge au départ</span><span class="g-read" data-gread="start">' + gaugeRead(startJauge, true) + "</span></div></div>" +
       '<div class="gauge-sm p1-g">' + gaugeHtml("start", startJauge) + "</div></div>" +
       '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div></div>";
     h += boardHtml("Indiquez les personnes à bord.");
@@ -755,6 +758,8 @@
         if (g <= GAP_TOL + 0.001) continue;
         // trou déjà traité (v1.9.4) : noté sur la session elle-même, plus dans la fiche commune qu'un autre téléphone peut écraser
         if (a.gapOk === b.id || (a.mode === "rattrapage" && a.gapKey && a.gapKey.split(">")[1] === b.id) || (b.mode === "rattrapage" && b.gapKey && b.gapKey.split(">")[0] === a.id)) continue;
+        // v1.9.6 : session rattrapée avec une version antérieure (sans gapKey) ou compteurs saisis qui ne collent pas exactement : le trou est traité
+        if ((a.mode === "rattrapage" && !a.gapKey && !a.aCompleter) || (b.mode === "rattrapage" && !b.gapKey && !b.aCompleter)) continue;
         out.push({ key: a.id + ">" + b.id, from: a, to: b, h: g, rech: a.gapRech === b.id || (ETAT.gapsRecherche || []).indexOf(a.id + ">" + b.id) >= 0 });
       }
     });
@@ -769,7 +774,7 @@
     var nu = unreadNotes();
     if (nu) { var ln = notes.filter(function (n) { return isUnread(n, notesLues()); })[0]; h += '<button class="note-alert" data-go="journal"><span class="na-n">' + nu + '</span><span><b>' + (nu > 1 ? nu + " notes à lire" : "1 note à lire") + "</b>" + esc(ln.cat) + " · " + esc(ln.auteurNom || "?") + " · " + fmtDateTime(ln.date) + '</span><span class="chev" aria-hidden="true">›</span></button>'; }
     var todo = sessionsArr.filter(function (s) { return s.aCompleter; });
-    if (todo.length) h += '<div class="alert"><b>' + todo.map(function (s) { return "Saison " + yearOf(s) + " : " + hm(s.engineMin) + " de moteur à détailler"; }).join(" · ") + '</b>Essence achetée et versée, temps par personne. La saison a été saisie en un bloc (compteur ' + todo.map(function (s) { return dec1.format(Number(s.compteurDeb)) + " → " + dec1.format(Number(s.compteurFin)) + " h"; }).join(", ") + ').</div>';
+    if (todo.length) h += '<div class="alert alert-sm"><b>' + todo.map(function (s) { return "Saison " + yearOf(s) + " : " + hm(s.engineMin) + " de moteur à détailler"; }).join(" · ") + "</b></div>"; // v1.9.6 : bandeau réduit à sa ligne de titre
     // jauge estimée du bateau (à gauche) et stock de bidons compact (à droite), sur une même ligne
     var T = theo(), nb = stockN();
     h += '<div class="fuel-row"><div class="card fuel-g"><div class="gwrap">' + gaugeHtml("theo", T.v, true) + '</div><div class="fg-cap">Stock d’essence estimé<b id="theoL">≈ ' + Math.round(T.L) + " L · " + fracLabel(T.v) + "</b></div></div>" +
@@ -784,12 +789,15 @@
     if (gp) {
       var srch = false;
       gap.key = gp.key;
-      h += '<div class="alert"><b>' + (srch ? "Trou de compteur en recherche : " : "Trou de compteur : ") + hm(gp.h * 60) + "</b>Entre la session du " + esc(isoToFr(dkey(gp.from))) + " (fin " + dec1.format(sessionEnd(gp.from)) + " h) et celle du " + esc(isoToFr(dkey(gp.to))) + " (début " + dec1.format(gp.to.compteurDeb) + " h). Ça ne bloque rien." + (gap.open ? "" : '<div><button class="btn sm" id="gapOpen">Rattraper cette session</button></div>') + "</div>";
-      if (gap.open) h += '<div class="card"><h3>Session rattrapée</h3><div class="two"><div class="field"><label for="gD">Date</label><input id="gD" type="date" value="' + esc(dkey(gp.from)) + '"></div><div class="field"><label for="gM">Durée (min)</label><input id="gM" inputmode="numeric" placeholder="si connue"></div></div>' +
+      h += '<div class="alert"><b>' + (srch ? "Trou de compteur en recherche : " : "Trou de compteur : ") + hm(gp.h * 60) + "</b>Entre la session du " + esc(isoToFr(dkey(gp.from))) + " (fin " + dec1.format(sessionEnd(gp.from)) + " h) et celle du " + esc(isoToFr(dkey(gp.to))) + " (début " + dec1.format(gp.to.compteurDeb) + " h). Ça ne bloque rien.</div>";
+      // v1.9.6 : encart repliable pour rattraper la session manquante
+      h += '<div class="card">' + collHead("gapf", "Session rattrapée", "Rattraper les " + hm(gp.h * 60) + " manquantes");
+      if (ui.gapf) h += '<div class="two"><div class="field"><label for="gD">Date</label><input id="gD" type="date" value="' + esc(dkey(gp.from)) + '"></div><div class="field"><label for="gM">Durée (min)</label><input id="gM" inputmode="numeric" placeholder="si connue"></div></div>' +
         '<div class="two"><div class="field"><label for="gC1">Compteur début</label><input id="gC1" inputmode="decimal" value="' + dec1.format(sessionEnd(gp.from)) + '"></div><div class="field"><label for="gC2">Compteur fin</label><input id="gC2" inputmode="decimal" value="' + dec1.format(gp.to.compteurDeb) + '"></div></div>' +
         '<div class="field"><span class="flabel">Attribué à</span><div class="small">' + gapFamTxt(gp.from) + " (la session d’avant le trou)</div></div>" +
         '<div class="toggle"><span>Je ne sais pas encore : à rechercher</span><button data-grat="' + (gap.rat === "search" ? "auto" : "search") + '" aria-pressed="' + (gap.rat === "search") + '" aria-label="À rechercher"></button></div>' +
-        '<div class="actions"><button class="btn ghost" id="gapCancel">Annuler</button><button class="btn" id="gapSave">Enregistrer</button></div></div>';
+        '<div class="actions"><button class="btn ghost" id="gapCancel">Annuler</button><button class="btn" id="gapSave">Enregistrer</button></div>';
+      h += "</div>";
     }
     var yk = latestYear();
     if (yk) {
@@ -918,7 +926,10 @@
       return '<tr class="det-click' + (op ? " open" : "") + '" data-achf="' + f + '" aria-expanded="' + op + '"><td>' + TRI + famDot(f) + FAM[f].n + '<span class="sub">' + t.n + " achat" + (t.n > 1 ? "s" : "") + (t.l ? " · " + dec2.format(t.e / t.l) + " €/L" : "") + "</span></td><td>" + int0.format(t.l) + " L</td><td>" + eur.format(t.e) + "</td></tr>" +
         (op ? '<tr class="det-row"><td colspan="3">' + (its.length ? its.map(function (m) { var l = Number(m.litres) || 0, p = Number(m.prix) || 0; return '<div class="det-it"><span>' + esc(m.d || isoToFr(m.date)) + '<span class="sub">' + (m.bidons ? m.bidons + " bidon" + (m.bidons > 1 ? "s" : "") + " · " : "") + int0.format(l) + " L" + (l ? " · " + dec2.format(p / l) + " €/L" : "") + (m.verse ? " · versé tout de suite" : "") + (m.retire ? " · " + esc(m.retire) : "") + '</span></span><b>' + eur.format(p) + "</b></div>"; }).join("") : '<div class="small muted">Aucun achat.</div>') + "</td></tr>" : "");
     };
-    return '<div class="card"><h3>Total des achats</h3><div class="chips small-chips">' + yrs.map(function (y) { return '<button class="chip" data-essyear="' + y + '" aria-pressed="' + (y === essYear) + '">' + y + "</button>"; }).join("") + "</div>" +
+    // v1.9.6 : encart repliable, le total de l'année choisie reste visible dans l'en-tête
+    var head = collHead("achTot", "Total des achats", (essYear === "Toutes" ? "toutes années" : essYear) + " · " + int0.format(T.YC.l + T.OC.l) + " L · " + eur.format(T.YC.e + T.OC.e));
+    if (!ui.achTot) return '<div class="card">' + head + "</div>";
+    return '<div class="card">' + head + '<div class="chips small-chips" style="margin-top:8px">' + yrs.map(function (y) { return '<button class="chip" data-essyear="' + y + '" aria-pressed="' + (y === essYear) + '">' + y + "</button>"; }).join("") + "</div>" +
       '<table class="rtable" style="margin-top:8px"><thead><tr><th>Famille</th><th>Volume</th><th>Montant</th></tr></thead><tbody>' + row("YC") + row("OC") +
       '<tr class="tot"><td>Total</td><td>' + int0.format(T.YC.l + T.OC.l) + " L</td><td>" + eur.format(T.YC.e + T.OC.e) + "</td></tr></tbody></table></div>";
   }
@@ -1213,7 +1224,31 @@
   function balVTxt(v) { return Math.abs(v) < 0.5 ? "équilibrée" : (v > 0 ? "Olivier doit " + eur.format(v) + " à Yann" : "Yann doit " + eur.format(-v) + " à Olivier"); }
   function balEffHtml(R, amt, dir) {
     var Bc = balance(), v = (Bc.net.YC - Bc.net.OC) / 2, nv = v + (dir === "OC" ? amt : -amt);
+    // v1.9.6 : sans répéter « Olivier doit à Yann » quand le sens ne change pas
+    if (Math.abs(v) >= 0.5 && Math.abs(nv) >= 0.5 && (v > 0) === (nv > 0)) return "Balance des comptes : " + eur.format(Math.abs(v)) + " → <b>" + eur.format(Math.abs(nv)) + "</b> (" + (v > 0 ? "Olivier doit à Yann" : "Yann doit à Olivier") + ")";
     return "Balance des comptes : " + balVTxt(v) + " → <b>" + balVTxt(nv) + "</b>";
+  }
+  /* v1.9.6 : essence reportée au prochain équilibrage essence, dite clairement */
+  function balResteTxt(R) {
+    var t = R.reste.L.YC + R.reste.L.OC;
+    if (t <= 0.05) return "Réservoir vide après cet équilibrage : rien n’est reporté.";
+    return "Il restera " + dec1.format(t) + " L dans le réservoir (" + [R.reste.L.YC > 0.05 ? dec1.format(R.reste.L.YC) + " L payés par Yann" : "", R.reste.L.OC > 0.05 ? dec1.format(R.reste.L.OC) + " L payés par Olivier" : ""].filter(Boolean).join(", ") + ") : cette essence sera répartie au prochain équilibrage essence, selon qui la consommera.";
+  }
+  /* v1.9.6 : second équilibrage, celui des dépenses communes (hors essence). Un règlement est une dépense « Règlement entre familles » :
+     elle augmente la part payée de la famille qui verse et diminue celle de la famille qui reçoit, ce qui solde la balance des comptes. */
+  var reglForm = null;
+  function reglHtml() {
+    var Bc = balance(), v = (Bc.net.YC - Bc.net.OC) / 2, h = '<div class="card bal-regl"><div class="step"><b>5</b>Équilibrage des dépenses communes</div>' +
+      '<div class="small">' + (Math.abs(v) < 0.5 ? "Balance des comptes : équilibrée." : "Balance des comptes : <b>" + balVTxt(v) + "</b>.") + "</div>";
+    if (!reglForm) return h + '<button class="btn ghost" id="reglOpen"' + (canValidate() ? "" : " disabled") + ">Noter un règlement</button>" + (canValidate() ? "" : RESERVE_TXT) + "</div>";
+    var F = reglForm;
+    h += '<div class="field"><span class="flabel">Qui a payé qui ?</span>' + segHtml("fam mini", "data-reglp", [["OC", "Olivier a payé Yann"], ["YC", "Yann a payé Olivier"]], F.p) + "</div>" +
+      '<div class="two"><div class="field"><label for="rgM">Montant réglé (€)</label><input id="rgM" inputmode="decimal" value="' + (F.m ? dec2.format(F.m) : "") + '"></div>' +
+      '<div class="field"><label for="rgD">Date</label><input id="rgD" type="date" value="' + esc(F.d) + '"></div></div>' +
+      '<div class="field"><label for="rgL">Motif</label><input id="rgL" value="' + esc(F.l) + '"></div>' +
+      '<div class="small muted">Le montant est ajouté à la part payée ' + (F.p === "OC" ? "d’Olivier" : "de Yann") + " et retiré de celle " + (F.p === "OC" ? "de Yann" : "d’Olivier") + " dans les dépenses.</div>" +
+      '<div class="actions"><button class="btn ghost" id="reglCancel">Annuler</button><button class="btn" id="reglSave">Enregistrer le règlement</button></div></div>';
+    return h;
   }
   /* Frise « à régulariser » : versements (gouttes, couleur du payeur) et sessions (bleu Yann, rouge Olivier, mixte = partagée au temps, contour orange),
      dans l'ordre chronologique depuis le dernier équilibrage ; litres consommés entre deux versements. */
@@ -1254,12 +1289,14 @@
       } else s += '<rect x="' + x0 + '" y="63" width="' + w + '" height="16" rx="3" fill="' + col[f] + '">' + tip + "</rect>";
     });
     if (!n) s += '<text x="190" y="75.5" text-anchor="middle" font-size="12" fill="var(--muted)">rien depuis</text>';
-    s += '<text x="4" y="122" font-size="11" fill="var(--muted)">Dernier équilibrage</text><text x="4" y="136" font-size="11" fill="var(--muted)">' + esc(R.label.indexOf("hivernage") === 0 ? "hivernage, réservoir vide" : "comptes à 0") + "</text>" +
+    s += '<text x="4" y="122" font-size="11" fill="var(--muted)">Dernier équilibrage</text>' + (R.label.indexOf("hivernage") === 0 ? '<text x="4" y="136" font-size="11" fill="var(--muted)">hivernage</text>' : "") +
       '<text x="' + (W - 4) + '" y="122" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink)">Aujourd’hui</text><text x="' + (W - 4) + '" y="136" text-anchor="end" font-size="11" fill="var(--muted)">' + todayFr().slice(0, 5) + "</text></svg>" +
       (wide ? '</div><div class="small muted bal-fhint">← Glisser la frise du doigt pour remonter le temps</div>' : "");
     var dropIc = function (f) { return '<svg width="10" height="13" viewBox="-8 -12 16 23" style="vertical-align:-2px;margin-right:4px" aria-hidden="true"><path d="' + drop + '" fill="' + col[f] + '"/></svg>'; };
-    var h = '<div class="card bal-head"><div class="row"><h3>Balance essence</h3><span class="small muted">' + litF(R.litres) + " consommés</span></div>" +
-      '<div class="small muted">Depuis le dernier équilibrage : ' + keyFr(R.start) + " (" + esc(R.label) + ")</div>" + s +
+    // v1.9.6 : encart repliable (ouvert par défaut), sous-titre réduit à la date du dernier équilibrage
+    var h = '<div class="card bal-head">' + collHead("balFriseOff", "Balance essence", "Dernier équilibrage : " + keyFr(R.start) + " · " + litF(R.litres) + " consommés").replace('aria-expanded="' + !!ui.balFriseOff + '"', 'aria-expanded="' + !ui.balFriseOff + '"');
+    if (ui.balFriseOff) return h + '<div class="small" style="margin-top:6px"><b>' + balResultText(R) + "</b></div></div>";
+    h += s +
       '<div class="legend"><span>' + dropIc("YC") + "Versé par Yann</span><span>" + dropIc("OC") + 'Versé par Olivier</span><span><i style="display:inline-block;width:12px;height:9px;border:2px solid var(--run);border-radius:2px;margin-right:4px;vertical-align:-1px"></i>Session mixte</span></div>';
     var nP = { YC: 0, OC: 0 }; R.P.forEach(function (p) { nP[payer(p.m)]++; });
     h += '<div class="kpis" style="margin-top:10px">' + ["YC", "OC"].map(function (f) { var m = R.mis[f]; return '<div class="kpi"><span class="label">Versé · ' + FAM[f].s + '</span><span class="v" style="color:' + col[f] + '">' + int0.format(m.L) + ' <small>L</small></span><span class="s">' + nP[f] + " versement" + (nP[f] > 1 ? "s" : "") + " · " + eur.format(m.E) + "</span></div>"; }).join("") + "</div>";
@@ -1300,29 +1337,33 @@
     R.S.forEach(function (x, i) {
       var cross = (x.yForO || 0) + (x.oForY || 0), one = cross < 0.005, s = x.s; // rien à équilibrer : aucune essence payée par l'autre famille
       h += '<div class="bal-s' + (i ? " bal-sep" : "") + '"><div><b>' + esc(keyFr(x.k).slice(0, 5)) + " · " + Math.round(x.eMin) + ' min</b><span class="small muted">' + dot("YC") + Math.round(x.fam.YC) + " min · " + dot("OC") + Math.round(x.fam.OC) + " min" + (x.fam.pass ? " · " + x.fam.pass + " passager" + (x.fam.pass > 1 ? "s" : "") + " non compté" + (x.fam.pass > 1 ? "s" : "") : "") + "</span>" +
-        '<span class="small muted">' + esc(x.howTxt) + (s.mode === "manuel" ? " · saisie manuelle" : "") + "</span></div>" +
+        (ui.bal2How ? '<span class="small muted">' + esc(x.howTxt) + (s.mode === "manuel" ? " · saisie manuelle" : "") + "</span>" : "") + "</div>" +
         '<div class="bal-r"><b>' + dec1.format(x.L || 0) + " L · " + eur.format(x.cost || 0) + "</b>" +
         (one ? '<span class="tag">' + (x.tY > 0.999 || x.tY < 0.001 ? "une seule famille, " : "") + "rien à équilibrer</span>" : '<span class="small muted">Y ' + eur.format(x.due.YC) + " · O " + eur.format(x.due.OC) + "</span>" +
           '<span class="small bal-x">' + [x.yForO >= 0.005 ? eur.format(x.yForO) + " payés par Yann pour Olivier" : "", x.oForY >= 0.005 ? eur.format(x.oForY) + " payés par Olivier pour Yann" : ""].filter(Boolean).join(" · ") + "</span>") + "</div></div>";
       if (x.exces > 0.5) h += '<div class="small bal-warn">' + dec1.format(x.exces) + " L consommés au-delà de l’essence notée dans le réservoir : comptés au prix moyen, sans payeur (pas d’équilibrage).</div>";
     });
-    h += '<div class="small muted bal-sep">Litres consommés : essence versée pour refaire le plein après la session, sinon baisse de la jauge (au 1/16 près, environ 8 L), sinon temps moteur × ' + int0.format(SPEC.conso || 13) + " L/h. Répartition au temps de chaque famille, passagers non comptés.</div></div>";
+    // v1.9.6 : commentaires repliés (toujours fermés à l'ouverture de l'app)
+    if (R.S.length) h += '<button class="coll bal-sub bal-sep" data-coll="bal2How" aria-expanded="' + !!ui.bal2How + '"><span class="ct"><span class="small muted">Détail du calcul des litres</span></span>' + TRI + "</button>";
+    if (ui.bal2How) h += '<div class="small muted">Litres consommés : essence versée pour refaire le plein après la session, sinon baisse de la jauge (au 1/16 près, environ 8 L), sinon temps moteur × ' + int0.format(SPEC.conso || 13) + " L/h. Répartition au temps de chaque famille, passagers non comptés.</div>";
+    h += "</div>";
     // 3. qui a payé l'essence de qui
     var net = R.yForO - R.oForY;
     h += '<div class="card"><div class="step"><b>3</b>Qui a payé l’essence de qui</div>' +
-      '<div class="bal-l"><span>Payée par ' + dot("YC") + "Yann, consommée par " + dot("OC") + "Olivier</span><b>" + eur.format(R.yForO) + "</b></div>" +
-      '<div class="bal-l"><span>Payée par ' + dot("OC") + "Olivier, consommée par " + dot("YC") + "Yann</span><b>" + eur.format(R.oForY) + "</b></div>" +
-      '<div class="bal-l bal-sep"><b>Écart</b><b>' + (Math.abs(net) < 0.005 ? "0,00 €" : eur.format(Math.abs(net)) + (net > 0 ? " en faveur de Yann" : " en faveur d’Olivier")) + "</b></div></div>";
+      // v1.9.6 : prénoms en couleur (sans pastille) pour tenir sur une ligne ; « Écart = … » aligné à droite
+      '<div class="bal-l"><span>Payée par <b class="n-yc">Yann</b>, consommée par <b class="n-oc">Olivier</b></span><b>' + eur.format(R.yForO) + "</b></div>" +
+      '<div class="bal-l"><span>Payée par <b class="n-oc">Olivier</b>, consommée par <b class="n-yc">Yann</b></span><b>' + eur.format(R.oForY) + "</b></div>" +
+      '<div class="bal-ec bal-sep">Écart = <b>' + (Math.abs(net) < 0.005 ? "0,00 €" : eur.format(Math.abs(net))) + "</b>" + (Math.abs(net) < 0.005 ? "" : '<span class="small muted">en faveur ' + (net > 0 ? "de Yann" : "d’Olivier") + "</span>") + "</div></div>";
     // 4. ajustement proposé (modifiable)
     var dir = ui.balDir || R.from, amt = ui.balAmt != null ? ui.balAmt : R.amount;
     h += '<div class="card bal-prop"><div class="step"><b>4</b>Ajustement proposé</div>' +
       '<div class="small muted">Équilibrage essence du ' + keyFr(R.start) + " au " + endFr + "</div>" +
       segHtml("fam mini", "data-baldir", [["OC", "Olivier doit à Yann"], ["YC", "Yann doit à Olivier"]], dir) +
       '<div class="bal-amt"><input id="balAmt" inputmode="decimal" value="' + dec2.format(amt) + '" aria-label="Montant de l’équilibrage"><span>€</span>' + (ui.balAmt != null || ui.balDir ? '<button class="btn link" id="balReset">Revenir au calcul (' + eur.format(R.amount) + ")</button>" : "") + "</div>" +
-      '<div class="small muted">Montant modifiable si besoin (arrondi, passager à compter…).</div>' +
       '<div class="small bal-sep" id="balEff">' + balEffHtml(R, amt, dir) + "</div>" +
       '<button class="btn" id="balValider"' + (canValidate() ? "" : " disabled") + ">Valider l’équilibrage</button>" + (canValidate() ? "" : RESERVE_TXT) +
-      '<div class="small muted">Après validation, il reste ' + dec1.format(R.reste.L.YC + R.reste.L.OC) + " L dans le réservoir" + (R.reste.L.YC + R.reste.L.OC > 0.05 ? " (" + [R.reste.L.YC > 0.05 ? dec1.format(R.reste.L.YC) + " L payés par Yann" : "", R.reste.L.OC > 0.05 ? dec1.format(R.reste.L.OC) + " L payés par Olivier" : ""].filter(Boolean).join(", ") + ")" : "") + " : ils passent au prochain équilibrage.</div></div>";
+      '<div class="small muted">' + balResteTxt(R) + "</div></div>";
+    h += reglHtml();
     // explication et historique, repliés
     h += '<div class="card">' + collHead("balHow", "Comment ça marche ?", "le calcul en détail");
     if (ui.balHow) h += '<div class="small bal-how"><p>Chaque achat d’essence est d’abord compté en entier pour la famille qui l’a payé. L’équilibrage corrige ensuite selon qui a consommé quoi.</p>' +
@@ -2463,21 +2504,31 @@
     '<linearGradient id="nkW" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".38" stop-color="#e6eef2"/><stop offset=".5" stop-color="#8fa6b1"/><stop offset=".56" stop-color="#f4f8fa"/><stop offset=".8" stop-color="#c3d3da"/><stop offset="1" stop-color="#7e97a3"/></linearGradient>' +
     '<linearGradient id="nkG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset=".38" stop-color="#f6cf55"/><stop offset=".5" stop-color="#a8730a"/><stop offset=".56" stop-color="#ffe08a"/><stop offset=".8" stop-color="#e2a923"/><stop offset="1" stop-color="#9a6a06"/></linearGradient>' +
     '<filter id="nkRel" x="-10%" y="-15%" width="125%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="bl"/><feSpecularLighting in="bl" surfaceScale="3" specularConstant=".9" specularExponent="18" lighting-color="#ffffff" result="sp"><fePointLight x="-60" y="-80" z="120"/></feSpecularLighting><feComposite in="sp" in2="SourceAlpha" operator="in" result="spc"/><feComposite in="SourceGraphic" in2="spc" operator="arithmetic" k1="0" k2="1" k3=".55" k4="0" result="lit"/><feDropShadow in="lit" dx="1.6" dy="2.4" stdDeviation=".7" flood-color="#000" flood-opacity=".6"/></filter></defs>' +
-    '<g transform="skewX(-8)"><text class="nk-tt" x="34" y="62" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" fill="url(#nkW)" stroke="#06161d" stroke-width="1.2" paint-order="stroke" filter="url(#nkRel)"><tspan class="nk-n" font-size="68">N</tspan><tspan font-size="42" dx="-3">O</tspan><tspan font-size="42" fill="url(#nkG)">SKI</tspan><tspan font-size="42">DS</tspan></text>' +
+    '<g transform="skewX(-8)"><path class="nk-n" d="M16 106 C37 94 57 71 64 56 L77 11 L108 12 L141 56 L172 15 L226 10 C205 22 185 45 178 60 L165 105 L134 105 L101 60 L70 105 Z" fill="url(#nkW)" stroke="#06161d" stroke-width="1.2" stroke-linejoin="round" paint-order="stroke" filter="url(#nkRel)"/>' +
+    '<text class="nk-tt" x="96" y="62" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" fill="url(#nkW)" stroke="#06161d" stroke-width="1.2" paint-order="stroke" filter="url(#nkRel)"><tspan font-size="42">O</tspan><tspan font-size="42" fill="url(#nkG)">SKI</tspan><tspan font-size="42">DS</tspan></text>' +
     '<path class="nk-trace" fill="none" stroke="#14b5c8" stroke-width="1.2" stroke-linecap="round" opacity=".85"/><g class="nk-buoys"></g><line class="nk-r1" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/><line class="nk-r2" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/><g class="nk-pal" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" fill="none"></g>' +
     '<text class="nk-ch" x="80" y="88" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" font-size="17" fill="#9fe7f0" letter-spacing="3">CHOUILLOU</text><g class="nk-boat"></g></g></svg>';
   function nkLayout(svg) {
     if (!svg) return;
     var NS = "http://www.w3.org/2000/svg", q = function (c) { return svg.querySelector("." + c); };
-    var tt = q("nk-tt"), tN = q("nk-n"), ch = q("nk-ch"), b = tt.getBBox(), nb = tN.getBBox(), x2 = b.x + b.width - 2;
+    // v1.9.6 : le N est un dessin (arrondi et pointu), posé droit dans le groupe incliné ; OSKIDS reste en police inclinée.
+    // Positions « écran » (droites) converties en coordonnées du groupe incliné : x + tan(8°) × y.
+    var t8 = Math.tan(8 * Math.PI / 180), gx = function (sx, y) { return sx + t8 * y; };
+    // tracé du N : boîte 16..226 × 10..106 (unités du dessin), ramenée à 46 de haut
+    var NX = 22, NY = 16, NSC = 46 / 96, NW = 210 * NSC, NH = 96 * NSC, base = NY + NH, top = NY;
+    q("nk-n").setAttribute("transform", "translate(" + gx(NX, NY) + "," + NY + ") skewX(8) scale(" + NSC + ") translate(-16,-10)");
+    var tt = q("nk-tt"), ch = q("nk-ch"); tt.setAttribute("x", gx(NX + (165 - 16) * NSC + 7, base)); tt.setAttribute("y", base); // O collé au pied droit du N
+    var b = tt.getBBox(), x2 = b.x + b.width - 2;
     if (!b.width) return;
     ch.setAttribute("x", 0); var cw = ch.getComputedTextLength(), x0 = x2 - cw; ch.setAttribute("x", x0);
     var cb = ch.getBBox(), yr = cb.y + cb.height * 0.55;
-    var base = Number(tt.getAttribute("y")), fs = 68, top = base - fs * 0.70, L = nb.x + fs * 0.05, R = nb.x + nb.width - fs * 0.07;
-    var B = [[L + 3, base - 3], [L + 3, top + 3], [R - 3, base - 3], [R - 3, top + 3]], o = 5, bz = q("nk-buoys"); bz.innerHTML = "";
+    // slalom régulier : quatre bouées à intervalle égal, une en bas, une en haut, en alternance
+    var BX = [0.13, 0.38, 0.63, 0.88].map(function (f) { return NX + NW * f; }), BY = [base - 3, top + 3, base - 3, top + 3];
+    var B = BX.map(function (x, i) { return [gx(x, BY[i]), BY[i]]; }), o = 5, bz = q("nk-buoys"); bz.innerHTML = "";
+    var L = gx(BX[0] - (BX[1] - BX[0]) + 26, (top + base) / 2);
     B.forEach(function (p) { var c = document.createElementNS(NS, "circle"); c.setAttribute("cx", p[0]); c.setAttribute("cy", p[1]); c.setAttribute("r", 3.2); c.setAttribute("fill", "#f0a46a"); c.setAttribute("opacity", ".85"); bz.appendChild(c); });
     var P = [[L - 26, (top + base) / 2], [B[0][0], base + o], [B[1][0], top - o], [B[2][0], base + o], [B[3][0], top - o]], d = "M" + P[0][0] + " " + P[0][1];
-    for (var i = 0; i < P.length - 1; i++) { var k = Math.max(10, (P[i + 1][0] - P[i][0]) * 0.55); d += " C" + (P[i][0] + k) + " " + P[i][1] + " " + (P[i + 1][0] - k) + " " + P[i + 1][1] + " " + P[i + 1][0] + " " + P[i + 1][1]; }
+    for (var i = 0; i < P.length - 1; i++) { var k = Math.max(10, ((P[i + 1][0] - t8 * P[i + 1][1]) - (P[i][0] - t8 * P[i][1])) * 0.55); /* écart mesuré à l'écran : arcs identiques */ d += " C" + (P[i][0] + k) + " " + P[i][1] + " " + (P[i + 1][0] - k) + " " + P[i + 1][1] + " " + P[i + 1][0] + " " + P[i + 1][1]; }
     q("nk-trace").setAttribute("d", d);
     var pa = x0 - 26, r1 = q("nk-r1"), r2 = q("nk-r2"), bx = x2 + 26, by = yr + 4;
     r1.setAttribute("x1", pa + 6); r1.setAttribute("y1", yr); r1.setAttribute("x2", x0 - 5); r1.setAttribute("y2", yr);
@@ -2702,11 +2753,10 @@
       lastLevel = sortie.plein ? 16 : sortie.jaugeFin; lastLevelDate = todayFr();
       sortie = { active: false, compteurDeb: endC, tours: [], participants: [] }; save(3); toast(savedMsg(msg)); return render();
     }
-    if (b.id === "gapOpen") { gap.open = true; return render(); }
-    if (b.id === "gapCancel") { gap.open = false; return render(); }
+    if (b.id === "gapCancel") { ui.gapf = false; return render(); }
     if (ds.grat) { gap.rat = ds.grat; return render(); }
     if (b.id === "gapSave") {
-      var gpp = findGaps().filter(function (x) { return x.key === gap.key; })[0]; gap.open = false;
+      var gpp = findGaps().filter(function (x) { return x.key === gap.key; })[0]; ui.gapf = false;
       if (!gpp) { toast("Ce trou a déjà été traité."); return render(); }
       if (gap.rat === "search") { gpp.from.gapRech = gpp.to.id; gap.rat = "auto"; toast(savedMsg("Trou noté « à rechercher ».")); return render(); }
       var c1 = parseNum(document.getElementById("gC1").value), c2 = parseNum(document.getElementById("gC2").value), mm = parseNum(document.getElementById("gM").value) || Math.round((c2 - c1) * 60), gf = gapFam(gpp.from), fm = { YC: Math.round(mm * gf.YC * 10) / 10, OC: Math.round(mm * gf.OC * 10) / 10 };
@@ -2794,6 +2844,18 @@
     if (b.id === "saveMise") { var mp0 = planPrelevement(miseForm.n, miseForm.f); if (mp0.manque > 0.01) return toast("Il n’y a que " + half(stockCans()) + " bidon(s) en stock : impossible d’en verser " + half(miseForm.n) + "."); applyPrelevement(planPrelevement(miseForm.n, miseForm.f), miseForm.f, "", miseForm.plein); if (miseForm.plein) lastPlein = todayFr(); view.essence = null; save(1); toast(savedMsg("Versement enregistré.")); return render(); }
     if (b.id === "dNew") { view.dep = true; return render(); }
     if (ds.bip) { balForm = balForm || {}; balForm.payeur = ds.bip; return render(); }
+    // v1.9.6 : règlement des dépenses communes (montant, date, motif, qui a payé qui)
+    if (b.id === "reglOpen") { var rb0 = balance(), rv0 = (rb0.net.YC - rb0.net.OC) / 2; reglForm = { p: rv0 >= 0 ? "OC" : "YC", m: Math.round(Math.abs(rv0) * 100) / 100, d: todayIso(), l: "Équilibrage des dépenses communes" }; return render(); }
+    if (b.id === "reglCancel") { reglForm = null; return render(); }
+    if (ds.reglp) { reglForm.m = parseNum(document.getElementById("rgM").value); reglForm.d = document.getElementById("rgD").value || todayIso(); reglForm.l = document.getElementById("rgL").value; reglForm.p = ds.reglp; return render(); }
+    if (b.id === "reglSave") {
+      if (!canValidate()) return toast("Réservé à Yann et Olivier.");
+      var rgm = Math.round(parseNum(document.getElementById("rgM").value) * 100) / 100, rgd = document.getElementById("rgD").value || todayIso(), rgl = (document.getElementById("rgL").value || "").trim() || "Équilibrage des dépenses communes";
+      if (!(rgm > 0)) return toast("Indiquez le montant réglé.");
+      var rgp = reglForm.p;
+      depenses.unshift({ id: uid(), d: isoToFr(rgd), lib: rgl + " (" + FAM[rgp].s + " → " + FAM[rgp === "OC" ? "YC" : "OC"].s + ")", cat: REGL, m: rgm, payeur: rgp, regle: "regl", isNew: true });
+      reglForm = null; save(1); toast(savedMsg("Règlement de " + eur.format(rgm) + " enregistré.")); return render();
+    }
     if (ds.baldir) { var ba0 = document.getElementById("balAmt"); if (ba0) ui.balAmt = Math.max(0, parseNum(ba0.value)); ui.balDir = ds.baldir; return render(); }
     if (b.id === "balReset") { ui.balAmt = null; ui.balDir = ""; return render(); }
     if (b.id === "balValider") {
@@ -2931,7 +2993,7 @@
     if (key === "start") startJauge = v; else if (key === "fin") sortie.jaugeFin = v;
     var n = gPt(v, 90), nd = svg.querySelector("[data-needle]"); nd.setAttribute("x2", n[0].toFixed(1)); nd.setAttribute("y2", n[1].toFixed(1));
     svg.setAttribute("aria-valuenow", v); svg.setAttribute("aria-valuetext", fracLabel(v));
-    var rd = screen.querySelector('[data-gread="' + key + '"]'); if (rd) rd.innerHTML = gaugeRead(v);
+    var rd = screen.querySelector('[data-gread="' + key + '"]'); if (rd) rd.innerHTML = gaugeRead(v, key === "start");
     if (key === "fin") { var c = document.getElementById("consoEst"); if (c) c.innerHTML = consoEstHtml(); }
   }
   function gaugeFromEvent(svg, e) {
