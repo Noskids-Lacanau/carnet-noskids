@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.9.8 — 2026-11-25
+
+- Écran d'ouverture : logo en plein écran, bouton Entrer, son de moteur V8, le bateau du logo traverse l'Accueil ; GPS demandé au toucher d'Entrer
+- Écran Session : bouton rond START, le cadre de l'écran scintille au démarrage, étape 4 « Démarrer »
+- Personnes à bord : boutons Yann, Olivier et Extérieur égaux sur toute la largeur, personnes à ajouter sur une ligne (Invité Y, Invité O), compteur et jauge alignés sous l'étape 1
+
 ## 1.9.7 — 2026-11-25
 
 - Trous de compteur : l'historique importé de l'ancien bateau (été 2025) n'est plus contrôlé, le bandeau ne revient plus

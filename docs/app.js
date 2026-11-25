@@ -112,7 +112,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.7", SCHEMA = 1;
+  var APP_VERSION = "1.9.8", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -559,7 +559,7 @@
     h += boardHtml("Indiquez les personnes à bord.");
     if (startList.length) h += '<div class="card"><div class="field"><label for="pilStart">Pilote</label><select id="pilStart">' + startList.map(function (p) { return '<option value="' + p.pid + '"' + (p.pid === startPilote ? " selected" : "") + ">" + esc(person(p.pid).name) + "</option>"; }).join("") + "</select></div></div>";
     h += '<div class="card"><div class="step"><b>3</b>Vérifiez avant de partir :</div><div class="checks three">' + [["huile", "Niveau d’huile"], ["cale", "Pompe de cale"], ["aera", "Aération moteur"]].map(function (c) { return '<label class="chk"><input type="checkbox" data-startchk="' + c[0] + '"' + (startChecks[c[0]] ? " checked" : "") + "><span>" + c[1] + "</span></label>"; }).join("") + "</div></div>";
-    return h + '<div class="card"><div class="step"><b>4</b>Démarrez la session au démarrage du moteur.</div><button class="btn big run" id="goStart">Démarrer la session</button></div>';
+    return h + '<div class="card p4"><div class="step"><b>4</b>Démarrer</div><button class="rbtn-red rstart" id="goStart" aria-label="Démarrer la session">START<small>session</small></button></div>';
   }
   /* ---------- Saisie manuelle : session faite sans le téléphone (date, pilote, compteurs, temps et activité par personne) ---------- */
   var manForm = null;
@@ -598,7 +598,7 @@
     h += '<div class="card board"><div class="step step-row"><b>2</b><span>Personnes à bord, temps et activité</span><span class="board-n' + (M.list.length > 8 ? " over" : "") + '">' + M.list.length + " / 8</span></div>";
     h += '<div class="fam-heads">' + ["YF", "OF", "EXT"].map(function (c) {
       var op = M.pick === c;
-      return '<div class="fh' + (op ? " open" : "") + '"><span class="fh-av">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + '</span><span class="fh-t">' + FH[c] + "</span>" +
+      return '<div class="fh fh-' + c + (op ? " open" : "") + '"><span class="fh-av">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + '</span><span class="fh-t">' + FH[c] + "</span>" +
         '<button class="plus" data-mpick="' + c + '" aria-expanded="' + op + '" aria-label="Ajouter : ' + CAT[c] + '">' + (op ? "−" : "+") + "</button></div>";
     }).join("") + "</div>";
     if (M.pick) {
@@ -658,15 +658,17 @@
     if (nTot > 8) h += ui.over8Ack ? '<div class="small over8-mini">' + nTot + " personnes à bord : homologué pour 8, amendes à la charge du groupe.</div>"
       : '<div class="alert bad over8"><b>' + nTot + " personnes à bord : le bateau est homologué pour 8 personnes.</b>Toute amende sera à la charge du groupe.<div class=\"actions\"><button class=\"btn sm\" id=\"over8Ok\">Compris</button></div></div>";
     // les trois groupes sur une même ligne, le « + » collé au nom ; la liste des personnes choisies vient en dessous, par famille
-    var FH = { YF: "<small>Famille</small>Yann", OF: "<small>Famille</small>Olivier", EXT: "Extérieur" };
+    var FH = { YF: "Yann", OF: "Olivier", EXT: "Extérieur" }; // v1.9.8 : une seule ligne, couleur de la famille
     h += '<div class="fam-heads">' + ["YF", "OF", "EXT"].map(function (c) {
       var op = picker === c;
-      return '<div class="fh' + (op ? " open" : "") + '"><span class="fh-av">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + '</span><span class="fh-t">' + FH[c] + "</span>" +
+      return '<div class="fh fh-' + c + (op ? " open" : "") + '"><span class="fh-av">' + (c === "EXT" ? EXT_ICON : famAvatar(CATF[c])) + '</span><span class="fh-t">' + FH[c] + "</span>" +
         '<button class="plus" data-pick="' + c + '" aria-expanded="' + op + '" aria-label="Ajouter : ' + CAT[c] + '">' + (op ? "−" : "+") + "</button></div>";
     }).join("") + "</div>";
     if (picker && CAT[picker]) {
       var pc = picker, avail = PEOPLE.filter(function (q) { return q.c === pc && !inList(q.id); });
-      h += '<div class="picker"><div class="small muted">Ajouter : ' + CAT[pc] + "</div>" + (avail.length ? '<div class="chips">' + avail.map(function (q) { return '<button class="chip" data-addp="' + q.id + '">+ ' + esc(q.name) + "</button>"; }).join("") + "</div>" : '<div class="small muted">Tout le monde est déjà à bord.</div>') +
+      // v1.9.8 : « Ajouter : » et les boutons sur une même ligne, boutons étroits ; invités : « Invité Y » (bleu) et « Invité O » (rouge)
+      var chipLab = function (q) { return q.id === "invy" ? 'Invité <b class="n-yc">Y</b>' : q.id === "invo" ? 'Invité <b class="n-oc">O</b>' : esc(q.name); };
+      h += '<div class="picker pk-row"><div class="pk-line"><span class="small muted pk-l">Ajouter :</span>' + (avail.length ? '<div class="chips">' + avail.map(function (q) { return '<button class="chip" data-addp="' + q.id + '" aria-label="Ajouter ' + esc(q.name) + '"><span>' + chipLab(q) + "</span></button>"; }).join("") + "</div>" : '<span class="small muted">tout le monde est déjà à bord.</span>') + "</div>" +
         (pc === "EXT" ? '<div class="newp"><input id="np' + pc + '" placeholder="Nouvelle personne" aria-label="Nom de la nouvelle personne"><button class="btn sm" data-newp="' + pc + '">Ajouter</button></div>' : "") + "</div>"; // nouvelle personne : seulement pour les extérieurs
     }
     ["YF", "OF", "EXT"].forEach(function (c) {
@@ -2664,6 +2666,7 @@
       sortie.checks = startChecks; startChecks = {};
       startList = []; picker = null; save(1); render();
       screen.scrollTop = 0; window.scrollTo(0, 0); // session lancée : retour en haut, sur le chrono
+      frameSparkle(); // v1.9.8 : le cadre de l'écran scintille
       return;
     }
     if (b.id === "goClose") { // en terminant : l'appareil photo s'ouvre tout de suite pour photographier le compteur
@@ -3034,7 +3037,119 @@
     startJauge = lastLevel; // la jauge de départ part du niveau estimé (réservoir vide après l'hivernage)
   })();
   if (CONF.moi) { startPilote = CONF.moi; corrForm.who = CONF.moi; }
-  gpsAsk(); // autorisation du GPS demandée dès le lancement (vitesse du bateau pendant les sessions)
+  /* ---------- Écran d'ouverture (v1.9.8) : logo en plein écran, bouton « Entrer » ----------
+     Au toucher : moteur V8 (son fabriqué par le code, aucun fichier), demande du GPS (un vrai geste de l'utilisateur,
+     sinon le téléphone peut bloquer la question en silence), le bateau du logo traverse l'Accueil, l'appli s'ouvre aussitôt. */
+  var AC = null, V8BUF = null;
+  function v8Buffer(c) {
+    if (V8BUF) return V8BUF;
+    var sr = 24000, dur = 3.4, n = Math.floor(sr * dur), buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), TAU = 6.2832;
+    var R = [[0, 0], [0.06, 260], [0.38, 300], [0.5, 1000], [0.62, 900], [0.98, 5400], [1.12, 5000], [1.7, 1250], [2.2, 820], [3.4, 800]]; // démarreur, coup de gaz, ralenti
+    function rpm(t) { for (var i = 1; i < R.length; i++) if (t <= R[i][0]) { var a = R[i - 1], b = R[i], k = (t - a[0]) / (b[0] - a[0]); k = k * k * (3 - 2 * k); return a[1] + (b[1] - a[1]) * k; } return R[R.length - 1][1]; }
+    // V8 « croisé » : explosions d'intensité irrégulière (le gargouillis typique), 4 par tour de vilebrequin
+    var pat = [1, 0.58, 0.92, 0.5, 0.97, 0.66, 0.8, 0.55], ph = 0, cyl = 0, P = [], kn = Math.exp(-1 / (0.0018 * sr));
+    for (var i = 0; i < n; i++) {
+      var t = i / sr, r = rpm(t), crank = t < 0.46;
+      ph += (r / 60) * 4 / sr;
+      if (ph >= 1) {
+        ph -= 1;
+        var dd = crank ? 0.018 : Math.max(0.0045, 0.016 - r / 450000), fq = 62 + Math.random() * 18 + r / 70;
+        P.push({ e: (crank ? 0.28 : 1) * pat[cyl % 8] * (0.85 + Math.random() * 0.3), k: Math.exp(-1 / (dd * sr)), en: 1, w: TAU * fq / sr, p: 0 });
+        cyl++;
+      }
+      var s = 0;
+      for (var j = P.length - 1; j >= 0; j--) {
+        var q = P[j];
+        s += q.e * (Math.sin(q.p) + 0.45 * Math.sin(q.p * 2.03) + (Math.random() * 2 - 1) * 0.5 * q.en);
+        q.p += q.w; q.e *= q.k; q.en *= kn; if (q.e < 0.003) P.splice(j, 1);
+      }
+      if (crank) s += 0.1 * Math.sin(TAU * (38 + t * 30) * t) * (0.55 + 0.45 * Math.sin(TAU * 11 * t)); // démarreur
+      var env = t < 0.02 ? t / 0.02 : t > 2.9 ? Math.max(0, (3.4 - t) / 0.5) : 1;
+      d[i] = s * env * 0.42;
+    }
+    return (V8BUF = buf);
+  }
+  function vroom() {
+    try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    var c = AC; if (c.state === "suspended" && c.resume) c.resume();
+    var src = c.createBufferSource(); src.buffer = v8Buffer(c);
+    // échappement : saturation douce, résonance du pot (retard court réinjecté), graves renforcés, aigus coupés
+    var sh = c.createWaveShaper(), cv = new Float32Array(2048); for (var i = 0; i < 2048; i++) { var x = i / 1024 - 1; cv[i] = Math.tanh(x * 2.2); } sh.curve = cv;
+    var dl = c.createDelay(0.05), fb = c.createGain(), fbl = c.createBiquadFilter(); dl.delayTime.value = 0.0042; fb.gain.value = 0.38; fbl.type = "lowpass"; fbl.frequency.value = 900;
+    var bass = c.createBiquadFilter(); bass.type = "peaking"; bass.frequency.value = 95; bass.Q.value = 0.9; bass.gain.value = 7;
+    var lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2600; lp.Q.value = 0.5;
+    var hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 28;
+    var out = c.createGain(); out.gain.value = 0.9;
+    src.connect(sh); sh.connect(bass); bass.connect(dl); dl.connect(fbl); fbl.connect(fb); fb.connect(dl);
+    bass.connect(lp); dl.connect(lp); lp.connect(hp); hp.connect(out); out.connect(c.destination);
+    src.start();
+  }
+  function introShow() {
+    var old = document.getElementById("introV"); if (old) old.remove();
+    var src = document.querySelector("#hVis .nk-logo");
+    if (!src) return setTimeout(introShow, 200);
+    var v = document.createElement("div"); v.id = "introV";
+    v.innerHTML = '<svg class="iv-waves" viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path d="M0 60 Q50 40 100 60 T200 60 T300 60 T400 60 V120 H0Z" fill="#14b5c8" opacity=".18"/>' +
+      '<path d="M0 78 Q50 62 100 78 T200 78 T300 78 T400 78 V120 H0Z" fill="#0f6f86" opacity=".35"/>' +
+      '<path d="M0 96 Q50 84 100 96 T200 96 T300 96 T400 96 V120 H0Z" fill="#0a3a48" opacity=".7"/></svg>' +
+      '<div class="iv-logo"></div><button class="iv-start rbtn-red" aria-label="Entrer dans l’application">Entrer</button><div class="iv-hint">Touchez Entrer pour démarrer le moteur</div>';
+    var logo = src.cloneNode(true); logo.removeAttribute("class");
+    v.querySelector(".iv-logo").appendChild(logo); v.querySelector(".iv-logo").insertAdjacentHTML("beforeend", '<span class="iv-shine"></span>');
+    document.body.appendChild(v);
+    requestAnimationFrame(function () { v.classList.add("in"); });
+    var tr = logo.querySelector(".nk-trace"); if (tr && tr.getTotalLength) tr.style.setProperty("--len", Math.ceil(tr.getTotalLength()) + "px");
+    [].forEach.call(logo.querySelectorAll(".nk-buoys circle"), function (c, i) { c.style.animationDelay = (0.75 + i * 0.2) + "s"; });
+    // le son est préparé pendant que le logo arrive : au toucher d'« Entrer », il part sans délai
+    setTimeout(function () { try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); v8Buffer(AC); } catch (e) { /* son indisponible */ } }, 1500);
+    function go() {
+      if (v.classList.contains("go")) return finish();
+      v.classList.add("go"); vroom(); gpsAsk(); boatCross();
+      var lb = v.querySelector(".nk-boat"); if (lb) lb.style.visibility = "hidden"; // le bateau du logo part : c'est lui qui traverse l'Accueil
+      setTimeout(finish, 120); // ouverture instantanée : le moteur continue de tourner sur l'Accueil
+    }
+    function finish() { if (v.classList.contains("out")) return; v.classList.add("out"); setTimeout(function () { v.remove(); }, 320); }
+    v.querySelector(".iv-start").addEventListener("click", function (e) { e.stopPropagation(); go(); });
+    v.addEventListener("click", function () { if (v.classList.contains("go")) finish(); });
+  }
+  /* Le bateau du logo traverse l'Accueil, à la même taille et à la même hauteur que sur l'écran d'ouverture, écume derrière. */
+  function boatCross() {
+    var o = document.getElementById("boatX"); if (o) o.remove();
+    var b = document.createElement("div"); b.id = "boatX";
+    b.innerHTML = '<svg viewBox="-250 -34 340 72" aria-hidden="true"><g transform="skewX(-8)"><defs><linearGradient id="bxF" x1="1" x2="0"><stop offset="0" stop-color="#7fdcea" stop-opacity=".95"/><stop offset="1" stop-color="#7fdcea" stop-opacity="0"/></linearGradient></defs>' +
+      '<path d="M88 -7 Q-60 -13 -250 -9 L-250 13 Q-60 17 88 9 Z" fill="url(#bxF)" opacity=".35"/><path d="M2 -2 C-40 -6 -120 -12 -240 -10 C-120 -2 -60 3 2 4 Z" fill="url(#bxF)"/>' +
+      '<path d="M2 -6 L46 -7 Q66 -6.5 82 -4 L66 2 Q32 3.6 6 3 L2 1 Z" fill="#ffffff" stroke="#0f2a36" stroke-width="1.1" stroke-linejoin="round"/>' +
+      '<path d="M-4 1.4 L4 1.4" stroke="#d9e7ee" stroke-width="1.8" stroke-linecap="round"/>' +
+      '<path d="M6 -3 L58 -4.2 Q66 -4 72 -4.6 Q64 -2.2 56 -1.2 L8 -0.6 Z" fill="#3b5561"/>' +
+      '<path d="M10 0.8 L54 0.2" stroke="#f4c542" stroke-width="1.2" stroke-linecap="round"/>' +
+      '<path d="M42 -7 L50 -12.5 L57 -12 L63 -6.4 Z" fill="#9fe7f0" stroke="#ffffff" stroke-width="0.9" stroke-linejoin="round"/>' +
+      '<path d="M19 -6.6 L28 -22 M25 -6.8 L34 -22" stroke="#5b7380" stroke-width="2" stroke-linecap="round"/>' +
+      '<path d="M18 -23 Q20 -26.5 30 -26.5 L42 -26 Q46 -25.5 44 -22.5 L20 -22 Z" fill="#d9e7ee" stroke="#0f2a36" stroke-width=".9"/>' +
+      '<path d="M-6 6 Q30 9 80 4" fill="none" stroke="#14b5c8" stroke-width="1.6" stroke-linecap="round" opacity=".85"/></g></svg>';
+    var hull = document.querySelector("#introV .nk-boat path"), r = hull && hull.getBoundingClientRect(), u, hullTop;
+    if (r && r.width > 4) { u = r.width / 81; hullTop = r.top; } // coque : 80 unités de dessin
+    else { var LW = Math.min(innerWidth * 0.94, 620); u = LW / 365; hullTop = innerHeight / 2 - 52 * u + 78.5 * u; }
+    b.style.width = (340 * u) + "px"; b.style.top = (hullTop - 27 * u) + "px";
+    document.body.appendChild(b);
+    if (b.animate) b.animate([{ transform: "translateX(" + (-332 * u) + "px)" }, { transform: "translateX(" + (innerWidth - 244 * u + 10) + "px)" }], { duration: 1300, easing: "cubic-bezier(.45,.05,.6,.9)", fill: "forwards" });
+    setTimeout(function () { b.remove(); }, 1400);
+  }
+  /* Démarrage d'une session : le cadre de tout l'écran scintille une petite seconde (par-dessus la nouvelle page). */
+  function frameSparkle() {
+    ["sesFrame", "sesGlow"].forEach(function (id) { var o = document.getElementById(id); if (o) o.remove(); });
+    var fr = document.createElement("div"); fr.id = "sesFrame";
+    var gl = document.createElement("div"); gl.id = "sesGlow";
+    for (var i = 0; i < 18; i++) { // étincelles réparties sur le pourtour
+      var s = document.createElement("i"), p = i / 18 * 4, side = Math.floor(p), f = p - side;
+      var x = side === 0 ? f : side === 1 ? 1 : side === 2 ? 1 - f : 0, y = side === 0 ? 0 : side === 1 ? f : side === 2 ? 1 : 1 - f;
+      s.style.left = (x * 100) + "%"; s.style.top = (y * 100) + "%"; s.style.animationDelay = (0.1 + Math.random() * 0.5) + "s";
+      gl.appendChild(s);
+    }
+    document.body.appendChild(gl); document.body.appendChild(fr);
+    setTimeout(function () { fr.remove(); gl.remove(); }, 1100);
+  }
+  // au lancement : écran d'ouverture ; si une session est déjà en cours, on retourne directement au chrono (GPS demandé comme avant)
+  if (sortie.active) gpsAsk(); else introShow();
   window.addEventListener("online", function () { updateNet(); Sync.run(); });
   window.addEventListener("offline", updateNet);
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") Sync.run(); });
