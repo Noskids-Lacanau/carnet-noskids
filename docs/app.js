@@ -11,6 +11,7 @@
     { id: "olivier", name: "Olivier", c: "OF" }, { id: "fiorella", name: "Fiorella", c: "OF" }, { id: "thao", name: "Thao", c: "OF" },
     { id: "malou", name: "Malou", c: "OF" }, { id: "calie", name: "Calie", c: "OF" },
     { id: "julien", name: "Julien", c: "EXT" }, { id: "jessica", name: "Jessica", c: "EXT" }, { id: "louca", name: "Louca", c: "EXT" },
+    { id: "mateu", name: "Mateu", c: "EXT", kid: true, parent: "julien" }, { id: "alba", name: "Alba", c: "EXT", kid: true, parent: "julien" }, // v1.9.9 : enfants de Julien, moins de 10 ans (tarif enfant au camping)
     { id: "invy", name: "Invités Yann", c: "EXT", host: "YC", hidden: true }, { id: "invo", name: "Invités Olivier", c: "EXT", host: "OC", hidden: true }
   ];
   var ACTS = { slalom: "Slalom", wake: "Wake", ski: "Ski libre", formation: "Formation", balade: "Balade", meca: "Mécanique" };
@@ -112,12 +113,13 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.8", SCHEMA = 1;
+  var APP_VERSION = "1.9.9", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
   var sessionsArr = [], bidons = [], dettes = [], moves = [], depenses = [];
   var notes = []; // journal : rangé dans la table « etat » (kind = "note"), sans changement côté serveur
+  var resas = []; // v1.9.9 : réservations du camping, table « etat » (kind = "resa"), indépendantes des dépenses du bateau
   var lastPlein = "", lastLevel = 16, lastLevelDate = "";
   var ETAT = { id: "etat", gapsRecherche: [] };
   var docYear = "Toutes", ui = { spec: false, maint: false, conn: false, perso: false, indic: true, coutDet: false, mvts: false, docs: false };
@@ -177,7 +179,7 @@
   function currentCollections() {
     SPEC.id = "spec";
     ETAT.lastPlein = lastPlein; ETAT.lastLevel = lastLevel; ETAT.lastLevelDate = lastLevelDate;
-    return { personnes: PEOPLE, sessions: sessionsArr, bidons: bidons, dettes: dettes, mouvements: moves, depenses: depenses, documents: flatDocs(), entretien: maint, parametres: [SPEC], etat: [ETAT].concat(notes) };
+    return { personnes: PEOPLE, sessions: sessionsArr, bidons: bidons, dettes: dettes, mouvements: moves, depenses: depenses, documents: flatDocs(), entretien: maint, parametres: [SPEC], etat: [ETAT].concat(notes).concat(resas) };
   }
   function snapshotAll() { SNAP = {}; var cur = currentCollections(); COLS.forEach(function (c) { cur[c].forEach(function (r) { if (!r.id) r.id = uid(); SNAP[c + ":" + r.id] = strip(r); }); }); }
   /* Compare l'état affiché à la dernière version connue : ce qui a changé part dans la file d'envoi. */
@@ -205,6 +207,7 @@
     bidons = vals("bidons").sort(function (a, b) { var x = dkey(a), y = dkey(b); return x < y ? -1 : x > y ? 1 : ((a.updatedAt || "") < (b.updatedAt || "") ? -1 : 1); });
     dettes = vals("dettes"); moves = vals("mouvements").sort(byDateDesc); depenses = vals("depenses").sort(byDateDesc);
     notes = vals("etat").filter(function (r) { return r.kind === "note"; }).sort(function (a, b) { return (a.date || "") < (b.date || "") ? 1 : -1; });
+    resas = vals("etat").filter(function (r) { return r.kind === "resa"; });
     DOC_CATS.forEach(function (c) { docs[c] = []; });
     vals("documents").forEach(function (d) { (docs[d.cat] || docs["Autres"]).push(d); });
     vals("entretien").forEach(function (m) { if (maint[m.i]) maint[m.i] = m; });
@@ -819,6 +822,7 @@
     achat: '<svg viewBox="0 0 24 24"><path d="M5.5 9L9 5.5h9a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1H6.5a1 1 0 0 1-1-1z"/><path d="M12 5.5V3h5v2.5"/><path d="M7.2 7.3L4.5 4.6 6 3.1l2.7 2.7"/><path d="M9.5 11.5l5.5 6M15 11.5l-5.5 6"/></svg>',
     mise: '<svg viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M2.5 21h13"/><rect x="6.5" y="6" width="5" height="4" rx=".6"/><path d="M14 11h1.5a1.5 1.5 0 0 1 1.5 1.5v4a1.5 1.5 0 0 0 3 0V8.5L17.5 6"/></svg>',
     hist: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/><path d="M3.5 12H2M22 12h-1.5"/></svg>',
+    camp: '<svg viewBox="0 0 24 24"><path d="M3 20L12 4l9 16z"/><path d="M12 4v16M9 20l3-6 3 6"/><path d="M1 20h22"/></svg>', // v1.9.9 : tente (réservation du camp)
     stats: '<svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-7M22 20H2"/></svg>',
     journal: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v4h4M8.5 11h7M8.5 14.5h7M8.5 18h4"/></svg>',
     play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z"/></svg>',
@@ -839,7 +843,7 @@
       qa("qa-dep qa-wide", 'data-depnew="1"', QI.euro, "Saisir une dépense") +
       qa("qa-bal qa-wide", 'data-fin="balance"', QI.balance, "Faire la balance", balanceText(balance()).replace(/\.$/, "")) +
       qa("qa-stats qa-sm", 'data-qa="stats"', QI.stats, "Statistiques") +
-      qa("qa-hist qa-sm", 'data-qa="hist"', QI.hist, "Historique sessions") +
+      qa("qa-camp qa-sm", 'data-qa="camp"', QI.camp, "Réservation Camp.") + // v1.9.9 : à la place d'Historique sessions (liste des sessions toujours dans Activité)
       qa("qa-journal qa-sm", 'data-go="journal"', QI.journal, "Journal - Notes", "", unread ? '<span class="qa-dot big" aria-label="' + unread + ' note(s) à lire">' + unread + "</span>" : "") +
       qa("qa-urg qa-sm", 'data-go="annuaire"', URG_ICON, "Contact urgence");
     return h + "</div>";
@@ -2119,14 +2123,165 @@
     var br = e.target.closest && e.target.closest("#bigView [data-rstar], #bigView [data-eau]"); if (br) { resInput(br); return; }
     var bs = e.target.closest && e.target.closest("#bigView [data-bsk]"); if (bs) bigSki(bs.dataset.bsk);
   });
+  /* ---------- Camping « Les petits Pellegrins » (v1.9.9) ----------
+     Réservation de jours au camp, de juin à août. Indépendant du bateau : les réservations sont rangées dans la table « etat »
+     (kind = "resa") et ne créent ni dépense, ni dette, ni écriture d'essence. Le coût affiché n'est qu'une estimation.
+     Hébergements : caravane 4 places + 1 enfant de moins de 12 ans, deux tentes de 3 places. */
+  var CP_LODGE = { car: { n: "Caravane", cap: 4, kid: 1, s: "4 places + 1 enfant de moins de 12 ans" }, t1: { n: "Tente 1", cap: 3, kid: 0, s: "3 places" }, t2: { n: "Tente 2", cap: 3, kid: 0, s: "3 places" } };
+  var CP_CAP = 10, CP_CAPK = 1, CP_RATE = { ad: 8, kid: 5 }, CP_N = 92; // 92 nuits : du 1er juin au 31 août
+  var CP_FAMN = { YC: "Famille Yann", OC: "Famille Olivier", EXT: "Extérieurs" };
+  var CP_MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+  var CP_LOCK = '<svg class="cp-ic" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.3" y="5.3" width="7.4" height="5.4" rx="1.2"/><path d="M3.9 5.3V3.9a2.1 2.1 0 0 1 4.2 0v1.4"/></svg>';
+  var CP_NOSH = '<svg class="cp-ic cp-ns" viewBox="0 0 22 12" aria-hidden="true"><circle cx="4" cy="3.2" r="1.8"/><path d="M1 11.2c0-2.6 1.3-4.2 3-4.2s3 1.6 3 4.2"/><path d="M11 4.6v3.2M9.4 6.2h3.2"/><circle cx="18" cy="3.2" r="1.8"/><path d="M15 11.2c0-2.6 1.3-4.2 3-4.2s3 1.6 3 4.2"/><path class="x" d="M1.5 1L20.5 11.5"/></svg>';
+  var CP_WARN = '<svg class="cp-ic cp-warn" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.3L11 10.5H1z"/><path d="M6 4.6v2.8M6 8.9v.1"/></svg>';
+  var cpUi = { m: 6, form: false, sel: {}, from: "", to: "", lodge: "t1", share: true, cost: {}, del: "" };
+  function cpYear() { var d = new Date(); return d.getMonth() > 7 ? d.getFullYear() + 1 : d.getFullYear(); } // après août : l'été suivant
+  function cpT0() { return Date.UTC(cpYear(), 5, 1); }
+  function cpDi(iso) { var a = String(iso || "").split("-"); return a.length < 3 ? NaN : Math.round((Date.UTC(+a[0], +a[1] - 1, +a[2]) - cpT0()) / 86400000); }
+  function cpDt(i) { return new Date(cpT0() + i * 86400000); }
+  function cpIso(i) { return cpDt(i).toISOString().slice(0, 10); }
+  function cpLab(i) { var d = cpDt(i); return d.getUTCDate() + " " + CP_MOIS[d.getUTCMonth()]; }
+  function cpFam(p) { return !p ? "EXT" : p.c === "YF" ? "YC" : p.c === "OF" ? "OC" : "EXT"; }
+  function cpName(id) { var p = person(id); return p ? p.name : id; }
+  function cpCounts(b) { var k = (b.ppl || []).filter(function (id) { var p = person(id); return p && p.kid; }).length; return { ad: (b.ppl || []).length - k, kid: k, n: (b.ppl || []).length }; }
+  function cpNights(b) { return cpDi(b.to) - cpDi(b.from); }
+  function cpCost(b) { var c = cpCounts(b); return cpNights(b) * (c.ad * CP_RATE.ad + c.kid * CP_RATE.kid); }
+  function cpById(id) { return resas.filter(function (b) { return b.id === id; })[0]; }
+  function cpSeason() { var y = String(cpYear()); return resas.filter(function (b) { return String(b.from || "").slice(0, 4) === y; }); }
+  /* Occupation de chaque nuit, par hébergement et au total. Conflit : hébergement trop plein (satL), ou une réservation
+     « pas ouverte au chevauchement » qui partage la nuit avec une autre (ns). */
+  function cpOcc(list) {
+    var O = [], byId = {}; list.forEach(function (b) { byId[b.id] = b; });
+    for (var n = 0; n < CP_N; n++) O.push({ tot: 0, L: { car: { n: 0, k: 0 }, t1: { n: 0, k: 0 }, t2: { n: 0, k: 0 } }, b: [] });
+    list.forEach(function (b) { var c = cpCounts(b), l0 = CP_LODGE[b.lodge] ? b.lodge : "t1"; for (var n = Math.max(0, cpDi(b.from)); n < Math.min(CP_N, cpDi(b.to)); n++) { var o = O[n]; o.tot += c.n; o.L[l0].n += c.n; o.L[l0].k += c.kid; o.b.push(b.id); } });
+    O.forEach(function (o) {
+      o.satL = {}; Object.keys(CP_LODGE).forEach(function (k) { var l = o.L[k], cap = CP_LODGE[k]; o.satL[k] = l.n > cap.cap + Math.min(cap.kid, l.k); });
+      o.ns = o.b.length > 1 && o.b.some(function (id) { return byId[id].share === false; });
+      o.free = Math.max(0, CP_CAP + CP_CAPK - o.tot);
+    });
+    return O;
+  }
+  function cpAnyConf(o) { return o.ns || Object.keys(o.satL).some(function (k) { return o.satL[k]; }); }
+  function cpOverlaps(O) {
+    var out = [], cur = null;
+    for (var n = 0; n <= CP_N; n++) {
+      var o = O[n], sat = o ? Object.keys(o.satL).filter(function (k) { return o.satL[k]; }) : [], key = o && o.b.length > 1 ? o.b.slice().sort().join(",") + "|" + sat.join(",") + "|" + o.ns : "";
+      if (cur && key !== cur.key) { out.push(cur); cur = null; }
+      if (key && !cur) cur = { key: key, a: n, z: n, ids: o.b.slice(), sat: sat, ns: o.ns, tot: o.tot };
+      if (cur) { cur.z = n; cur.tot = Math.max(cur.tot, o.tot); }
+    }
+    return out;
+  }
+  function cpFreeCls(f) { return f >= 5 ? "f-ok" : f > 0 ? "f-mid" : "f-full"; }
+  function cpCalendar(O, list) {
+    var Y = cpYear(), m = cpUi.m, first = Date.UTC(Y, m, 1), last = Date.UTC(Y, m + 1, 0), T0 = cpT0(), h = '<div class="cp-dow">' + ["L", "M", "M", "J", "V", "S", "D"].map(function (d) { return "<span>" + d + "</span>"; }).join("") + "</div>";
+    var start = first - ((new Date(first).getUTCDay() + 6) % 7) * 86400000;
+    for (var w = start; w <= last; w += 7 * 86400000) {
+      var i0 = Math.round((w - T0) / 86400000), cells = "", segs = [];
+      for (var d = 0; d < 7; d++) {
+        var i = i0 + d, inM = cpDt(i).getUTCMonth() === m && i >= 0 && i < CP_N, o = inM ? O[i] : null, cf = o && cpAnyConf(o);
+        cells += '<div class="cp-day' + (inM ? "" : " out") + (cf ? " sat" : "") + '">' + (inM ? '<span class="n">' + cpDt(i).getUTCDate() + '</span><span class="f ' + (cf ? "f-full" : cpFreeCls(o.free)) + '">' + o.free + " pl.</span>" : "") + "</div>";
+      }
+      // segments de chaque réservation dans la semaine, coupés là où il y a conflit (pointillé + pictogramme)
+      list.forEach(function (b) {
+        var a = Math.max(cpDi(b.from), i0), z = Math.min(cpDi(b.to), i0 + 7); if (!(a < z)) return;
+        var run = null;
+        for (var n = a; n < z; n++) {
+          if (cpDt(n).getUTCMonth() !== m || n < 0 || n >= CP_N) { if (run) { segs.push(run); run = null; } continue; }
+          var s = !!(O[n].satL[b.lodge] || O[n].ns), why = !s ? "" : O[n].ns ? "ns" : "cap";
+          if (run && (run.sat !== s || run.why !== why)) { segs.push(run); run = null; }
+          if (!run) run = { b: b, a: n - i0, z: n - i0 + 1, sat: s, why: why, first: !segs.some(function (x) { return x.b === b; }) };
+          else run.z = n - i0 + 1;
+        }
+        if (run) segs.push(run);
+      });
+      var lanes = [], laneOf = {};
+      segs.forEach(function (s) { if (laneOf[s.b.id] != null) return; var l = 0; while (lanes[l] && lanes[l].some(function (x) { return !(x.z <= s.a || x.a >= s.z); })) l++; lanes[l] = (lanes[l] || []).concat(segs.filter(function (x) { return x.b.id === s.b.id; })); laneOf[s.b.id] = l; });
+      var bars = segs.map(function (s) {
+        var c = cpCounts(s.b), mk = (s.b.ok ? CP_LOCK : "") + (s.b.share === false ? CP_NOSH : "");
+        var t = s.sat ? (s.why === "ns" ? CP_NOSH : CP_WARN) + (s.first ? esc(s.b.who) : "") : (s.first ? mk + esc(s.b.who) + " · " + c.n : "");
+        return '<div class="cp-bar ' + s.b.f + (s.sat ? " sat" : "") + '" style="left:calc(' + (s.a / 7 * 100) + '% + 2px);width:calc(' + ((s.z - s.a) / 7 * 100) + '% - 4px);top:' + (laneOf[s.b.id] * 18 + 2) + 'px" title="' + esc(s.b.who + " · " + (CP_LODGE[s.b.lodge] || CP_LODGE.t1).n + (s.b.ok ? " · confirmée" : "") + (s.b.share === false ? " · pas de chevauchement" : "")) + '">' + t + "</div>";
+      }).join("");
+      h += '<div class="cp-week"><div class="cp-days">' + cells + '</div><div class="cp-lanes" style="height:' + (lanes.length ? lanes.length * 18 + 4 : 0) + 'px">' + bars + "</div></div>";
+    }
+    return h;
+  }
+  function cpFormHtml(list) {
+    var sel = Object.keys(cpUi.sel).filter(function (k) { return cpUi.sel[k]; }), Y = cpYear();
+    var h = '<div class="card"><h3>Nouvelle réservation</h3>' + ["YC", "OC", "EXT"].map(function (f) {
+      var ps = PEOPLE.filter(function (p) { return !p.hidden && cpFam(p) === f; });
+      return '<div class="cp-grp"><span class="cp-dot ' + f + '"></span>' + CP_FAMN[f] + '</div><div class="cp-sel">' + ps.map(function (p) { return '<button class="chip" data-cpp="' + esc(p.id) + '" aria-pressed="' + !!cpUi.sel[p.id] + '">' + esc(p.name) + (p.kid ? " (enf.)" : "") + "</button>"; }).join("") + "</div>";
+    }).join("") +
+      '<div class="two" style="margin-top:8px"><div class="field"><label for="cpFrom">Arrivée</label><input id="cpFrom" type="date" min="' + Y + '-06-01" max="' + Y + '-08-31" value="' + esc(cpUi.from) + '"></div><div class="field"><label for="cpTo">Départ</label><input id="cpTo" type="date" min="' + Y + '-06-02" max="' + Y + '-09-01" value="' + esc(cpUi.to) + '"></div></div>' +
+      '<div class="field"><span class="flabel">Hébergement</span><div class="seg">' + Object.keys(CP_LODGE).map(function (k) { return '<button data-cpl="' + k + '" aria-pressed="' + (cpUi.lodge === k) + '">' + CP_LODGE[k].n + "</button>"; }).join("") + "</div></div>" +
+      '<div class="field"><span class="flabel">Ouvert au chevauchement ?</span><div class="seg"><button data-cpsh="1" aria-pressed="' + cpUi.share + '">Oui, on peut partager</button><button data-cpsh="0" aria-pressed="' + !cpUi.share + '">' + CP_NOSH + " Non</button></div></div>";
+    var b = { id: "new", who: "?", f: sel.length ? cpFam(person(sel[0])) : "YC", ppl: sel, from: cpUi.from, to: cpUi.to, lodge: cpUi.lodge, share: cpUi.share }, nn = cpNights(b);
+    if (!sel.length || !(nn > 0)) return h + '<div class="small muted">Choisissez les personnes et les dates.</div></div>';
+    var O2 = cpOcc(list.concat([b])), satN = [], ovN = [], nsW = {};
+    for (var n = Math.max(0, cpDi(b.from)); n < Math.min(CP_N, cpDi(b.to)); n++) {
+      if (O2[n].satL[b.lodge]) satN.push(n);
+      if (O2[n].b.length > 1) { ovN.push(n); O2[n].b.forEach(function (id) { var x = cpById(id); if (x && x.share === false) nsW[x.who] = 1; }); }
+    }
+    var c = cpCounts(b);
+    h += '<div class="cp-sum bal-sep">' + nn + " nuit" + (nn > 1 ? "s" : "") + " · " + c.ad + " adulte" + (c.ad > 1 ? "s" : "") + (c.kid ? " + " + c.kid + " enfant" + (c.kid > 1 ? "s" : "") : "") + " · coût estimé <b>" + eur0.format(cpCost(b)) + "</b></div>";
+    if (satN.length) h += '<div class="alert bad"><b>Chevauchement : ' + CP_LODGE[b.lodge].n + " complète du " + cpLab(satN[0]) + " au " + cpLab(satN[satN.length - 1] + 1) + "</b>Choisissez un autre hébergement ou d’autres dates. Vous pouvez aussi réserver quand même : seules les nuits en chevauchement seront en pointillé avec le pictogramme.</div>";
+    else if (ovN.length && (!cpUi.share || Object.keys(nsW).length)) h += '<div class="alert bad"><b>Chevauchement du ' + cpLab(ovN[0]) + " au " + cpLab(ovN[ovN.length - 1] + 1) + "</b>" + (!cpUi.share ? "Vous ne souhaitez pas de chevauchement, mais d’autres ont déjà réservé ces dates." : esc(Object.keys(nsW).join(", ")) + " ne souhaite pas de chevauchement.") + " Vous pouvez réserver quand même : seules les nuits en chevauchement seront en pointillé avec le pictogramme.</div>";
+    else if (ovN.length) h += '<div class="alert ok"><b>Chevauchement avec une autre réservation, mais il reste de la place</b>Du ' + cpLab(ovN[0]) + " au " + cpLab(ovN[ovN.length - 1] + 1) + ".</div>";
+    return h + '<div class="actions"><button class="btn ghost" id="cpCancel">Annuler</button><button class="btn" id="cpSave">Enregistrer la réservation</button></div></div>';
+  }
+  function renderCamp() {
+    var Y = cpYear(), list = cpSeason(), O = cpOcc(list), ov = cpOverlaps(O), h = "";
+    if (!cpUi.from) { cpUi.from = Y + "-07-01"; cpUi.to = Y + "-07-08"; }
+    // taux d'occupation du 1er juillet au 31 août : jours avec au moins une personne, et couchages occupés (11 par nuit)
+    var a0 = cpDi(Y + "-07-01"), nJ = CP_N - a0, jOcc = 0, pn = 0;
+    for (var q = a0; q < CP_N; q++) { if (O[q].tot > 0) jOcc++; pn += Math.min(O[q].tot, CP_CAP + CP_CAPK); }
+    h += '<div class="card"><div class="cp-top"><h3>Le Camp</h3><div class="cp-occ" title="Du 1er juillet au 31 août"><span><b>' + Math.round(jOcc / nJ * 100) + ' %</b> des jours</span><span><b>' + Math.round(pn / (nJ * (CP_CAP + CP_CAPK)) * 100) + ' %</b> des couchages</span></div><button class="btn sm" id="cpBook">' + (cpUi.form ? "Fermer" : "Réserver") + "</button></div>" +
+      '<div class="small muted cp-occ-l">Été ' + Y + " · occupation moyenne du 1er juillet au 31 août : " + jOcc + " jours occupés sur " + nJ + ", " + pn + " nuitées sur " + nJ * (CP_CAP + CP_CAPK) + " couchages.</div>" +
+      '<div class="cp-cap">' + Object.keys(CP_LODGE).map(function (k) { return "<div><b>" + CP_LODGE[k].n + "</b><span>" + CP_LODGE[k].s + "</span></div>"; }).join("") + "</div></div>";
+    if (cpUi.form) h += cpFormHtml(list);
+    h += '<div class="card"><div class="cp-months">' + ["Juin", "Juillet", "Août"].map(function (l, k) { return '<button class="chip" data-cpm="' + (5 + k) + '" aria-pressed="' + (cpUi.m === 5 + k) + '">' + l + "</button>"; }).join("") + "</div>" + cpCalendar(O, list) +
+      '<div class="cp-legend"><span><i style="background:var(--yc)"></i>Famille Yann</span><span><i style="background:var(--oc)"></i>Famille Olivier</span><span><i style="background:#14a3b5"></i>Extérieurs</span><span><i class="dash"></i>Chevauchement en conflit</span><span class="lg-ic">' + CP_LOCK + 'Confirmée</span><span class="lg-ic">' + CP_NOSH + 'Pas de chevauchement</span><span>« 7 pl. » : places libres cette nuit-là</span></div></div>';
+    if (ov.length) h += '<div class="card"><h3>Chevauchements</h3>' + ov.map(function (c) {
+      var bs = c.ids.map(cpById).filter(Boolean), who = bs.map(function (b) { return b.who; }).join(" + "), why = [];
+      c.sat.forEach(function (k) { why.push(CP_LODGE[k].n + " : trop de monde pour " + CP_LODGE[k].s); });
+      if (c.ns) bs.filter(function (b) { return b.share === false; }).forEach(function (b) { why.push(b.who + " ne souhaite pas de chevauchement"); });
+      return why.length ? '<div class="alert bad"><b>' + cpLab(c.a) + " → " + cpLab(c.z + 1) + " : " + esc(who) + "</b>" + esc(why.join(" ; ")) + ". À régler entre vous (autre hébergement ou autres dates).</div>"
+        : '<div class="alert ok"><b>' + cpLab(c.a) + " → " + cpLab(c.z + 1) + " : " + esc(who) + "</b>" + c.tot + " personnes sur 11 places : ça passe, chacun a son hébergement.</div>";
+    }).join("") + "</div>";
+    // périodes réservées (sans la partie financière) ; le cadenas confirme la réservation ; suppression réservée à Yann et Olivier
+    var sorted = list.slice().sort(function (a, b) { return a.from < b.from ? -1 : 1; });
+    h += '<div class="card"><h3>Périodes réservées</h3>' + (!sorted.length ? '<div class="small muted">Aucune réservation pour l’été ' + Y + ". Touchez « Réserver ».</div>" :
+      '<table class="rtable cp-res"><thead><tr><th>Qui</th><th>Dates</th><th class="r">Nuits</th><th class="r">Pers.</th><th class="r">Confirmée</th></tr></thead><tbody>' +
+      sorted.map(function (b) {
+        var c = cpCounts(b), del = canValidate() ? (cpUi.del === b.id ? ' <button class="btn link cp-delok" data-cpdel="' + esc(b.id) + '">Supprimer ?</button>' : ' <button class="cp-x" data-cpdel="' + esc(b.id) + '" aria-label="Supprimer la réservation">×</button>') : "";
+        return '<tr><td><span class="cp-dot ' + b.f + '"></span>' + esc(b.who) + (b.share === false ? CP_NOSH : "") + '<span class="sub">' + (CP_LODGE[b.lodge] || CP_LODGE.t1).n + " · " + esc((b.ppl || []).map(cpName).join(", ")) + "</span></td><td>" + cpLab(cpDi(b.from)) + " → " + cpLab(cpDi(b.to)) + '</td><td class="r">' + cpNights(b) + '</td><td class="r">' + c.ad + (c.kid ? " + " + c.kid + " enf." : "") + '</td><td class="r cp-act"><button class="cp-lock" data-cpok="' + esc(b.id) + '" aria-pressed="' + !!b.ok + '" aria-label="' + (b.ok ? "Réservation confirmée, toucher pour annuler la confirmation" : "Confirmer la réservation") + '">' + CP_LOCK + "</button>" + del + "</td></tr>";
+      }).join("") + "</tbody></table>") + "</div>";
+    // semaines libres
+    var weeks = [], w0 = 0 - ((new Date(cpT0()).getUTCDay() + 6) % 7);
+    for (var w = w0; w < CP_N; w += 7) { var a = Math.max(0, w), z = Math.min(CP_N, w + 7), min = 99; for (var n = a; n < z; n++) min = Math.min(min, O[n].free); weeks.push({ a: a, z: z, min: min }); }
+    var libres = weeks.filter(function (x) { return x.min >= CP_CAP + CP_CAPK; }), part = weeks.filter(function (x) { return x.min > 0 && x.min < CP_CAP + CP_CAPK; });
+    h += '<div class="card"><h3>Semaines libres</h3>' + (libres.length ? '<div class="chips">' + libres.map(function (x) { return '<span class="chip">' + cpLab(x.a) + " → " + cpLab(x.z) + "</span>"; }).join("") + "</div>" : '<div class="small muted">Aucune semaine entièrement libre.</div>') +
+      (part.length ? '<div class="label" style="margin-top:10px">En partie occupées</div><table class="rtable"><tbody>' + part.map(function (x) { return "<tr><td>" + cpLab(x.a) + " → " + cpLab(x.z) + '</td><td class="r">au moins ' + x.min + " places libres chaque nuit</td></tr>"; }).join("") + "</tbody></table>" : "") + "</div>";
+    // coût estimé par famille, dépliable pour voir chaque personne (simple estimation : aucune dépense n'est créée)
+    var per = {}, grand = 0;
+    list.forEach(function (b) { (b.ppl || []).forEach(function (id) { var p = person(id) || { id: id, name: id, c: "EXT" }; per[id] = per[id] || { p: p, n: 0 }; per[id].n += cpNights(b); }); });
+    if (Object.keys(per).length) h += '<div class="card"><h3>Coût estimé du séjour</h3>' + ["YC", "OC", "EXT"].map(function (f) {
+      var rows = Object.keys(per).map(function (k) { return per[k]; }).filter(function (x) { return cpFam(x.p) === f; }); if (!rows.length) return "";
+      var tot = 0, nn = 0; rows.forEach(function (x) { x.c = x.n * (x.p.kid ? CP_RATE.kid : CP_RATE.ad); tot += x.c; nn += x.n; }); grand += tot;
+      var op = !!cpUi.cost[f];
+      return '<button class="cp-fam" data-cpcost="' + f + '" aria-expanded="' + op + '"><span class="cp-dot ' + f + '"></span><b>' + CP_FAMN[f] + '</b><span class="muted">' + rows.length + " pers. · " + nn + ' nuitées</span><b class="r">' + eur0.format(tot) + "</b>" + TRI + "</button>" +
+        (op ? '<table class="rtable cp-det"><tbody>' + rows.map(function (x) { return "<tr><td>" + esc(x.p.name) + (x.p.kid ? ' <span class="muted">(enfant)</span>' : "") + '</td><td class="r">' + x.n + ' nuits</td><td class="r">' + eur0.format(x.c) + "</td></tr>"; }).join("") + "</tbody></table>" : "");
+    }).join("") + '<div class="cp-grand"><span>Total du séjour</span><b>' + eur0.format(grand) + '</b></div><div class="small muted" style="margin-top:6px">8 € par nuit et par adulte, 5 € par enfant de moins de 10 ans. Estimation seulement : rien n’est ajouté aux dépenses du bateau.</div></div>';
+    return h;
+  }
   function render() {
     computeYears();
-    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau };
+    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau, camp: renderCamp };
     screen.innerHTML = map[tab]();
     var fr = screen.querySelector(".bal-frise"); // frise de la balance : on garde la position de défilement, sinon on s'ouvre sur « Aujourd'hui »
     if (fr) { fr.scrollLeft = ui.friseX != null ? ui.friseX : fr.scrollWidth; fr.addEventListener("scroll", function () { ui.friseX = fr.scrollLeft; }, { passive: true }); } else ui.friseX = null;
     setTimeout(function () { persistAll(); updateNet(); }, 0);
-    var navTab = tab === "pilotes" || tab === "annuaire" ? "bateau" : tab === "journal" ? "accueil" : tab; // Pilotes et Annuaire sont des sous-menus de Bateau
+    var navTab = tab === "pilotes" || tab === "annuaire" ? "bateau" : tab === "journal" || tab === "camp" ? "accueil" : tab; // Pilotes et Annuaire sont des sous-menus de Bateau ; Journal et Camping, de l'Accueil
     document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === navTab)); });
     if (tab === "activite" && finView === "dep") depPreview();
     if (tab === "essence" && view.essence === "achat") achatPreview();
@@ -2559,6 +2714,7 @@
     depenses: { t: "Dépenses", v: '<span class="hv" style="background:#14532d;color:#cfeed3;font:700 23px var(--f-body)" aria-hidden="true">€</span>' },
     pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + WHEEL_ICON + "</span>" },
     journal: { t: "Journal - Notes", v: '<span class="hv" style="background:#ffffff;color:#1e4d6b" aria-hidden="true">' + QI.journal + "</span>" },
+    camp: { t: "Camping Les petits Pellegrins", v: '<span class="hv" style="background:#ffffff;color:#2f7d4f" aria-hidden="true">' + QI.camp + "</span>" },
     annuaire: { t: "Urgence - Dépannage", v: '<span class="hv urg-ic" aria-hidden="true">' + URG_ICON + "</span>" },
     bateau: { t: "", v: '<span class="nk-wrap">' + NK_SVG + "</span>" } // le logo suffit : pas de titre « Bateau »
   };
@@ -2606,12 +2762,33 @@
     if (ds.resedit) { ui.resEdit = ui.resEdit === ds.resedit ? "" : ds.resedit; return render(); }
     if ((ds.rstar || ds.eau) && resInput(b)) return;
     if (ds.go) return goTab(ds.go);
+    // v1.9.9 : camping « Les petits Pellegrins » (indépendant du bateau : aucune dépense)
+    if (b.id === "cpBook") { cpUi.form = !cpUi.form; cpUi.del = ""; return render(); }
+    if (b.id === "cpCancel") { cpUi.form = false; cpUi.sel = {}; return render(); }
+    if (ds.cpm) { cpUi.m = +ds.cpm; return render(); }
+    if (ds.cpp) { cpUi.sel[ds.cpp] = !cpUi.sel[ds.cpp]; return render(); }
+    if (ds.cpl) { cpUi.lodge = ds.cpl; return render(); }
+    if (ds.cpsh) { cpUi.share = ds.cpsh === "1"; return render(); }
+    if (ds.cpcost) { cpUi.cost[ds.cpcost] = !cpUi.cost[ds.cpcost]; return render(); }
+    if (ds.cpok) { var cpb = cpById(ds.cpok); if (cpb) { cpb.ok = !cpb.ok; toast(cpb.ok ? "Réservation confirmée." : "Confirmation retirée."); } return render(); }
+    if (ds.cpdel) { if (!canValidate()) return toast("Réservé à Yann et Olivier."); if (cpUi.del !== ds.cpdel) { cpUi.del = ds.cpdel; return render(); } resas = resas.filter(function (x) { return x.id !== ds.cpdel; }); cpUi.del = ""; toast("Réservation supprimée."); return render(); }
+    if (b.id === "cpSave") {
+      var cps = Object.keys(cpUi.sel).filter(function (k) { return cpUi.sel[k]; }), cpn = cpDi(cpUi.to) - cpDi(cpUi.from);
+      if (!cps.length) return toast("Choisissez au moins une personne.");
+      if (!(cpn > 0) || cpDi(cpUi.from) < 0 || cpDi(cpUi.to) > CP_N) return toast("Dates à vérifier : arrivée avant le départ, entre le 1er juin et le 31 août.");
+      var cpf = cpFam(person(cps[0])), cpfs = {}; cps.forEach(function (id) { cpfs[cpFam(person(id))] = 1; });
+      var cpwho = Object.keys(cpfs).length === 1 && cpf !== "EXT" ? CP_FAMN[cpf] : cpName(cps[0]);
+      var me = person(CONF.moi);
+      resas.push({ id: "resa-" + uid(), kind: "resa", date: nowIso(), who: cpwho, f: cpf, ppl: cps, from: cpUi.from, to: cpUi.to, lodge: cpUi.lodge, ok: false, share: cpUi.share, auteur: me ? me.id : "", auteurNom: me ? me.name : "" });
+      cpUi.form = false; cpUi.sel = {}; cpUi.share = true; cpUi.m = cpDt(cpDi(cpUi.from)).getUTCMonth(); toast("Réservation enregistrée."); return render();
+    }
     if (ds.demo) return setDemo(ds.demo === "1");
     if (ds.essyear) { essYear = ds.essyear; return render(); }
     if (ds.qa) { // boutons d'accès direct de l'accueil
       if (ds.qa === "achat") { view.essence = "achat"; return goTab("essence"); }
       if (ds.qa === "mise") { if (!bidons.length) { toast("Aucun bidon en stock : notez d’abord un achat."); view.essence = null; return goTab("essence"); } view.essence = "mise"; return goTab("essence"); }
       if (ds.qa === "stats") { finView = "bilan"; return goTab("activite"); }
+      if (ds.qa === "camp") return goTab("camp");
       if (ds.qa === "hist") {
         finView = "bilan"; var hy = latestYear() || String(new Date().getFullYear()); bilanYear = hy; ui["ses" + hy] = true; goTab("activite");
         var sc0 = document.querySelector('[data-coll="ses' + hy + '"]'); if (sc0) screen.scrollTop = sc0.closest(".card").offsetTop - 8;
@@ -2918,6 +3095,7 @@
   });
   screen.addEventListener("change", function (e) {
     var el = e.target;
+    if (el.id === "cpFrom" || el.id === "cpTo") { cpUi[el.id === "cpFrom" ? "from" : "to"] = el.value; if (el.id === "cpFrom" && cpUi.to <= el.value) { var nd = cpDi(el.value) + 7; cpUi.to = cpIso(Math.min(nd, CP_N)); } return render(); } // v1.9.9 : camping
     if (el.dataset.res && resInput(el)) return;
     if (el.dataset.f && el.tagName === "SELECT") { var t = findTour(Number(el.dataset.id)); t[el.dataset.f] = el.value; if (el.dataset.f === "act") { t.speed = ""; t.passes = ""; } save(1); return render(); }
     if (el.dataset.f && el.tagName === "INPUT") { save(1); return; }

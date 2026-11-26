@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.9.9 — 2026-11-26
+
+- Nouvelle page Camping Les petits Pellegrins : réservation de jours au camp de juin à août (caravane et deux tentes), calendrier, chevauchements, confirmation par cadenas, refus de chevauchement, semaines libres, taux d'occupation, coût estimé par famille
+- Réservations indépendantes du bateau : aucune dépense ni dette créée
+- Accueil : bouton Réservation Camp. à la place d'Historique sessions (toujours dans Activité) ; Mateu et Alba ajoutés (enfants de Julien)
+
 ## 1.9.8 — 2026-11-25
 
 - Écran d'ouverture : logo en plein écran, bouton Entrer, son de moteur V8, le bateau du logo traverse l'Accueil ; GPS demandé au toucher d'Entrer
