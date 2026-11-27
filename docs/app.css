@@ -1599,3 +1599,13 @@ body.camp-mode .tabs { display: none; }
 /* v2.0.3 : « GO pour session » descendu, posé sur l'eau juste au-dessus du bord du cadre, sans cacher le skieur */
 .quick .qa-session.qa-go2 { padding-bottom: 3px; }
 .quick .qa-session.qa-go2 .qa-t { line-height: 1.1; }
+/* v2.0.5 : temps moteur en 4 parts : les extérieurs de chaque famille en teinte claire */
+.split .yc.ext { background: color-mix(in srgb, var(--yc) 45%, transparent); }
+.split .oc.ext { background: color-mix(in srgb, var(--oc) 45%, transparent); }
+.legend.fam4 { gap: 6px 14px; }
+.legend.fam4 .ext .dot { opacity: .45; }
+/* v2.0.5 : réservation camping, prénoms rapprochés du nom de la famille pour tenir sur une ligne, même sur un petit téléphone */
+.cp-frow { gap: 3px; }
+.cp-frow .cp-grp { width: 50px; }
+.cp-frow .cp-sel { gap: 3px; }
+.cp-frow .cp-sel .chip { padding: 4px 5px; }

@@ -39,7 +39,7 @@
   var FIXED_CATS = { "Assurance": "assurance", "Adhésion": "adhesions", "Taxes": "taxes", "Taxe / corps mort lac": "taxes" };
   function computeYears() {
     YEARS = {};
-    function Y(y) { return YEARS[y] || (YEARS[y] = { min: 0, ext: 0, fam: { YC: 0, OC: 0 }, fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, lnote: "achetés dans l’année", commun: 0, meca: 0, pmap: {}, curve: [], cum: 0 }); }
+    function Y(y) { return YEARS[y] || (YEARS[y] = { min: 0, ext: 0, extF: { YC: 0, OC: 0 }, fam: { YC: 0, OC: 0 }, fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, lnote: "achetés dans l’année", commun: 0, meca: 0, pmap: {}, curve: [], cum: 0 }); }
     sessionsArr.slice().sort(function (a, b) { return dkey(a) < dkey(b) ? -1 : 1; }).forEach(function (s) {
       var yk = yearOf(s); if (!yk) return; var y = Y(yk), m = Number(s.engineMin) || 0;
       y.min += m; y.fam.YC += (s.famMin && Number(s.famMin.YC)) || 0; y.fam.OC += (s.famMin && Number(s.famMin.OC)) || 0;
@@ -47,7 +47,10 @@
       Object.keys(s.minutes || {}).forEach(function (pid) {
         var p = person(pid), nm = p ? p.name : pid, f = p ? (p.c === "EXT" ? (p.host || "YC") : CATF[p.c]) : "YC";
         if (!y.pmap[nm]) y.pmap[nm] = [nm, f, 0, 0]; y.pmap[nm][2] += Number(s.minutes[pid]) || 0; y.pmap[nm][3] += 1;
-        if (p && p.c === "EXT") y.ext += Number(s.minutes[pid]) || 0; // v2.0 : temps des extérieurs (déjà compté dans la famille qui invite)
+        if (p && p.c === "EXT") { // v2.0 : temps des extérieurs (déjà compté dans la famille qui invite) ; v2.0.5 : par famille hôte
+          var em = Number(s.minutes[pid]) || 0, pt = (s.participants || []).filter(function (q) { return q.pid === pid; })[0], hf = pt && (pt.host === "YC" || pt.host === "OC") ? pt.host : (p.host || "YC");
+          y.ext += em; y.extF[hf] += em;
+        }
       });
       y.cum += m;
       if (m > 0) { var dd = isoToFr(dkey(s)).slice(0, 5), last = y.curve[y.curve.length - 1]; if (last && last[1] === dd) last[0] = y.cum; else y.curve.push([y.cum, dd]); }
@@ -58,6 +61,15 @@
       var y = YEARS[k]; y.min = Math.round(y.min);
       y.people = Object.keys(y.pmap).map(function (n) { var p = y.pmap[n]; return [p[0], p[1], Math.round(p[2]), p[3]]; }).sort(function (a, b) { return b[2] - a[2]; });
     });
+  }
+  /* v2.0.5 : temps moteur en 4 parts sans double compte : chaque famille sans ses extérieurs, puis les extérieurs de chaque famille.
+     La somme des 4 parts = temps des familles (famMin), c'est-à-dire le temps moteur total. */
+  function famExtHtml(fam, extF, fmt) {
+    var p = [["YC", "Famille Yann", Math.max(0, fam.YC - extF.YC), ""], ["YC", "Extérieur Yann", Math.min(extF.YC, fam.YC), " ext"],
+      ["OC", "Famille Olivier", Math.max(0, fam.OC - extF.OC), ""], ["OC", "Extérieur Olivier", Math.min(extF.OC, fam.OC), " ext"]];
+    var t = p.reduce(function (a, x) { return a + x[2]; }, 0) || 1;
+    return '<div class="split">' + p.map(function (x) { return x[2] > 0 ? '<i class="' + x[0].toLowerCase() + x[3] + '" style="width:' + (x[2] / t * 100) + '%"></i>' : ""; }).join("") + "</div>" +
+      '<div class="legend fam4">' + p.map(function (x) { return '<span class="' + x[3].trim() + '">' + famDot(x[0]) + x[1] + ' <b class="num">' + fmt(x[2], t) + "</b></span>"; }).join("") + "</div>";
   }
   function latestYear() { var ks = Object.keys(YEARS).filter(function (k) { return YEARS[k].min > 0; }).sort(); return ks.length ? ks[ks.length - 1] : ""; }
 
@@ -113,7 +125,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.4", SCHEMA = 1;
+  var APP_VERSION = "2.0.5", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -827,11 +839,10 @@
     }
     var yk = latestYear();
     if (yk) {
-      var Y = YEARS[yk], t = Y.fam.YC + Y.fam.OC || 1;
-      h += '<div class="card"><div class="row"><h3>Temps moteur ' + yk + '</h3><span class="small muted">' + dec1.format(Y.min / 60) + " h</span></div>" +
-        '<div class="split"><i class="yc" style="width:' + (Y.fam.YC / t * 100) + '%"></i><i class="oc" style="width:' + (Y.fam.OC / t * 100) + '%"></i></div>' +
-        // v2.0 : en heures, et le temps des extérieurs (compris dans celui de la famille qui invite)
-        '<div class="legend"><span>' + famDot("YC") + 'Yann <b class="num">' + hm(Y.fam.YC) + "</b></span><span>" + famDot("OC") + 'Olivier <b class="num">' + hm(Y.fam.OC) + '</b></span><span class="muted">Extérieur : <b class="num">' + hm(Y.ext || 0) + "</b></span></div></div>";
+      var Y = YEARS[yk];
+      // v2.0.5 : familles sans leurs extérieurs + extérieurs de chaque famille : le total fait le temps moteur, sans double compte
+      h += '<div class="card"><div class="row"><h3>Temps moteur ' + yk + '</h3><span class="small muted">' + hm(Y.min) + "</span></div>" +
+        famExtHtml(Y.fam, Y.extF, function (m) { return hm(m); }) + "</div>";
     }
     h += '<div class="card spray-card photo-only"><div class="spray-bg img-ski" aria-hidden="true"></div><span class="brandlogo img-logo" aria-hidden="true"></span></div>'; // photo seule : la jauge est remontée à côté des bidons
     return h;
@@ -1632,7 +1643,8 @@
   function bilanData(bk, year) {
     var all = boatYears(bk), ys = year === "Toutes" ? all : [year];
     var D = { bk: bk, ys: ys, years: ys.length, min: 0, tour: 0, nSes: 0, fam: { YC: 0, OC: 0 }, commun: 0, meca: 0, people: [], curve: [], fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, autres: 0, recettes: 0, it: { fixes: [], essence: [], autres: [], recettes: [], achat: [] } };
-    ys.forEach(function (y) { var a = YEARS[y]; if (!a) return; D.min += a.min; D.fam.YC += a.fam.YC; D.fam.OC += a.fam.OC; D.commun += a.commun; D.meca += a.meca; D.people = mergePeople(D.people, a.people || []); if (ys.length === 1) D.curve = a.curve; });
+    D.extF = { YC: 0, OC: 0 };
+    ys.forEach(function (y) { var a = YEARS[y]; if (!a) return; D.min += a.min; D.fam.YC += a.fam.YC; D.fam.OC += a.fam.OC; D.extF.YC += a.extF.YC; D.extF.OC += a.extF.OC; D.commun += a.commun; D.meca += a.meca; D.people = mergePeople(D.people, a.people || []); if (ys.length === 1) D.curve = a.curve; });
     sessionsArr.forEach(function (s) { if (ys.indexOf(yearOf(s)) < 0) return; D.nSes++; Object.keys(s.minutes || {}).forEach(function (p) { D.tour += Number(s.minutes[p]) || 0; }); });
     var achatTot = 0;
     depenses.forEach(function (d) {
@@ -1721,10 +1733,8 @@
       '<div class="small muted">' + (bilanBoat === "old" ? "Ancien bateau : dépenses jusqu’à fin 2025. Revente à " + eur0.format(D.vente) + " (modifiable dans la fiche technique, onglet Admin)." : "Nouveau bateau : dépenses depuis 2026 ; amortissement et usure d’après la fiche technique (achat " + eur0.format(D.achat) + ").") + "</div>") + "</div>";
     if (bilanYear !== "Toutes" && D.curve.length) h += chartHtml(D, D.fixedYear, essM + usM);
     if (D.min) {
-      var t = D.fam.YC + D.fam.OC || 1;
-      h += '<div class="card"><h3>Temps moteur par famille</h3><div class="split"><i class="yc" style="width:' + (D.fam.YC / t * 100) + '%"></i><i class="oc" style="width:' + (D.fam.OC / t * 100) + '%"></i></div>' +
-        '<div class="legend"><span>' + famDot("YC") + 'Famille Yann <b class="num">' + int0.format(D.fam.YC) + " min · " + Math.round(D.fam.YC / t * 100) + " %</b></span><span>" + famDot("OC") + 'Famille Olivier <b class="num">' + int0.format(D.fam.OC) + " min · " + Math.round(D.fam.OC / t * 100) + " %</b></span></div>" +
-        '<div class="small muted">Invités compris dans leur famille ; temps commun et mécanique partagés.</div></div>';
+      h += '<div class="card"><h3>Temps moteur par famille</h3>' + famExtHtml(D.fam, D.extF, function (m, t) { return hm(m) + " · " + Math.round(m / t * 100) + " %"; }) +
+        '<div class="small muted">Total : ' + hm(D.fam.YC + D.fam.OC) + ". Les extérieurs sont comptés à part, dans la famille qui les invite (sans double compte) ; temps commun et mécanique partagés.</div></div>";
     } else h += '<div class="alert"><b>Aucune session enregistrée ' + (bilanYear === "Toutes" ? "pour ce bateau" : "en " + esc(bilanYear)) + ".</b>Les ratios par minute apparaîtront dès les premières sessions.</div>";
     h += personCardHtml();
     return h + sessionListHtml(bilanYear, bilanBoat);
@@ -3554,25 +3564,32 @@
   var CIGBUF = null;
   function cigBuffer(c) {
     if (CIGBUF) return CIGBUF;
-    var sr = c.sampleRate, dur = 3.6, n = Math.floor(sr * dur), buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), TAU = 6.2832;
-    var V = [{ f: 5200, pr: 52, tr: 2.6, a: 1, del: 0 }, { f: 6100, pr: 61, tr: 3.4, a: 0.7, del: 0.35 }, { f: 4700, pr: 46, tr: 1.9, a: 0.55, del: 0.8 }];
+    /* v2.0.5 : vraie cigale (et plus un grillon) : un bruit grésillant, fait de petits claquements très rapides (cymbales, 270 à 360 par seconde)
+       passés dans une résonance aiguë (4,8 à 6,2 kHz) ; une cigale chante en continu, les deux autres en phrases « tchi-tchi » ; 1,8 s en tout */
+    var sr = c.sampleRate, dur = 1.8, n = Math.floor(sr * dur), buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), TAU = 6.2832, peak = 0;
+    var V = [{ f: 4800, pr: 310, ech: 0, a: 1, del: 0 }, { f: 6200, pr: 270, ech: 4.2, a: 0.7, del: 0.12 }, { f: 5400, pr: 360, ech: 3.1, a: 0.55, del: 0.25 }];
+    V.forEach(function (v) { var r = 0.965, w = TAU * v.f / sr; v.a1 = 2 * r * Math.cos(w); v.a2 = -r * r; v.y1 = 0; v.y2 = 0; v.ph = 0; });
     for (var i = 0; i < n; i++) {
-      var t = i / sr, s = 0, fade = t > dur - 0.9 ? Math.max(0, (dur - t) / 0.9) : 1;
+      var t = i / sr, s = 0, fade = t > dur - 0.5 ? Math.max(0, (dur - t) / 0.5) : 1;
       for (var k = 0; k < V.length; k++) {
         var v = V[k], tt = t - v.del; if (tt < 0) continue;
-        var env = Math.min(1, tt / 0.5) * fade, trem = Math.pow(0.5 + 0.5 * Math.sin(TAU * v.tr * tt), 1.5), pulse = Math.pow(0.5 + 0.5 * Math.sin(TAU * v.pr * tt), 6);
-        s += v.a * env * (0.35 + 0.65 * trem) * pulse * (Math.sin(TAU * v.f * tt + 3 * Math.sin(TAU * 230 * tt)) + 0.6 * (Math.random() * 2 - 1));
+        v.ph += v.pr * (1 + 0.04 * Math.sin(TAU * 0.7 * tt)) / sr; // cadence des claquements, légèrement vivante
+        var click = Math.exp(-(v.ph % 1) * 7), phrase = v.ech ? 0.15 + 0.85 * Math.pow(0.5 + 0.5 * Math.sin(TAU * v.ech * tt), 2) : 0.8 + 0.2 * Math.sin(TAU * 1.3 * tt);
+        var x = (Math.random() * 2 - 1) * click * phrase * Math.min(1, tt / 0.25) * fade;
+        var y = x + v.a1 * v.y1 + v.a2 * v.y2; v.y2 = v.y1; v.y1 = y;
+        s += v.a * y;
       }
-      d[i] = s * 0.3;
+      d[i] = s; if (Math.abs(s) > peak) peak = Math.abs(s);
     }
+    if (peak > 0) for (var j = 0; j < n; j++) d[j] *= 0.7 / peak;
     return (CIGBUF = buf);
   }
   function cigales() {
     try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
     var c = AC; if (c.state === "suspended" && c.resume) c.resume();
     var src = c.createBufferSource(); src.buffer = cigBuffer(c);
-    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 5300; bp.Q.value = 1.1;
-    var out = c.createGain(); out.gain.value = 0.5;
+    var bp = c.createBiquadFilter(); bp.type = "highpass"; bp.frequency.value = 2800; bp.Q.value = 0.7; // ne garde que le grésillement aigu
+    var out = c.createGain(); out.gain.value = 0.45;
     src.connect(bp); bp.connect(out); out.connect(c.destination); src.start();
   }
   function vroom() {

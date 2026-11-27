@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 2.0.5 — 2026-11-27
+
+- Temps moteur en 4 parts sans double compte : Famille Yann, Extérieur Yann, Famille Olivier, Extérieur Olivier (Accueil et Activité, en heures)
+- Chant de cigale à la place du grillon, 1,8 s
+- Réservation camping : prénoms rapprochés, chaque famille sur une ligne
+
 ## 2.0.4 — 2026-11-27
 
 - Logo : espace entre NOS et KIDS, lettres SKI d'un doré plus doux
