@@ -113,7 +113,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.1", SCHEMA = 1;
+  var APP_VERSION = "2.0.2", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -3665,17 +3665,32 @@
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") Sync.run(); });
   setInterval(function () { Sync.run(); }, 120000);
 
-  /* Mises à jour de l'app : le service worker télécharge la nouvelle version, l'utilisateur l'active. */
-  var swReg = null;
+  /* Mises à jour de l'app : le service worker télécharge la nouvelle version.
+     v2.0.2 : recherche automatique à l'ouverture et à chaque retour sur l'app (au plus toutes les 5 min) ;
+     la nouvelle version s'installe seule si personne n'est en train de saisir et qu'aucune session ne tourne, sinon le bandeau « Mettre à jour » s'affiche. */
+  var swReg = null, swAutoAt = Date.now(), swLastCheck = 0;
   function showUpdate() { var bar = document.getElementById("updBar"); if (bar) bar.hidden = false; }
+  function updIdle() {
+    if (sortie && sortie.active) return false; // jamais pendant une session
+    var ae = document.activeElement; if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return false; // saisie en cours
+    return !!document.getElementById("introV") || Date.now() - swAutoAt < 60000; // à l'ouverture ou juste au retour sur l'app
+  }
+  function onUpdateReady() { if (!swReg || !swReg.waiting) return; if (updIdle()) swReg.waiting.postMessage("skipWaiting"); else showUpdate(); }
+  function autoCheck() {
+    if (!swReg || !navigator.onLine || Date.now() - swLastCheck < 300000) return;
+    swLastCheck = Date.now(); swAutoAt = Date.now();
+    swReg.update().then(onUpdateReady).catch(function () { /* pas de réseau : on réessaiera au prochain retour */ });
+  }
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") autoCheck(); });
   function checkUpdate(manual) {
     if (!swReg) { if (manual) toast("Version " + APP_VERSION + ". Mise à jour automatique indisponible ici."); return; }
     swReg.update().then(function () { if (swReg.waiting) showUpdate(); else if (manual) toast("Vous avez la dernière version (" + APP_VERSION + ")."); }).catch(function () { if (manual) toast("Pas de réseau : réessayez plus tard."); });
   }
   if ("serviceWorker" in navigator && location.protocol === "https:") {
-    navigator.serviceWorker.register("sw.js").then(function (reg) {
-      swReg = reg; if (reg.waiting) showUpdate();
-      reg.addEventListener("updatefound", function () { var w = reg.installing; if (w) w.addEventListener("statechange", function () { if (w.state === "installed" && navigator.serviceWorker.controller) showUpdate(); }); });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (reg) {
+      swReg = reg; if (reg.waiting) onUpdateReady();
+      reg.addEventListener("updatefound", function () { var w = reg.installing; if (w) w.addEventListener("statechange", function () { if (w.state === "installed" && navigator.serviceWorker.controller) onUpdateReady(); }); });
+      autoCheck();
     }).catch(function () { /* hors https ou navigateur non compatible */ });
     var reloading = false;
     navigator.serviceWorker.addEventListener("controllerchange", function () { if (!reloading) { reloading = true; location.reload(); } });

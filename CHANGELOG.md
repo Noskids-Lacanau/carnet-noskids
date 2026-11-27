@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.0.2 — 2026-11-27
+
+- Mise à jour automatique : recherche d'une nouvelle version à l'ouverture et à chaque retour sur l'app, installation seule si aucune session ni saisie en cours, sinon bandeau Mettre à jour
+- Le fichier du service worker est toujours relu sur le site (pas de copie ancienne)
+
 ## 2.0.1 — 2026-11-27
 
 - Bouton Météo lisible en mode nuit du téléphone
