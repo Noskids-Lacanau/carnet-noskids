@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 2.0.6 — 2026-11-27
+
+- Achat d'essence : prix actuels SP95-E10 et gazole de 5 stations (Intermarché Le Porge, Esso Chambéry, Auchan Villenave, Carrefour Lacanau-Océan, Super U Lacanau) avec leurs logos
+- Scan du ticket de caisse : litres, prix, payeur et bidons proposés ; photo du ticket gardée dans le Drive, lien Ticket dans les mouvements et les dépenses
+- Bouton Entrer affiché plus tôt sur la page d'ouverture
+
 ## 2.0.5 — 2026-11-27
 
 - Temps moteur en 4 parts sans double compte : Famille Yann, Extérieur Yann, Famille Olivier, Extérieur Olivier (Accueil et Activité, en heures)

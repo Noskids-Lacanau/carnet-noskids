@@ -125,7 +125,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.5", SCHEMA = 1;
+  var APP_VERSION = "2.0.6", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -913,12 +913,101 @@
       '<div class="legend small"><span>' + famDot("YC") + "payé Yann</span><span>" + famDot("OC") + "payé Olivier</span></div></div>" +
       (!view.essence ? '<button class="corr-btn corr-sm" id="corrOpen">Correction</button>' : "") + "</div>";
   }
+  /* v2.0.6 : prix actuels du SP95-E10 et du gazole dans les stations habituelles, d'après les données publiques du ministère (prix-carburants, flux instantané, mis à jour par les stations).
+     Gardés sur le téléphone (carnet.prixE10) et rafraîchis au plus toutes les 30 min quand on ouvre l'achat ; hors ligne, on montre les derniers connus.
+     Logos : petites icônes officielles des enseignes (favicons de leurs sites), dans img/stations. */
+  var PRIX_ST = [["33680006", "Le Porge", "intermarche", "Intermarché"], ["33140009", "Chambéry", "esso", "Esso"], ["33140012", "Villenave", "auchan", "Auchan"], ["33680003", "Océan", "carrefour", "Carrefour Contact Lacanau-Océan"], ["33680005", "Lacanau", "systeme-u", "Super U Lacanau ville"]]; // ordre voulu par Yann
+  var prixBusy = false;
+  function prixBoxIn() {
+    var c = LS.get("prixE10", null), s = c && c.s ? c.s : {}, ok = PRIX_ST.filter(function (st) { return s[st[0]] && (s[st[0]].p > 0 || s[st[0]].g > 0); });
+    if (!c || c.v !== 3 || Date.now() - (c.t || 0) > 30 * 60000) prixLoad(); // v3 : liste des stations changée, on recharge
+    var hd = '<span class="px-t">Prix actuel</span>';
+    if (!ok.length) return hd + '<span class="px-wait">' + (navigator.onLine === false ? "Indisponible hors ligne" : "Chargement…") + "</span>";
+    var mE = Math.min.apply(null, ok.map(function (st) { return s[st[0]].p || 99; })), mG = Math.min.apply(null, ok.map(function (st) { return s[st[0]].g || 99; }));
+    var cell = function (v, m) { return '<b class="' + (v && v === m ? "best" : "") + '">' + (v ? dec3(v) : "—") + "</b>"; };
+    return hd + '<span class="px-h"></span><span class="px-h">SP95-E10</span><span class="px-h">Gazole</span><span class="px-h"></span>' + ok.map(function (st) {
+      var x = s[st[0]];
+      return '<span class="px-n"><img class="px-lg" src="img/stations/' + st[2] + '.png" alt="' + st[3] + '" title="' + st[3] + '">' + st[1] + "</span>" + cell(x.p, mE) + cell(x.g, mG) + '<span class="px-d">' + (x.maj ? isoToFr(String(x.maj).slice(0, 10)).slice(0, 5) : "") + "</span>";
+    }).join("");
+  }
+  function dec3(v) { return Number(v).toFixed(3).replace(".", ","); }
+  function prixLoad() {
+    if (prixBusy || navigator.onLine === false) return; prixBusy = true;
+    var u = "https://data.economie.gouv.fr/api/explore/v2.1/catalog/datasets/prix-des-carburants-en-france-flux-instantane-v2/records?select=id,e10_prix,e10_maj,gazole_prix&limit=10&where=" +
+      encodeURIComponent("id in (" + PRIX_ST.map(function (st) { return st[0]; }).join(",") + ")");
+    fetch(u).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (j) {
+      var s = {}; (j.results || []).forEach(function (x) { s[String(x.id)] = { p: Number(x.e10_prix) || 0, g: Number(x.gazole_prix) || 0, maj: x.e10_maj || "" }; });
+      LS.set("prixE10", { v: 3, t: Date.now(), s: s });
+      var box = document.getElementById("prixBox"); if (box) box.innerHTML = prixBoxIn();
+    }).catch(function () { /* hors ligne ou service indisponible : on garde les derniers prix connus */ }).then(function () { prixBusy = false; });
+  }
+  /* v2.0.6 : scan du ticket de caisse. La photo est lue sur le téléphone (Tesseract.js, logiciel libre de reconnaissance de texte, chargé au premier scan :
+     il faut du réseau la première fois) ; la photo n'est envoyée nulle part et n'est pas gardée. L'app propose litres, prix, payeur (la personne qui saisit)
+     et nombre de bidons (litres / 22, arrondi) ; rien n'est enregistré sans « Enregistrer ». */
+  var SCAN_IC = '<svg class="scan-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>';
+  var TESS_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+  function tessLoad() {
+    if (window.Tesseract) return Promise.resolve(window.Tesseract);
+    return new Promise(function (ok, ko) { var s = document.createElement("script"); s.src = TESS_URL; s.onload = function () { ok(window.Tesseract); }; s.onerror = function () { ko(new Error("lecteur de ticket non chargé (réseau ?)")); }; document.head.appendChild(s); });
+  }
+  /* photo réduite (1600 px au plus), en niveaux de gris et contrastée : la lecture des tickets thermiques est plus sûre */
+  function scanPrep(file) {
+    return new Promise(function (ok, ko) {
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function () {
+        var k = Math.min(1, 1600 / Math.max(im.width, im.height)), c = document.createElement("canvas"); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+        var x = c.getContext("2d"); x.drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+        try { var d = x.getImageData(0, 0, c.width, c.height), p = d.data; for (var i = 0; i < p.length; i += 4) { var g = 0.3 * p[i] + 0.59 * p[i + 1] + 0.11 * p[i + 2]; g = Math.max(0, Math.min(255, (g - 128) * 1.6 + 128)); p[i] = p[i + 1] = p[i + 2] = g; } x.putImageData(d, 0, 0); } catch (e) { /* image protégée : on lit telle quelle */ }
+        ok(c);
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); ko(new Error("photo illisible")); };
+      im.src = url;
+    });
+  }
+  /* Lecture du texte du ticket : volume (L), prix au litre (€/L, trois décimales), montant (TOTAL, MONTANT, À PAYER…), puis recoupement des trois */
+  function ticketParse(txt) {
+    var T = String(txt || "").toUpperCase().replace(/(\d)\s*[,]\s*(\d)/g, "$1.$2").replace(/€/g, " EUR ");
+    var num = function (re) { var m = T.match(re); return m ? parseFloat(m[1]) : 0; };
+    var L = num(/VOLUME\D{0,14}(\d{1,3}\.\d{1,3})/) || num(/QUANTIT\w*\D{0,10}(\d{1,3}\.\d{1,3})/) || num(/QTE\D{0,10}(\d{1,3}\.\d{1,3})/) || num(/(\d{1,3}\.\d{2,3})\s*(?:L|LITRES?|LTRS?|LT)\b/);
+    var pu = num(/(\d\.\d{3})\s*(?:EUR)?\s*\/\s*L/) || num(/PRIX\s*(?:UNIT\w*|AU\s*LITRE|\/\s*L)?\D{0,12}(\d\.\d{3})/);
+    if (!pu) { var all3 = T.match(/\b\d\.\d{3}\b/g) || []; for (var i = 0; i < all3.length; i++) { var v3 = parseFloat(all3[i]); if (v3 > 1.2 && v3 < 3) { pu = v3; break; } } }
+    var tot = 0;
+    T.split(/\n/).forEach(function (l) {
+      if (!/TOTAL|MONTANT|PAYER|TTC|NET\b|CB\b|CARTE/.test(l) || /HT\b|TVA/.test(l) && !/TTC/.test(l)) return;
+      var ms = l.match(/\d{1,3}\.\d{2}\b/g); if (ms) ms.forEach(function (s) { var v = parseFloat(s); if (v > tot && v < 600) tot = v; });
+    });
+    if (!tot) { var ms2 = T.match(/(\d{1,3}\.\d{2})\s*EUR/g) || []; ms2.forEach(function (s) { var v = parseFloat(s); if (v > tot && v < 600) tot = v; }); }
+    if (L && pu && !tot) tot = Math.round(L * pu * 100) / 100;
+    if (!L && tot && pu) L = Math.round(tot / pu * 100) / 100;
+    if (L && tot && !pu) pu = tot / L;
+    if (!(L > 0.5 && L < 250)) L = 0; if (!(tot > 0.5 && tot < 600)) tot = 0;
+    return { L: L, P: tot, pu: pu };
+  }
+  function ticketScan(file) {
+    var A = achatForm;
+    A.scanBusy = true; A.scanTxt = navigator.onLine === false && !window.Tesseract ? "Hors ligne : la première lecture de ticket a besoin du réseau." : "Lecture du ticket… (quelques secondes, plus longue la première fois)"; render();
+    if (navigator.onLine === false && !window.Tesseract) { A.scanBusy = false; return; }
+    Promise.all([tessLoad(), scanPrep(file)]).then(function (r) {
+      try { A.ticketImg = r[1].toDataURL("image/jpeg", 0.72); } catch (e) { A.ticketImg = null; } // gardé pour l'envoi dans le Drive à l'enregistrement
+      return r[0].recognize(r[1], "fra", { logger: function (m) { var st = document.getElementById("aScanSt"); if (st && m && m.status === "recognizing text") st.textContent = "Lecture du ticket… " + Math.round((m.progress || 0) * 100) + " %"; } });
+    }).then(function (res) {
+      var t = ticketParse(res && res.data ? res.data.text : ""), me = person(CONF.moi), f = me ? (me.c === "YF" ? "YC" : me.c === "OF" ? "OC" : "") : "";
+      A.scanBusy = false;
+      if (!t.L && !t.P) { A.scanTxt = "Ticket illisible : reprenez la photo bien à plat et éclairée, ou saisissez à la main (la photo sera quand même gardée avec l’achat)."; return render(); }
+      if (t.L) { A.L = t.L; A.b = Math.max(1, Math.round(t.L / 22)); }
+      if (t.P) A.P = t.P;
+      if (f) A.f = f;
+      A.scanTxt = "Lu sur le ticket : " + (t.L ? dec2.format(t.L) + " L" : "litres non trouvés") + " · " + (t.P ? eur.format(t.P) : "montant non trouvé") + (t.pu ? " (" + dec3(t.pu) + " €/L)" : "") + ". Vérifiez avant d’enregistrer ; la photo du ticket sera gardée avec l’achat.";
+      render(); toast("Ticket lu : vérifiez les valeurs proposées.");
+    }).catch(function (e) { A.scanBusy = false; A.scanTxt = "Lecture impossible : " + e.message + ". Saisissez à la main."; render(); });
+  }
   function isAchat(m) { return m.type === "achat" && !m.annule; } // un achat extourné (saisie erronée ou en double) ne compte plus
   function achatFormHtml() {
     var A = achatForm, perCan = A.L > 0 && A.b ? A.L / A.b : 0;
-    return '<div class="card"><h3>1 - Renseigner les bidons achetés</h3>' +
+    return '<div class="card"><div class="ach-h"><h3>1 - Renseigner les bidons achetés</h3><label class="btn sm ghost scan-btn">' + SCAN_IC + 'Ticket<input type="file" accept="image/*" capture="environment" id="aScan" hidden></label></div>' + (achatForm.scanTxt ? '<div class="small scan-st' + (achatForm.scanBusy ? " busy" : "") + '" id="aScanSt">' + esc(achatForm.scanTxt) + "</div>" : "") + '' +
       '<div class="two"><div class="field"><label for="aL">Litres</label><input id="aL" inputmode="decimal" value="' + (A.L ? half(A.L) : "") + '" placeholder="ex. 44"></div><div class="field"><label for="aP">Prix payé (€)</label><input id="aP" inputmode="decimal" value="' + (A.P ? half(A.P) : "") + '" placeholder="ex. 76,10"></div></div>' +
-      '<div class="field"><span class="flabel">Nombre de bidons remplis</span><div class="stepper"><button data-astep="-1" aria-label="Un bidon de moins">−</button><span class="val">' + A.b + '</span><button data-astep="1" aria-label="Un bidon de plus">+</button></div></div>' +
+      '<div class="ach-row"><div class="field"><span class="flabel">Nombre de bidons remplis</span><div class="stepper"><button data-astep="-1" aria-label="Un bidon de moins">−</button><span class="val">' + A.b + '</span><button data-astep="1" aria-label="Un bidon de plus">+</button></div></div>' +
+      '<div class="prix-box" id="prixBox">' + prixBoxIn() + "</div></div>" +
       '<div class="small muted" id="aPL">' + achatPLText() + "</div>" +
       '<div class="field"><span class="flabel">Payé par (obligatoire)</span>' + segHtml("fam", "data-af", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], A.f) + "</div>" +
       (A.passe ? "" : '<div class="toggle"><span>Versé tout de suite dans le réservoir</span><button data-atog="verse" aria-pressed="' + A.verse + '" aria-label="Versé tout de suite"></button></div>') +
@@ -958,7 +1047,7 @@
       '<div><button class="btn sm' + (ui.dupAsk ? " stop" : "") + '" id="dupClean">' + (ui.dupAsk ? "Confirmer la suppression définitive" : "Supprimer ces mouvements") + "</button></div></div>";
     if (ui.mvts) {
       h += '<div class="list small" style="margin-top:8px">';
-      moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + (m.annule ? ' <b class="todo">' + (m.type === "verse" ? "annulé" : "extourné") + "</b>" : m.corrige ? ' <b class="todo">corrigé</b>' : "") + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
+      moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + (m.ticket && m.ticket.url ? ' <a class="tk-link" href="' + esc(m.ticket.url) + '" target="_blank" rel="noopener">Ticket</a>' : "") + (m.annule ? ' <b class="todo">' + (m.type === "verse" ? "annulé" : "extourné") + "</b>" : m.corrige ? ' <b class="todo">corrigé</b>' : "") + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
       h += "</div>" + (moves.length > 30 ? '<div class="small muted">Les 30 plus récents sont affichés.</div>' : "");
     }
     return h + "</div>";
@@ -1112,16 +1201,28 @@
     }
     return h + '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="corrSave"' + (takes.length ? "" : " disabled") + ">Enregistrer la correction</button></div></div>";
   }
+  /* v2.0.6 : le ticket scanné part dans le dossier Drive des documents (comme les vidéos du journal) ; l'achat et la dépense gardent son lien, visible par tous.
+     Sans réseau ou si l'envoi échoue, l'achat est quand même enregistré, sans le ticket. */
   function commitAchat() {
+    var A0 = achatForm, img = A0.ticketImg;
+    if (A0.busy) return;
+    if (!img || DEMO) return commitAchatNow(null);
+    if (!(CONF.url && CONF.code && navigator.onLine)) return commitAchatNow(null, "Ticket non gardé : pas de connexion.");
+    A0.busy = true; render(); toast("Envoi du ticket…");
+    Sync.call({ action: "upload", name: "Ticket essence " + todayIso() + " - " + FAM[A0.f].s + ".jpg", mime: "image/jpeg", data: img.split(",")[1], cat: "Essence - Tickets", y: String(new Date().getFullYear()) })
+      .then(function (res) { if (!res.ok) throw new Error(res.error || "erreur du serveur"); commitAchatNow({ url: res.url, n: "Ticket du " + todayFr() }, "Ticket gardé dans le Drive."); })
+      .catch(function (er) { commitAchatNow(null, "Ticket non envoyé (" + ((er && er.message) || er) + ")."); });
+  }
+  function commitAchatNow(tk, note) {
     var A = achatForm, f = A.f, B = A.b, Lt = A.L, P = A.P, pay = { YC: 0, OC: 0 }; pay[f] = P;
     // type, famille, litres, prix, versement et plein : servent aux totaux d'achat et à la balance essence
-    var base = { type: "achat", at: stamp(), date: todayIso(), d: todayFr(), f: f, litres: Lt, prix: P, bidons: B, verse: !!A.verse, plein: !!(A.verse && A.plein), cout: P, paye: pay };
+    var base = { type: "achat", at: stamp(), date: todayIso(), d: todayFr(), f: f, litres: Lt, prix: P, bidons: B, verse: !!A.verse, plein: !!(A.verse && A.plein), cout: P, paye: pay }; if (tk) base.ticket = tk;
     if (A.passe) { base.verse = false; base.plein = false; base.passe = true; moves.unshift(Object.assign({}, base, { t: "Achat de la saison passée (déjà consommé)", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n })); }
     else if (A.verse) { moves.unshift(Object.assign({}, base, { t: "Achat versé tout de suite", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n + (A.plein ? " · plein" : "") })); if (A.plein) { lastPlein = todayFr(); lastLevel = 16; lastLevelDate = todayFr(); } }
     else { for (var bi = 0; bi < B; bi++) bidons.push({ id: uid(), f: f, litres: Lt / B, cap: Lt / B, prix: P / Lt, d: todayFr() }); moves.unshift(Object.assign({}, base, { t: "Achat mis en stock", v: B + " bidon(s) · " + int0.format(Lt) + " L · " + eur.format(P), who: FAM[f].n })); }
     // la dépense est comptée pour la famille qui a payé ; la balance essence corrige ensuite selon la consommation
-    depenses.unshift({ d: todayFr(), lib: "Essence " + int0.format(Lt) + " L (" + B + " bidon" + (B > 1 ? "s" : "") + ")", cat: "Essence", m: P, payeur: f, regle: "payeur", isNew: true });
-    A.step = null; A.tfOpen = false; A.L = 0; A.P = 0; A.f = ""; A.verse = false; A.passe = false; A.plein = true; view.essence = null; save(2); toast(savedMsg("Achat enregistré, dépense créée.")); render();
+    depenses.unshift({ d: todayFr(), lib: "Essence " + int0.format(Lt) + " L (" + B + " bidon" + (B > 1 ? "s" : "") + ")", cat: "Essence", m: P, payeur: f, regle: "payeur", isNew: true, ticket: tk || undefined });
+    A.step = null; A.tfOpen = false; A.scanTxt = ""; A.ticketImg = null; A.busy = false; A.L = 0; A.P = 0; A.f = ""; A.verse = false; A.passe = false; A.plein = true; view.essence = null; save(2); toast(savedMsg("Achat enregistré, dépense créée." + (note ? " " + note : ""))); render();
   }
 
   /* ---------- Dépenses ---------- */
@@ -1472,7 +1573,7 @@
     if (!depenses.length) h += '<tr><td colspan="4" class="muted">Aucune dépense. Importez l’historique (onglet Admin) ou ajoutez la première.</td></tr>';
     depenses.forEach(function (d) {
       var s = sharesOf(d), pay = FAM[d.payeur] ? FAM[d.payeur].s : "?";
-      h += "<tr><td>" + esc(d.lib) + " " + tagOf(s) + '<span class="sub">' + esc(d.d || isoToFr(d.date)) + " · " + esc(d.cat) + " · payé par " + pay + "</span></td><td><b>" + eur.format(Number(d.m) || 0) + '</b></td><td class="part">' + (s.YC ? eur.format(s.YC) : "—") + '</td><td class="part">' + (s.OC ? eur.format(s.OC) : "—") + "</td></tr>";
+      h += "<tr><td>" + esc(d.lib) + " " + tagOf(s) + (d.ticket && d.ticket.url ? ' <a class="tk-link" href="' + esc(d.ticket.url) + '" target="_blank" rel="noopener">Ticket</a>' : "") + '<span class="sub">' + esc(d.d || isoToFr(d.date)) + " · " + esc(d.cat) + " · payé par " + pay + "</span></td><td><b>" + eur.format(Number(d.m) || 0) + '</b></td><td class="part">' + (s.YC ? eur.format(s.YC) : "—") + '</td><td class="part">' + (s.OC ? eur.format(s.OC) : "—") + "</td></tr>";
     });
     return h + '</tbody></table><div class="small muted">Y+O : partagé entre les deux familles · Y : Yann seul · O : Olivier seul. L’essence est répartie selon la consommation de chaque famille.</div></div>';
   }
@@ -3253,7 +3354,7 @@
       toast(savedMsg("Session rattrapée enregistrée.")); return render();
     }
     if (ds.ev === "achat" || ds.ev === "mise") { view.essence = ds.ev; return render(); }
-    if (ds.ev === "cancel") { view.essence = null; achatForm.step = null; achatForm.f = ""; achatForm.verse = false; achatForm.L = 0; achatForm.P = 0; return render(); }
+    if (ds.ev === "cancel") { view.essence = null; achatForm.step = null; achatForm.f = ""; achatForm.verse = false; achatForm.L = 0; achatForm.P = 0; achatForm.scanTxt = ""; achatForm.ticketImg = null; return render(); }
     if (ds.af) { achatForm.f = ds.af; return render(); }
     if (ds.mf) { miseForm.f = ds.mf; return render(); }
     if (ds.atog) { achatForm[ds.atog] = !achatForm[ds.atog]; return render(); }
@@ -3472,6 +3573,7 @@
       addDocs(Array.prototype.map.call(el.files, function (f) { return { file: f, cat: typ, y: guessDoc(f.name, f.lastModified).y, pid: pilotSel }; }));
       return;
     }
+    if (el.id === "aScan" && el.files && el.files[0]) { ticketScan(el.files[0]); el.value = ""; return; } // v2.0.6 : scan du ticket de caisse
     if (el.id === "impFile" && el.files && el.files[0]) {
       if (!reserveOk()) { el.value = ""; return; }
       var rdr = new FileReader();

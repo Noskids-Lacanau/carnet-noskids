@@ -1589,7 +1589,7 @@ body.camp-mode .tabs { display: none; }
 #introV .iv-ski { box-shadow: none; }
 #introV .iv-camp, #introV .iv-ski, #introV .iv-start, #introV .iv-hint { opacity: 0; transition: opacity .7s ease; }
 #introV .iv-ski { transition-duration: .4s; transition-delay: .5s; }
-#introV .iv-start, #introV .iv-hint { visibility: hidden; transition: opacity .4s ease 2.15s, visibility 0s 2.15s; }
+#introV .iv-start, #introV .iv-hint { visibility: hidden; transition: opacity .4s ease 1s, visibility 0s 1s; }
 #introV.in .iv-start, #introV.in .iv-hint { visibility: visible; }
 #introV.in .iv-camp, #introV.in .iv-ski, #introV.in .iv-start, #introV.in .iv-hint { opacity: 1; }
 #introV.in .iv-logo { animation-delay: .75s; }
@@ -1609,3 +1609,49 @@ body.camp-mode .tabs { display: none; }
 .cp-frow .cp-grp { width: 50px; }
 .cp-frow .cp-sel { gap: 3px; }
 .cp-frow .cp-sel .chip { padding: 4px 5px; }
+/* v2.0.6 : achat d'essence, prix du SP95-E10 des stations habituelles à droite du nombre de bidons */
+.ach-row { display: flex; align-items: flex-start; gap: 10px; }
+.ach-row > .field { flex: none; }
+.ach-row .stepper { gap: 6px; }
+.ach-row .stepper .val { min-width: 40px; }
+.prix-box { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr; row-gap: 1px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); margin-top: 2px; }
+.prix-box .px-t { font: 600 11px var(--f-body); color: var(--muted); letter-spacing: .02em; margin-bottom: 2px; }
+.prix-box .px-r { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 12px; line-height: 1.25; }
+.prix-box .px-n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.prix-box .px-r b { font-variant-numeric: tabular-nums; }
+.prix-box .px-r.best b { color: var(--good, #1f7a3a); }
+.prix-box .px-d { font-size: 10px; color: var(--muted); text-align: right; margin-top: -2px; }
+/* v2.0.6b : encart des prix compact, collé au nombre de bidons : une ligne par station (pastille, lieu, SP95-E10, gazole, date) */
+.ach-row { gap: 8px; align-items: flex-end; }
+.ach-row .stepper button { width: 36px; height: 36px; font-size: 20px; }
+.ach-row .stepper .val { min-width: 30px; font-size: 24px; }
+.prix-box { flex: 0 1 auto; margin-left: auto; grid-template-columns: auto auto auto auto; column-gap: 6px; row-gap: 2px; align-items: center; padding: 5px 7px; margin-top: 0; }
+.prix-box .px-t { grid-column: 1 / -1; margin: 0; text-transform: uppercase; font-size: 10px; letter-spacing: .06em; }
+.prix-box .px-wait { grid-column: 1 / -1; font-size: 11px; color: var(--muted); }
+.prix-box .px-h { font-size: 9.5px; color: var(--muted); text-align: right; line-height: 1; }
+.prix-box .px-n { display: flex; align-items: center; gap: 4px; font-size: 11px; white-space: nowrap; }
+.prix-box .px-lg { width: 13px; height: 13px; border-radius: 3px; color: #fff; font: 800 9px/13px var(--f-body); font-style: normal; text-align: center; flex: none; }
+.prix-box b { font-size: 11.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.prix-box b.best { color: var(--good, #1f7a3a); }
+.prix-box .px-d { font-size: 9.5px; color: var(--muted); margin: 0; text-align: right; }
+.ach-row > .field { max-width: 104px; }
+.ach-row > .field .flabel { line-height: 1.2; }
+.ach-row .stepper { gap: 6px; }
+.ach-row .stepper button { width: 32px; height: 34px; }
+.ach-row .stepper .val { min-width: 28px; }
+.prix-box { flex: none; }
+/* v2.0.6 : bouton « Ticket » (scan du ticket de caisse) à côté du titre de l'achat */
+.ach-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ach-h h3 { margin: 0; }
+.scan-btn { display: inline-flex; align-items: center; gap: 5px; flex: none; cursor: pointer; }
+.scan-ic { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.scan-st { margin: 6px 0 2px; padding: 6px 8px; border-radius: 8px; background: var(--accent-soft); color: var(--ink); }
+.scan-st.busy { color: var(--muted); }
+/* v2.0.6c : vrais logos des enseignes (petites icônes) à la place des lettres */
+.prix-box img.px-lg { width: 15px; height: 15px; border-radius: 3px; object-fit: contain; background: #fff; flex: none; }
+/* v2.0.6 : lien vers la photo du ticket (Drive) dans les mouvements d'essence et les dépenses */
+.tk-link { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 600; text-decoration: none; }
+/* v2.0.6d : nombre de bidons centré sous la colonne Litres et au milieu de la hauteur de l'encart des prix */
+.ach-row { align-items: center; }
+.ach-row > .field { flex: 1; max-width: none; display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 0; }
+.ach-row > .field .flabel { max-width: 110px; }
