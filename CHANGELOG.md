@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 2.0.7 — 2026-11-27
+
+- Accueil : encart Dernier plein retiré ; une ligne basse avec le temps moteur de l'année (repliable, une famille par ligne) et le compteur moteur à droite
+- Accueil : les 3 lignes de boutons occupent la hauteur de l'écran
+- Achat d'essence : option saison passée retirée
+- Scan du ticket : toujours le montant TTC, jamais le HT
+
 ## 2.0.6 — 2026-11-27
 
 - Achat d'essence : prix actuels SP95-E10 et gazole de 5 stations (Intermarché Le Porge, Esso Chambéry, Auchan Villenave, Carrefour Lacanau-Océan, Super U Lacanau) avec leurs logos

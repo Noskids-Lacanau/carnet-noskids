@@ -1655,3 +1655,24 @@ body.camp-mode .tabs { display: none; }
 .ach-row { align-items: center; }
 .ach-row > .field { flex: 1; max-width: none; display: flex; flex-direction: column; align-items: center; text-align: center; margin-bottom: 0; }
 .ach-row > .field .flabel { max-width: 110px; }
+/* v2.0.7 : accueil. Bloc du haut à la hauteur de l'écran ; les 3 lignes de boutons se partagent la place ; une ligne basse temps moteur + compteur */
+.home-fill { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.home-fill > .quick { flex: 1 0 auto; grid-template-rows: minmax(118px, 1.5fr) minmax(64px, 1fr) minmax(84px, 1fr); margin-bottom: 0; }
+.home-fill > .quick .qa-session, .home-fill > .quick .qa-mid { height: auto; min-height: 0; align-self: stretch; }
+.home-fill > .quick .qa-wide, .home-fill > .quick .qa-sm { min-height: 0; align-self: stretch; }
+.eng-row { display: flex; gap: 8px; align-items: flex-start; }
+.eng-row .card { padding: 6px 10px; gap: 6px; }
+.eng-t { flex: 1; min-width: 0; }
+.eng-coll { gap: 6px; min-height: 30px; }
+.eng-coll .eng-l { flex: 1; }
+.eng-coll .tri { width: 22px; height: 22px; }
+.eng-l { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.eng-row b.num { font: 700 15px var(--f-display); letter-spacing: .02em; white-space: nowrap; }
+.eng-c { flex: none; display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 6px 12px; box-sizing: content-box; }
+.legend.fam4.rows { display: grid; gap: 4px; font-size: 13px; }
+.legend.fam4.rows > span { display: flex; align-items: center; gap: 6px; }
+.legend.fam4.rows > span b { margin-left: auto; color: var(--ink); }
+.eng-l { text-transform: none; letter-spacing: 0; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eng-coll .eng-l { min-width: 0; }
+.eng-coll .tri { width: 18px; }
+.eng-c { padding: 6px 10px; gap: 6px; }

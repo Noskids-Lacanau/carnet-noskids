@@ -64,7 +64,8 @@
   }
   /* v2.0.5 : temps moteur en 4 parts sans double compte : chaque famille sans ses extérieurs, puis les extérieurs de chaque famille.
      La somme des 4 parts = temps des familles (famMin), c'est-à-dire le temps moteur total. */
-  function famExtHtml(fam, extF, fmt) {
+  function famExtHtml(fam, extF, fmt, rows) { // rows (v2.0.7) : une part par ligne, valeur à droite
+    if (rows) return famExtHtml(fam, extF, fmt).replace('class="legend fam4"', 'class="legend fam4 rows"');
     var p = [["YC", "Famille Yann", Math.max(0, fam.YC - extF.YC), ""], ["YC", "Extérieur Yann", Math.min(extF.YC, fam.YC), " ext"],
       ["OC", "Famille Olivier", Math.max(0, fam.OC - extF.OC), ""], ["OC", "Extérieur Olivier", Math.min(extF.OC, fam.OC), " ext"]];
     var t = p.reduce(function (a, x) { return a + x[2]; }, 0) || 1;
@@ -125,7 +126,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.6", SCHEMA = 1;
+  var APP_VERSION = "2.0.7", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -807,7 +808,7 @@
   function gapFam(prev) { var f = famSplit(prev), t = f.YC + f.OC; return t > 0 ? { YC: f.YC / t, OC: f.OC / t } : { YC: 0.5, OC: 0.5 }; }
   function gapFamTxt(prev) { var p = gapFam(prev); return p.YC > 0.99 ? "Famille Yann" : p.OC > 0.99 ? "Famille Olivier" : "Yann " + Math.round(p.YC * 100) + " % · Olivier " + Math.round(p.OC * 100) + " %"; }
   function renderAccueil() {
-    var now = Date.now(), h = "";
+    var now = Date.now(), h = '<div class="home-fill">'; // v2.0.7 : boutons, jauge, temps moteur et compteur tiennent dans la hauteur de l'écran
     h += quickHtml(now);
     var nu = unreadNotes();
     if (nu) { var ln = notes.filter(function (n) { return isUnread(n, notesLues()); })[0]; h += '<button class="note-alert" data-go="journal"><span class="na-n">' + nu + '</span><span><b>' + (nu > 1 ? nu + " notes à lire" : "1 note à lire") + "</b>" + esc(ln.cat) + " · " + esc(ln.auteurNom || "?") + " · " + fmtDateTime(ln.date) + '</span><span class="chev" aria-hidden="true">›</span></button>'; }
@@ -818,9 +819,13 @@
     h += '<div class="fuel-row"><div class="card fuel-g"><div class="gwrap">' + gaugeHtml("theo", T.v, true) + '</div></div>' + /* v2.0.1 : plus d'estimation en litres sous la jauge */
       '<div class="card fuel-c"><div class="fc-h fc-h2"><span>Stock de bidons</span><b title="≈ ' + int0.format(stockL()) + ' L">' + nb + " bidon" + (nb > 1 ? "s" : "") + "</b></div>" + cansHtml(null, "mini") + "</div></div>"; // v2.0b : total à droite du titre, ligne plus basse
     dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
+    // v2.0.7 : une ligne basse : temps moteur de l'année (repliable, une famille par ligne une fois déplié) et compteur moteur à droite ; plus de « Dernier plein »
+    var yk = latestYear(), Y = yk ? YEARS[yk] : null;
+    h += '<div class="eng-row"><div class="card eng-t"><button class="coll eng-coll" data-coll="engT" aria-expanded="' + !!ui.engT + '"><span class="eng-l">Temps moteur ' + esc(yk) + '</span><b class="num">' + (Y ? hm(Y.min) : "—") + "</b>" + TRI + "</button>" +
+      (ui.engT && Y ? famExtHtml(Y.fam, Y.extF, function (m) { return hm(m); }, true) : "") + "</div>" +
+      '<div class="card eng-c" title="Fin de la dernière session"><span class="eng-l">Compteur</span><b class="num">' + dec1.format(lastCompteur()) + " h</b></div></div>";
+    h += "</div>";
     if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Admin pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
-    h += '<div class="kpis"><div class="kpi"><span class="label">Compteur moteur</span><span class="v">' + dec1.format(lastCompteur()) + ' h</span><span class="s">fin de la dernière session</span></div>' +
-      '<div class="kpi"><span class="label">Dernier plein</span><span class="v" style="font-size:19px">' + esc(lastPlein || "—") + "</span></div></div>";
     var gaps = findGaps(), rech = gaps.filter(function (g) { return g.rech; });
     var gp = gaps.filter(function (g) { return rech.indexOf(g) < 0; })[0];
     if (rech.length) h += '<div class="small muted">' + rech.length + " trou(s) de compteur en recherche.</div>";
@@ -836,13 +841,6 @@
         '<div class="toggle"><span>Je ne sais pas encore : à rechercher</span><button data-grat="' + (gap.rat === "search" ? "auto" : "search") + '" aria-pressed="' + (gap.rat === "search") + '" aria-label="À rechercher"></button></div>' +
         '<div class="actions"><button class="btn ghost" id="gapCancel">Annuler</button><button class="btn" id="gapSave">Enregistrer</button></div>';
       h += "</div>";
-    }
-    var yk = latestYear();
-    if (yk) {
-      var Y = YEARS[yk];
-      // v2.0.5 : familles sans leurs extérieurs + extérieurs de chaque famille : le total fait le temps moteur, sans double compte
-      h += '<div class="card"><div class="row"><h3>Temps moteur ' + yk + '</h3><span class="small muted">' + hm(Y.min) + "</span></div>" +
-        famExtHtml(Y.fam, Y.extF, function (m) { return hm(m); }) + "</div>";
     }
     h += '<div class="card spray-card photo-only"><div class="spray-bg img-ski" aria-hidden="true"></div><span class="brandlogo img-logo" aria-hidden="true"></span></div>'; // photo seule : la jauge est remontée à côté des bidons
     return h;
@@ -971,12 +969,14 @@
     var L = num(/VOLUME\D{0,14}(\d{1,3}\.\d{1,3})/) || num(/QUANTIT\w*\D{0,10}(\d{1,3}\.\d{1,3})/) || num(/QTE\D{0,10}(\d{1,3}\.\d{1,3})/) || num(/(\d{1,3}\.\d{2,3})\s*(?:L|LITRES?|LTRS?|LT)\b/);
     var pu = num(/(\d\.\d{3})\s*(?:EUR)?\s*\/\s*L/) || num(/PRIX\s*(?:UNIT\w*|AU\s*LITRE|\/\s*L)?\D{0,12}(\d\.\d{3})/);
     if (!pu) { var all3 = T.match(/\b\d\.\d{3}\b/g) || []; for (var i = 0; i < all3.length; i++) { var v3 = parseFloat(all3[i]); if (v3 > 1.2 && v3 < 3) { pu = v3; break; } } }
-    var tot = 0;
-    T.split(/\n/).forEach(function (l) {
-      if (!/TOTAL|MONTANT|PAYER|TTC|NET\b|CB\b|CARTE/.test(l) || /HT\b|TVA/.test(l) && !/TTC/.test(l)) return;
-      var ms = l.match(/\d{1,3}\.\d{2}\b/g); if (ms) ms.forEach(function (s) { var v = parseFloat(s); if (v > tot && v < 600) tot = v; });
-    });
+    /* v2.0.7 : toujours le montant TTC. 1) une ligne qui dit TTC ; 2) sinon TOTAL, MONTANT, À PAYER, CB… sans HT ni TVA ;
+       3) le prix affiché à la pompe est TTC : si le montant lu vaut litres × prix ÷ 1,2 (montant HT), on prend litres × prix. */
+    var tot = 0, big = function (l) { var b = 0, ms = l.match(/\d{1,3}\.\d{2}\b/g); if (ms) ms.forEach(function (s) { var v = parseFloat(s); if (v > b && v < 600) b = v; }); return b; };
+    var lines = T.split(/\n/), HT = /\bH\.?\s?T\.?\b|HORS\s*TAXE|TVA/;
+    lines.forEach(function (l) { if (/T\.?T\.?C/.test(l)) tot = Math.max(tot, big(l)); });
+    if (!tot) lines.forEach(function (l) { if (/TOTAL|MONTANT|PAYER|NET\b|CB\b|CARTE/.test(l) && !HT.test(l)) tot = Math.max(tot, big(l)); });
     if (!tot) { var ms2 = T.match(/(\d{1,3}\.\d{2})\s*EUR/g) || []; ms2.forEach(function (s) { var v = parseFloat(s); if (v > tot && v < 600) tot = v; }); }
+    if (L && pu && tot && tot < L * pu * 0.92) tot = Math.round(L * pu * 100) / 100; // montant HT lu par erreur
     if (L && pu && !tot) tot = Math.round(L * pu * 100) / 100;
     if (!L && tot && pu) L = Math.round(tot / pu * 100) / 100;
     if (L && tot && !pu) pu = tot / L;
@@ -1010,8 +1010,7 @@
       '<div class="prix-box" id="prixBox">' + prixBoxIn() + "</div></div>" +
       '<div class="small muted" id="aPL">' + achatPLText() + "</div>" +
       '<div class="field"><span class="flabel">Payé par (obligatoire)</span>' + segHtml("fam", "data-af", [["YC", "Famille Yann"], ["OC", "Famille Olivier"]], A.f) + "</div>" +
-      (A.passe ? "" : '<div class="toggle"><span>Versé tout de suite dans le réservoir</span><button data-atog="verse" aria-pressed="' + A.verse + '" aria-label="Versé tout de suite"></button></div>') +
-      '<div class="toggle"><span>Essence de la saison passée, déjà consommée (ni stock ni réservoir)</span><button data-atog="passe" aria-pressed="' + !!A.passe + '" aria-label="Saison passée"></button></div>' +
+      (A.passe ? "" : '<div class="toggle"><span>Versé tout de suite dans le réservoir</span><button data-atog="verse" aria-pressed="' + A.verse + '" aria-label="Versé tout de suite"></button></div>') + // v2.0.7 : plus d'option « saison passée » (les achats déjà importés restent lus)
       (A.verse && !A.passe ? '<div class="toggle"><span>Le réservoir est plein</span><button data-atog="plein" aria-pressed="' + A.plein + '" aria-label="Réservoir plein"></button></div>' : "") +
       '<div class="actions"><button class="btn ghost" data-ev="cancel">Annuler</button><button class="btn" id="saveAchat"' + (A.f ? "" : " disabled") + ">Enregistrer</button></div>" +
       (A.f ? "" : '<div class="small muted">Choisissez la famille qui a payé pour pouvoir enregistrer.</div>') + "</div>";
@@ -2628,10 +2627,18 @@
     s.onerror = function () { box.innerHTML = '<div class="small muted">Prévisions indisponibles : touchez « Ouvrir Windguru ».</div>'; };
     box.appendChild(s);
   }
+  /* v2.0.7 : à l'accueil, le bloc du haut (boutons, jauge, temps moteur) occupe la hauteur visible ; les 3 lignes de boutons se partagent la place gagnée */
+  function homeFit() {
+    var f = screen.querySelector(".home-fill"); if (!f) return;
+    var cs = getComputedStyle(screen), hv = screen.clientHeight - parseFloat(cs.paddingTop) - 34; // 34 px : le bouton rond Accueil déborde au-dessus de la barre d'onglets
+    f.style.minHeight = Math.min(hv, 900) + "px";
+  }
+  window.addEventListener("resize", homeFit);
   function render() {
     computeYears();
     var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau, camp: renderCamp, camphub: renderCampHub, campcap: renderCampCap, campagenda: renderCampAgenda, campedl: renderCampEdl, meteo: renderMeteo };
     screen.innerHTML = map[tab]();
+    homeFit();
     var fr = screen.querySelector(".bal-frise"); // frise de la balance : on garde la position de défilement, sinon on s'ouvre sur « Aujourd'hui »
     if (fr) { fr.scrollLeft = ui.friseX != null ? ui.friseX : fr.scrollWidth; fr.addEventListener("scroll", function () { ui.friseX = fr.scrollLeft; }, { passive: true }); } else ui.friseX = null;
     setTimeout(function () { persistAll(); updateNet(); }, 0);
