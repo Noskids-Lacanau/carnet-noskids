@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 2.0.8 — 2026-11-27
+
+- Page d'ouverture : photo du skieur entière, bords fondus, entre le camping et le logo (logo un peu plus bas)
+- Accueil : GO pour session avec le cadre des boutons voisins et le skieur entier ; grand bidon pour l'achat, pompe qui verse dans le bateau pour le plein
+- Accueil : photo du bas retirée
+- Chant des cigales raccourci (1,2 s)
+
 ## 2.0.7 — 2026-11-27
 
 - Accueil : encart Dernier plein retiré ; une ligne basse avec le temps moteur de l'année (repliable, une famille par ligne) et le compteur moteur à droite

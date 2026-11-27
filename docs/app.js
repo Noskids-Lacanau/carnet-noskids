@@ -126,7 +126,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.7", SCHEMA = 1;
+  var APP_VERSION = "2.0.8", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -842,7 +842,7 @@
         '<div class="actions"><button class="btn ghost" id="gapCancel">Annuler</button><button class="btn" id="gapSave">Enregistrer</button></div>';
       h += "</div>";
     }
-    h += '<div class="card spray-card photo-only"><div class="spray-bg img-ski" aria-hidden="true"></div><span class="brandlogo img-logo" aria-hidden="true"></span></div>'; // photo seule : la jauge est remontée à côté des bidons
+    // v2.0.8 : plus de photo du skieur en bas de l'accueil (elle est sur la page d'ouverture)
     return h;
   }
   var RELIEF = true; // boutons en relief (accueil, Bateau) : mettre false pour revenir aux boutons plats
@@ -858,6 +858,22 @@
     euro: '<svg viewBox="0 0 24 24"><path d="M17.5 6.2A7 7 0 1 0 17.5 17.8"/><path d="M4 10h9M4 14h9"/></svg>',
     balance: '<svg viewBox="0 0 24 24"><path d="M12 3.5v17M7.5 20.5h9M4 7h16"/><path d="M6.5 7L3.5 13.5a3 3 0 0 0 6 0zM17.5 7l-3 6.5a3 3 0 0 0 6 0z"/></svg>'
   };
+  /* v2.0.8 : grands dessins des boutons de la 1re ligne de l'accueil */
+  var BIG_BIDON = '<svg class="qa-art" viewBox="0 0 48 56" aria-hidden="true"><defs><linearGradient id="bgJc" x1="0" x2="1"><stop offset="0" stop-color="#ef6a2a"/><stop offset="1" stop-color="#c2410f"/></linearGradient></defs>' +
+    '<path d="M18 3h13a2 2 0 0 1 2 2v8H16V5a2 2 0 0 1 2-2z" fill="#9c330c"/><rect x="20" y="6" width="9" height="4" rx="2" fill="#fbe3d3"/>' +
+    '<path d="M36 4h5a1.5 1.5 0 0 1 1.5 1.5V12h-8V5.5A1.5 1.5 0 0 1 36 4z" fill="#33363a"/>' +
+    '<path d="M15 12h26a4 4 0 0 1 4 4v34a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4V23z" fill="url(#bgJc)" stroke="#8a2a08" stroke-width="1.4"/>' +
+    '<path d="M11 22.5l3.5-3.5H38v29H11z" fill="none" stroke="#f89a62" stroke-width="1.6" stroke-linejoin="round" opacity=".9"/>' +
+    '<path d="M14.5 23L35 44.5M35 23L14.5 44.5" stroke="#a8360c" stroke-width="3.2" stroke-linecap="round"/><path d="M14.5 23L35 44.5M35 23L14.5 44.5" stroke="#f7915a" stroke-width="1.2" stroke-linecap="round"/></svg>';
+  var BIG_POMPE = '<svg class="qa-art" viewBox="0 0 64 60" aria-hidden="true">' +
+    '<path d="M1 57c3.5-2.2 6 2.2 9.5 0s6 2.2 9.5 0 6 2.2 9.5 0 6 2.2 9.5 0 6 2.2 9.5 0 6 2.2 9.5 0" fill="none" stroke="#4a9cc7" stroke-width="2" stroke-linecap="round"/>' +
+    '<rect x="3" y="9" width="17" height="33" rx="3" fill="#d6a10f" stroke="#7a5a05" stroke-width="1.4"/><rect x="6.5" y="13" width="10" height="8" rx="1.5" fill="#fff8df" stroke="#7a5a05"/>' +
+    '<rect x="1" y="41" width="21" height="4" rx="1.5" fill="#5b4307"/>' +
+    '<path d="M20 14c9-11 19-8 15 11" fill="none" stroke="#2f3338" stroke-width="2.6" stroke-linecap="round"/>' +
+    '<path d="M31.5 24.5h7l-1.6 6.5h-3.8z" fill="#2f3338"/><path d="M35 31v2.5" stroke="#2f3338" stroke-width="1.8" stroke-linecap="round"/>' +
+    '<path d="M35 35.5c1.3 1.8 1.9 2.8 1.9 3.6a1.9 1.9 0 0 1-3.8 0c0-.8.6-1.8 1.9-3.6z" fill="#f0a417"/><path d="M35 41.6c.8 1.1 1.2 1.7 1.2 2.2a1.2 1.2 0 0 1-2.4 0c0-.5.4-1.1 1.2-2.2z" fill="#f0a417"/>' +
+    '<path d="M24 45.5h36c2.2 0 3.2 1.2 2.3 2.6-2.5 4-7.5 6.4-14 6.4H27c-1.7 0-3-1.3-3-3z" fill="#fff" stroke="#16324a" stroke-width="1.5" stroke-linejoin="round"/>' +
+    '<path d="M24.5 50h37" stroke="#d6283a" stroke-width="2"/><path d="M44 45.5l3-5h6.5l3 5" fill="#bfe3f5" stroke="#16324a" stroke-width="1.3" stroke-linejoin="round"/></svg>';
   function qa(cls, attr, icon, title, sub, extra) {
     return '<button class="qa ' + cls + '" ' + attr + '><span class="qa-ic" aria-hidden="true">' + icon + "</span>" + (extra || "") + '<span class="qa-t">' + title + "</span>" + (sub ? '<span class="qa-s">' + sub + "</span>" : "") + "</button>";
   }
@@ -866,8 +882,9 @@
     if (sortie.active) h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Session en cours</span><span class="qa-s">moteur ' + (sortie.engine === "on" ? "en route" : "arrêté") + ' · <b data-timer="engine">' + fmtClock(engineMs(now)) + "</b> · ouvrir</span></button>";
     else h += '<button class="qa qa-session qa-go2 img-ski" data-go="sortie"><span class="qa-t">GO pour session</span></button>'; // v2.0b : sans la flèche, texte centré sous le skieur
     // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
-    h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat SP95 E10") +
-      qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Plein bateau") +
+    // v2.0.8 : achat et plein en grand dessin (bidon ; pompe qui verse dans le bateau), texte dessous
+    h += '<button class="qa qa-achat qa-mid qa-big" data-qa="achat">' + BIG_BIDON + '<span class="qa-t">Achat SP95 E10</span></button>' +
+      '<button class="qa qa-mise qa-mid qa-big" data-qa="mise">' + BIG_POMPE + '<span class="qa-t">Plein bateau</span></button>' +
       // 2e ligne : dépense et balance ; 3e ligne : quatre petits boutons
       qa("qa-dep qa-wide", 'data-depnew="1"', QI.euro, "Saisir une dépense") +
       qa("qa-bal qa-wide", 'data-fin="balance"', QI.balance, "Faire la balance", balanceText(balance()).replace(/\.$/, "")) +
@@ -3674,12 +3691,12 @@
   function cigBuffer(c) {
     if (CIGBUF) return CIGBUF;
     /* v2.0.5 : vraie cigale (et plus un grillon) : un bruit grésillant, fait de petits claquements très rapides (cymbales, 270 à 360 par seconde)
-       passés dans une résonance aiguë (4,8 à 6,2 kHz) ; une cigale chante en continu, les deux autres en phrases « tchi-tchi » ; 1,8 s en tout */
-    var sr = c.sampleRate, dur = 1.8, n = Math.floor(sr * dur), buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), TAU = 6.2832, peak = 0;
+       passés dans une résonance aiguë (4,8 à 6,2 kHz) ; une cigale chante en continu, les deux autres en phrases « tchi-tchi » ; 1,2 s en tout (v2.0.8, 1,8 s avant) */
+    var sr = c.sampleRate, dur = 1.2, n = Math.floor(sr * dur), buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), TAU = 6.2832, peak = 0;
     var V = [{ f: 4800, pr: 310, ech: 0, a: 1, del: 0 }, { f: 6200, pr: 270, ech: 4.2, a: 0.7, del: 0.12 }, { f: 5400, pr: 360, ech: 3.1, a: 0.55, del: 0.25 }];
     V.forEach(function (v) { var r = 0.965, w = TAU * v.f / sr; v.a1 = 2 * r * Math.cos(w); v.a2 = -r * r; v.y1 = 0; v.y2 = 0; v.ph = 0; });
     for (var i = 0; i < n; i++) {
-      var t = i / sr, s = 0, fade = t > dur - 0.5 ? Math.max(0, (dur - t) / 0.5) : 1;
+      var t = i / sr, s = 0, fade = t > dur - 0.35 ? Math.max(0, (dur - t) / 0.35) : 1;
       for (var k = 0; k < V.length; k++) {
         var v = V[k], tt = t - v.del; if (tt < 0) continue;
         v.ph += v.pr * (1 + 0.04 * Math.sin(TAU * 0.7 * tt)) / sr; // cadence des claquements, légèrement vivante
@@ -3730,6 +3747,7 @@
       '<path d="M0 96 Q50 84 100 96 T200 96 T300 96 T400 96 V120 H0Z" fill="#0a3a48" opacity=".7"/></svg></div>' + /* v2.0b : zone ski nautique délimitée, coins arrondis */
       // v2.0 : le premier tiers de l'écran ouvre l'espace camping ; le reste reste la partie ski nautique
       '<div class="iv-camp"><button class="iv-campbtn" id="ivCamp">' + CP_ICON.tent + '<span><b>Réservation camping</b><small>Les petits Pellegrins</small></span></button></div>' +
+      '<div class="iv-photo" aria-hidden="true"></div>' + // v2.0.8 : photo du skieur entière, bords fondus, entre le camping et le logo
       '<div class="iv-logo"></div><button class="iv-start rbtn-red" aria-label="Entrer dans l’application">Entrer</button><div class="iv-hint">Touchez Entrer pour démarrer le moteur</div>';
     var logo = src.cloneNode(true); logo.removeAttribute("class"); if (tmpL) tmpL.remove();
     v.querySelector(".iv-logo").appendChild(logo); v.querySelector(".iv-logo").insertAdjacentHTML("beforeend", '<span class="iv-shine"></span>');

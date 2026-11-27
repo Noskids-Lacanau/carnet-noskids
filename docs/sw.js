@@ -1,6 +1,6 @@
 /* Carnet Noskids : service worker. Garde l'app sur le téléphone pour qu'elle s'ouvre sans réseau.
    À chaque nouvelle version, changer VERSION (outils/Nouvelle-Version.ps1 le fait). */
-const VERSION = "2.0.7";
+const VERSION = "2.0.8";
 const CACHE = "carnet-noskids-" + VERSION;
 const SHELL = ["./", "index.html", "app.css", "app.js", "manifest.webmanifest",
   "img/bateau.jpg", "img/ski.jpg", "img/logo-malibu.png", "img/logo-malibu-or.png", "img/pompe.png", "img/stations/intermarche.png", "img/stations/systeme-u.png", "img/stations/esso.png", "img/stations/auchan.png", "img/stations/carrefour.png", "icons/icon-192.png", "icons/icon-512.png"];
