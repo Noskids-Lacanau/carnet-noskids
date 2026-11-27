@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 2.0.1 — 2026-11-27
+
+- Bouton Météo lisible en mode nuit du téléphone
+- Accueil : espace entre le bandeau et les boutons pour Live / Démo et le retour au lancement ; ligne jauge et bidons resserrée, sans litrage sous la jauge
+- Camping : Réserver ouvre directement le formulaire de réservation ; boutons en vert tendre, version nuit
+
 ## 2.0.0 — 2026-11-27
 
 - Page de lancement en deux zones : Réservation camping (avec cigales) en haut, ski nautique dessous ; bouton de retour à la page de lancement

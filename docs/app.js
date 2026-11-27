@@ -113,7 +113,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.0", SCHEMA = 1;
+  var APP_VERSION = "2.0.1", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -803,7 +803,7 @@
     if (todo.length) h += '<div class="alert alert-sm"><b>' + todo.map(function (s) { return "Saison " + yearOf(s) + " : " + hm(s.engineMin) + " de moteur à détailler"; }).join(" · ") + "</b></div>"; // v1.9.6 : bandeau réduit à sa ligne de titre
     // jauge estimée du bateau (à gauche) et stock de bidons compact (à droite), sur une même ligne
     var T = theo(), nb = stockN();
-    h += '<div class="fuel-row"><div class="card fuel-g"><div class="gwrap">' + gaugeHtml("theo", T.v, true) + '</div><div class="fg-cap">Estimation : <b id="theoL">≈ ' + Math.round(T.L) + " L</b></div></div>" +
+    h += '<div class="fuel-row"><div class="card fuel-g"><div class="gwrap">' + gaugeHtml("theo", T.v, true) + '</div></div>' + /* v2.0.1 : plus d'estimation en litres sous la jauge */
       '<div class="card fuel-c"><div class="fc-h fc-h2"><span>Stock de bidons</span><b title="≈ ' + int0.format(stockL()) + ' L">' + nb + " bidon" + (nb > 1 ? "s" : "") + "</b></div>" + cansHtml(null, "mini") + "</div></div>"; // v2.0b : total à droite du titre, ligne plus basse
     dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
     if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Admin pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
@@ -2277,7 +2277,7 @@
     var Y = cpYear(), sel = Object.keys(cpUi.sel).filter(function (k) { return cpUi.sel[k]; }), extN = cpUi.ext.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
     var chip = function (id, nm, kid) { return '<button class="chip" data-cpp="' + esc(id) + '" aria-pressed="' + !!cpUi.sel[id] + '"' + (kid ? ' title="enfant"' : "") + ">" + esc(nm) + "</button>"; };
     var row = function (f, chips) { return '<div class="cp-frow"><span class="cp-grp ' + f + '"><span class="cp-dot ' + f + '"></span>' + CP_FAMS[f] + '</span><div class="cp-sel">' + chips + "</div></div>"; };
-    var h = '<div class="card"><h3>Nouvelle réservation</h3>' +
+    var h = '<div class="card" id="cpForm"><h3>Nouvelle réservation</h3>' +
       row("YC", PEOPLE.filter(function (p) { return !p.hidden && p.c === "YF"; }).map(function (p) { return chip(p.id, p.name, p.kid); }).join("")) +
       row("OC", PEOPLE.filter(function (p) { return !p.hidden && p.c === "OF"; }).map(function (p) { return chip(p.id, p.name, p.kid); }).join("")) +
       row("JC", CP_JUL.map(function (id) { var p = person(id); return p ? chip(id, p.name, p.kid) : ""; }).join("")) +
@@ -2368,7 +2368,7 @@
   function campBackHtml() { return '<button class="btn link" data-go="camphub">← Espace camping</button>'; }
   function renderCampHub() {
     var list = cpSeason(), conf = list.filter(function (b) { return b.ok; }).length;
-    var tile = function (go, ic, t, s) { return '<button class="hub-t" data-go="' + go + '"><span class="hub-ic" aria-hidden="true">' + ic + '</span><span class="hub-tt">' + t + '</span><span class="hub-s">' + s + "</span></button>"; };
+    var tile = function (go, ic, t, s) { return '<button class="hub-t" data-go="' + go + '"' + (go === "camp" ? ' data-book="1"' : "") + '><span class="hub-ic" aria-hidden="true">' + ic + '</span><span class="hub-tt">' + t + '</span><span class="hub-s">' + s + "</span></button>"; };
     return '<div class="hub">' +
       tile("camp", CP_HUB_IC.res, "Réserver", list.length + " réservation" + (list.length > 1 ? "s" : "") + " · " + conf + " confirmée" + (conf > 1 ? "s" : "")) +
       tile("campcap", CP_HUB_IC.cap, "Capacité du camp", "caravane et tentes, qui dort où") +
@@ -3012,6 +3012,7 @@
     var ds = b.dataset, k, t;
     if (ds.resedit) { ui.resEdit = ui.resEdit === ds.resedit ? "" : ds.resedit; return render(); }
     if ((ds.rstar || ds.eau) && resInput(b)) return;
+    if (ds.book) { cpUi.form = true; cpUi.del = ""; goTab("camp"); var cpf0 = document.getElementById("cpForm"); if (cpf0) cpf0.scrollIntoView({ block: "start" }); return; } // v2.0.1 : Réserver ouvre directement le formulaire
     if (ds.go) return goTab(ds.go);
     // v1.9.9 : camping « Les petits Pellegrins » (indépendant du bateau : aucune dépense)
     if (b.id === "dupClean") { if (!canValidate()) return toast("Réservé à Yann et Olivier."); if (!ui.dupAsk) { ui.dupAsk = true; return render(); } var dci = dupClean().ids; moves = moves.filter(function (m) { return dci.indexOf(m.id) < 0; }); ui.dupAsk = false; toast(dci.length + " mouvement(s) supprimé(s) de la base et de l’historique."); return render(); } // v2.0 : nettoyage

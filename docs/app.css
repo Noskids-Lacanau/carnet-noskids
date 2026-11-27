@@ -1556,3 +1556,29 @@ body.camp-mode .tabs { display: none; }
 /* v2.0c : bonhommes avec jambes (sans couette) */
 .lit2 .fig .fl { fill: none; stroke: #c9d2d6; stroke-width: 5.6; stroke-linecap: round; stroke-dasharray: none; }
 .lit2.pris .fig .fl { stroke: currentColor; }
+/* v2.0.1 : bouton Météo lisible en mode nuit du téléphone (réglage système), comme Statistiques */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .quick .qa-meteo { background: linear-gradient(180deg, #1c3446, #142735); border-color: #3b5f7a; --edge: #0a1620; color: #e3eef6; }
+  :root:not([data-theme="light"]) .quick .qa-meteo .qa-ic { background: #4fa3d9; color: #0e2231; }
+}
+:root[data-theme="dark"] .quick .qa-meteo { --edge: #0a1620; }
+:root[data-theme="dark"] .quick .qa-meteo .qa-ic { background: #4fa3d9; color: #0e2231; }
+/* v2.0.1 : accueil, de la place entre le bandeau et la 1re ligne de boutons pour Live / Démo et le bouton de lancement */
+.quick { margin-top: 30px; }
+.dt-wrap.on-quick { top: -32px; }
+/* v2.0.1 : ligne jauge + bidons resserrée (plus de litrage sous la jauge) */
+.fuel-row .card { padding: 6px 10px; }
+.fuel-g .gauge svg { max-width: 84px !important; }
+.fuel-c .cans.mini .can svg { max-width: 30px; }
+/* v2.0.1 : boutons de l'espace camping, vert tendre plutôt que blanc ; version nuit */
+.hub-t { background: linear-gradient(180deg, #d9ebde, #c4ddcb); border-color: #a3c6ac; box-shadow: 0 3px 0 #8fb69a, 0 10px 16px -10px rgba(20, 60, 30, .45); }
+.hub-t:active { box-shadow: 0 1px 0 #8fb69a; }
+.hub .hub-s { color: #4f6656; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .hub-t { background: linear-gradient(180deg, #24402f, #1a3022); border-color: #3f6b4f; color: #e3efe6; box-shadow: 0 3px 0 #0c1a11, 0 10px 16px -10px rgba(0, 0, 0, .6); }
+  :root:not([data-theme="light"]) .hub .hub-s { color: #a9c4b1; }
+  :root:not([data-theme="light"]) .hub-ic { background: #4f9b5f; }
+}
+:root[data-theme="dark"] .hub-t { background: linear-gradient(180deg, #24402f, #1a3022); border-color: #3f6b4f; color: #e3efe6; box-shadow: 0 3px 0 #0c1a11, 0 10px 16px -10px rgba(0, 0, 0, .6); }
+:root[data-theme="dark"] .hub .hub-s { color: #a9c4b1; }
+:root[data-theme="dark"] .hub-ic { background: #4f9b5f; }
