@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 2.0.4 — 2026-11-27
+
+- Logo : espace entre NOS et KIDS, lettres SKI d'un doré plus doux
+- Julian ajouté aux personnes (extérieur)
+- Consommation constatée (L/h) calculée sans la saison 2026, reconstituée et peu fiable
+
 ## 2.0.3 — 2026-11-27
 
 - Page d'ouverture : zone camping moins haute, fondu de la zone camping puis de la zone ski nautique, bouton Entrer affiché à la fin de l'animation du N

@@ -72,7 +72,8 @@ Depuis un appareil connecté : **Bateau > Connexion et partage > Importer**, pui
 | Fichier | Contenu | État |
 |---|---|---|
 | `historique.json` | Ancien bateau (Response 1993) : sessions 2023-2025, essence, dépenses du Google Sheet | importé |
-| `saison-2026.json` | Nouveau bateau (Noskids, LXR 2015) : saison 2026 en un bloc, compteur 1 950,0 → 1 991,6 h, 41,6 h famille Yann | à importer |
+| `saison-2026.json` | Nouveau bateau (Noskids, LXR 2015) : saison 2026 en un bloc, compteur 1 950,0 → 1 991,6 h, 41,6 h famille Yann | remplacé par le suivant |
+| `saison-2026-detail.json` | Saison 2026 détaillée : 8 sessions aux dates des achats d’essence (même compteur), 10 achats « saison passée » payés par Yann, bloc précédent effacé. Nécessite la version 2.0.4 (Julian) | à importer |
 
 ## Prochaines étapes
 

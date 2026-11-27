@@ -10,7 +10,7 @@
     { id: "baptiste", name: "Baptiste", c: "YF", histWake: 80 }, { id: "eve", name: "Eve", c: "YF" },
     { id: "olivier", name: "Olivier", c: "OF" }, { id: "fiorella", name: "Fiorella", c: "OF" }, { id: "thao", name: "Thao", c: "OF" },
     { id: "malou", name: "Malou", c: "OF" }, { id: "calie", name: "Calie", c: "OF" },
-    { id: "julien", name: "Julien", c: "EXT" }, { id: "jessica", name: "Jessica", c: "EXT" }, { id: "louca", name: "Louca", c: "EXT" },
+    { id: "julien", name: "Julien", c: "EXT" }, { id: "jessica", name: "Jessica", c: "EXT" }, { id: "louca", name: "Louca", c: "EXT" }, { id: "julian", name: "Julian", c: "EXT" },
     { id: "mateu", name: "Mateu", c: "EXT", kid: true, parent: "julien" }, { id: "alba", name: "Alba", c: "EXT", kid: true, parent: "julien" }, // v1.9.9 : enfants de Julien, moins de 10 ans (tarif enfant au camping)
     { id: "invy", name: "Invités Yann", c: "EXT", host: "YC", hidden: true }, { id: "invo", name: "Invités Olivier", c: "EXT", host: "OC", hidden: true }
   ];
@@ -113,7 +113,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.3", SCHEMA = 1;
+  var APP_VERSION = "2.0.4", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -1628,6 +1628,7 @@
     var l = 0, e = 0; moves.forEach(function (m) { if (isAchat(m) && Number(m.litres) > 0 && Number(m.prix) > 0) { l += Number(m.litres); e += Number(m.prix); } });
     return l > 0 ? e / l : 1.85;
   }
+  var CONSO_EXCL = { "2026": 1 }; // saisons écartées de la consommation moyenne
   function bilanData(bk, year) {
     var all = boatYears(bk), ys = year === "Toutes" ? all : [year];
     var D = { bk: bk, ys: ys, years: ys.length, min: 0, tour: 0, nSes: 0, fam: { YC: 0, OC: 0 }, commun: 0, meca: 0, people: [], curve: [], fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, autres: 0, recettes: 0, it: { fixes: [], essence: [], autres: [], recettes: [], achat: [] } };
@@ -1645,6 +1646,10 @@
       else { D.autres += m; D.it.autres.push(d); }
     });
     moves.forEach(function (mv) { if (isAchat(mv) && ys.indexOf(yearOf(mv)) >= 0) D.litres += Number(mv.litres) || 0; });
+    /* v2.0.4 : consommation constatée (L/h) sans la saison 2026, reconstituée après coup et peu fiable (demande de Yann, 27/11/2026) */
+    D.cMin = 0; D.cL = 0; D.cExcl = ys.some(function (y) { return CONSO_EXCL[y]; });
+    ys.forEach(function (y) { if (!CONSO_EXCL[y] && YEARS[y]) D.cMin += YEARS[y].min; });
+    moves.forEach(function (mv) { var y = yearOf(mv); if (isAchat(mv) && ys.indexOf(y) >= 0 && !CONSO_EXCL[y]) D.cL += Number(mv.litres) || 0; });
     if (bk === "new" && D.essence <= 0 && D.min > 0) { D.estime = true; D.litres = D.min / 60 * SPEC.conso; D.essence = D.litres * refPrixL(); }
     if (bk === "old") {
       D.achat = achatTot; D.vente = Number(SPEC.venteAncien) || 0;
@@ -1694,7 +1699,7 @@
       '<div class="kpis kpis-in"><div class="kpi hero"><span class="label">Coût total de l’activité</span><span class="v">' + eur0.format(D.total) + '</span><span class="s">' + per + (D.min ? " · " + perMin(D.total, D.min) + " par minute moteur, soit " + eur0.format(D.total / D.min * 60) + " de l’heure" : "") + "</span></div>" +
       '<div class="kpi"><span class="label">Temps moteur</span><span class="v">' + dec1.format(D.min / 60) + ' h</span><span class="s">' + int0.format(D.min) + " min · " + D.nSes + " session" + (D.nSes > 1 ? "s" : "") + "</span></div>" +
       '<div class="kpi"><span class="label">Minutes de tours</span><span class="v">' + int0.format(D.tour) + ' min</span><span class="s">' + (D.tour ? perMin(D.total, D.tour) + " par minute de tour" : "skieurs, wake, bouée") + "</span></div>" +
-      '<div class="kpi"><span class="label">' + (D.estime ? "Litres estimés" : "Litres achetés") + '</span><span class="v">' + int0.format(D.litres) + ' L</span><span class="s">' + (D.estime ? SPEC.conso + " L/h tant que l’essence n’est pas renseignée" : D.min ? dec1.format(D.litres / (D.min / 60)) + " L/h constatés" : "") + "</span></div>" +
+      '<div class="kpi"><span class="label">' + (D.estime ? "Litres estimés" : "Litres achetés") + '</span><span class="v">' + int0.format(D.litres) + ' L</span><span class="s">' + (D.estime ? SPEC.conso + " L/h tant que l’essence n’est pas renseignée" : D.cMin && D.cL ? dec1.format(D.cL / (D.cMin / 60)) + " L/h constatés" + (D.cExcl ? " (hors 2026)" : "") : D.cExcl ? "conso 2026 non retenue (suivi peu fiable)" : "") + "</span></div>" +
       '<div class="kpi"><span class="label">Coût fixe annuel</span><span class="v">' + eur0.format(D.fixes / Math.max(1, D.years)) + '</span><span class="s">assurance, adhésions, taxes</span></div>' +
       // coût par minute moteur, en deux parts : fixe (ne dépend pas du temps passé sur l'eau) et variable (essence, usure moteur) ; fixe + variable = coût total par minute
       '<div class="kpi"><span class="label">Coût fixe</span><span class="v">' + perMin(D.total - D.essence - D.usure, D.min) + (D.min ? '<small> / min</small>' : "") + '</span><span class="s">assurance, taxes, entretien, ' + (bilanBoat === "old" ? "achat − revente" : "amortissement") + "</span></div>" +
@@ -2904,10 +2909,10 @@
      Bandeau Bateau : à la place de la photo et du titre. Accueil : au centre du bandeau, le logo Malibu en petit à gauche. */
   var NK_SVG = '<svg class="nk-logo" viewBox="0 0 360 104" role="img" aria-label="Noskids Chouillou"><defs>' +
     '<linearGradient id="nkW" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".38" stop-color="#e6eef2"/><stop offset=".5" stop-color="#8fa6b1"/><stop offset=".56" stop-color="#f4f8fa"/><stop offset=".8" stop-color="#c3d3da"/><stop offset="1" stop-color="#7e97a3"/></linearGradient>' +
-    '<linearGradient id="nkG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c4"/><stop offset=".38" stop-color="#f6cf55"/><stop offset=".5" stop-color="#a8730a"/><stop offset=".56" stop-color="#ffe08a"/><stop offset=".8" stop-color="#e2a923"/><stop offset="1" stop-color="#9a6a06"/></linearGradient>' +
+    '<linearGradient id="nkG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f9f1dc"/><stop offset=".38" stop-color="#e2cd93"/><stop offset=".5" stop-color="#8d774a"/><stop offset=".56" stop-color="#efe3c1"/><stop offset=".8" stop-color="#cbb47a"/><stop offset="1" stop-color="#85704a"/></linearGradient>' +
     '<filter id="nkRel" x="-10%" y="-15%" width="125%" height="140%"><feGaussianBlur in="SourceAlpha" stdDeviation="1.1" result="bl"/><feSpecularLighting in="bl" surfaceScale="3" specularConstant=".9" specularExponent="18" lighting-color="#ffffff" result="sp"><fePointLight x="-60" y="-80" z="120"/></feSpecularLighting><feComposite in="sp" in2="SourceAlpha" operator="in" result="spc"/><feComposite in="SourceGraphic" in2="spc" operator="arithmetic" k1="0" k2="1" k3=".55" k4="0" result="lit"/><feDropShadow in="lit" dx="1.6" dy="2.4" stdDeviation=".7" flood-color="#000" flood-opacity=".6"/></filter></defs>' +
     '<g transform="skewX(-8)"><path class="nk-n" d="M16 106 C37 94 57 71 64 56 L77 11 L108 12 L141 56 L172 15 L226 10 C205 22 185 45 178 60 L165 105 L134 105 L101 60 L70 105 Z" fill="url(#nkW)" stroke="#06161d" stroke-width="1.2" stroke-linejoin="round" paint-order="stroke" filter="url(#nkRel)"/>' +
-    '<text class="nk-tt" x="96" y="62" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" fill="url(#nkW)" stroke="#06161d" stroke-width="1.2" paint-order="stroke" filter="url(#nkRel)"><tspan font-size="42">O</tspan><tspan font-size="42" fill="url(#nkG)">SKI</tspan><tspan font-size="42">DS</tspan></text>' +
+    '<text class="nk-tt" x="96" y="62" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" fill="url(#nkW)" stroke="#06161d" stroke-width="1.2" paint-order="stroke" filter="url(#nkRel)"><tspan font-size="42">O</tspan><tspan font-size="42" fill="url(#nkG)">S</tspan><tspan font-size="42" fill="url(#nkG)" dx="9">KI</tspan><tspan font-size="42">DS</tspan></text>' +
     '<path class="nk-trace" fill="none" stroke="#14b5c8" stroke-width="1.2" stroke-linecap="round" opacity=".85"/><g class="nk-buoys"></g><line class="nk-r1" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/><line class="nk-r2" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/><g class="nk-pal" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" fill="none"></g>' +
     '<text class="nk-ch" x="80" y="88" font-family="\'Racing Sans One\',\'Arial Black\',sans-serif" font-size="17" fill="#9fe7f0" letter-spacing="3">CHOUILLOU</text><g class="nk-boat"></g></g></svg>';
   function nkLayout(svg) {
