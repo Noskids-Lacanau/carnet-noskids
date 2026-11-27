@@ -30,8 +30,7 @@
       { id: "ann-police-lac", g: "Police du lac", n: "Police du lac", r: "", t: "06 85 92 05 58" },
       { id: "ann-snlg-president", g: "Association SNLG", n: "Marc Sourty", r: "président", t: "06 87 61 62 55" },
       { id: "ann-snlg-moniteur", g: "Association SNLG", n: "Yvan", r: "moniteur", t: "06 44 31 68 28" },
-      { id: "ann-snlg-secretariat", g: "Association SNLG", n: "Véronique", r: "secrétariat", t: "06 60 46 14 23" },
-      { id: "ann-vlg", g: "VLG", n: "VLG", r: "", t: "" }
+      { id: "ann-snlg-secretariat", g: "Association SNLG", n: "Véronique", r: "secrétariat", t: "06 60 46 14 23" }
     ] };
   function person(id) { for (var i = 0; i < PEOPLE.length; i++) if (PEOPLE[i].id === id) return PEOPLE[i]; return null; }
 
@@ -40,7 +39,7 @@
   var FIXED_CATS = { "Assurance": "assurance", "Adhésion": "adhesions", "Taxes": "taxes", "Taxe / corps mort lac": "taxes" };
   function computeYears() {
     YEARS = {};
-    function Y(y) { return YEARS[y] || (YEARS[y] = { min: 0, fam: { YC: 0, OC: 0 }, fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, lnote: "achetés dans l’année", commun: 0, meca: 0, pmap: {}, curve: [], cum: 0 }); }
+    function Y(y) { return YEARS[y] || (YEARS[y] = { min: 0, ext: 0, fam: { YC: 0, OC: 0 }, fixes: 0, fx: { assurance: 0, adhesions: 0, taxes: 0 }, essence: 0, litres: 0, lnote: "achetés dans l’année", commun: 0, meca: 0, pmap: {}, curve: [], cum: 0 }); }
     sessionsArr.slice().sort(function (a, b) { return dkey(a) < dkey(b) ? -1 : 1; }).forEach(function (s) {
       var yk = yearOf(s); if (!yk) return; var y = Y(yk), m = Number(s.engineMin) || 0;
       y.min += m; y.fam.YC += (s.famMin && Number(s.famMin.YC)) || 0; y.fam.OC += (s.famMin && Number(s.famMin.OC)) || 0;
@@ -48,6 +47,7 @@
       Object.keys(s.minutes || {}).forEach(function (pid) {
         var p = person(pid), nm = p ? p.name : pid, f = p ? (p.c === "EXT" ? (p.host || "YC") : CATF[p.c]) : "YC";
         if (!y.pmap[nm]) y.pmap[nm] = [nm, f, 0, 0]; y.pmap[nm][2] += Number(s.minutes[pid]) || 0; y.pmap[nm][3] += 1;
+        if (p && p.c === "EXT") y.ext += Number(s.minutes[pid]) || 0; // v2.0 : temps des extérieurs (déjà compté dans la famille qui invite)
       });
       y.cum += m;
       if (m > 0) { var dd = isoToFr(dkey(s)).slice(0, 5), last = y.curve[y.curve.length - 1]; if (last && last[1] === dd) last[0] = y.cum; else y.curve.push([y.cum, dd]); }
@@ -113,7 +113,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "1.9.9", SCHEMA = 1;
+  var APP_VERSION = "2.0.0", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -179,7 +179,7 @@
   function currentCollections() {
     SPEC.id = "spec";
     ETAT.lastPlein = lastPlein; ETAT.lastLevel = lastLevel; ETAT.lastLevelDate = lastLevelDate;
-    return { personnes: PEOPLE, sessions: sessionsArr, bidons: bidons, dettes: dettes, mouvements: moves, depenses: depenses, documents: flatDocs(), entretien: maint, parametres: [SPEC], etat: [ETAT].concat(notes).concat(resas) };
+    return { personnes: PEOPLE, sessions: sessionsArr, bidons: bidons, dettes: dettes, mouvements: moves, depenses: depenses, documents: flatDocs(), entretien: maint, parametres: [SPEC], etat: [ETAT].concat(notes).concat(resas).concat(cpTar ? [cpTar] : []).concat(cpLits ? [cpLits] : []).concat(cpEdl) };
   }
   function snapshotAll() { SNAP = {}; var cur = currentCollections(); COLS.forEach(function (c) { cur[c].forEach(function (r) { if (!r.id) r.id = uid(); SNAP[c + ":" + r.id] = strip(r); }); }); }
   /* Compare l'état affiché à la dernière version connue : ce qui a changé part dans la file d'envoi. */
@@ -208,6 +208,8 @@
     dettes = vals("dettes"); moves = vals("mouvements").sort(byDateDesc); depenses = vals("depenses").sort(byDateDesc);
     notes = vals("etat").filter(function (r) { return r.kind === "note"; }).sort(function (a, b) { return (a.date || "") < (b.date || "") ? 1 : -1; });
     resas = vals("etat").filter(function (r) { return r.kind === "resa"; });
+    cpTar = vals("etat").filter(function (r) { return r.kind === "camptarif"; })[0] || null; // v2.0 : tarifs du camping par année
+    cpLits = vals("etat").filter(function (r) { return r.kind === "camplits"; })[0] || null; cpEdl = vals("etat").filter(function (r) { return r.kind === "edl"; }); // v2.0 : lits et états des lieux du camping
     DOC_CATS.forEach(function (c) { docs[c] = []; });
     vals("documents").forEach(function (d) { (docs[d.cat] || docs["Autres"]).push(d); });
     vals("entretien").forEach(function (m) { if (maint[m.i]) maint[m.i] = m; });
@@ -253,18 +255,35 @@
         var n = mergeRemote(res.records || []); CONF.lastSync = res.serverTime || CONF.lastSync; if (res.sheetUrl) CONF.sheetUrl = res.sheetUrl; dbSave();
         Sync.busy = false; Sync.status = "ok"; Sync.lastError = "";
         if (n) { loadArrays(); render(); } else updateNet();
+        if (annCampAdd()) render(); // v2.0 : rubrique Camping, ajoutée seulement sur des données fraîchement synchronisées
         if (QUEUE.length) Sync.soon();
       }).catch(function (e) { Sync.busy = false; Sync.status = "err"; Sync.lastError = String((e && e.message) || e); updateNet(); });
     }
   };
 
   function save() { /* l'enregistrement se fait à chaque affichage (persistAll) */ }
+  /* v2.0 : rubrique « Camping » des contacts (Centre de voile EDF, Accueil camping, numéros à compléter), ajoutée une seule fois.
+     Seulement après une synchronisation réussie (ou sur une appli non connectée) : un téléphone pas à jour n'écrase pas l'annuaire partagé. */
+  function annCampAdd() {
+    var ch = false;
+    if (!SPEC.annCamp) {
+      if (!(SPEC.annuaire || []).some(function (c) { return /camping/i.test(c.g || ""); }))
+        SPEC.annuaire = (SPEC.annuaire || []).concat([{ id: uid(), g: "Camping", n: "Centre de Voile EDF", r: "", t: "" }, { id: uid(), g: "Camping", n: "Accueil camping", r: "", t: "" }]);
+      SPEC.annCamp = true; ch = true;
+    }
+    // v2.0 : rubrique VLG retirée (contacts et catégorie), « Centre de Voile » avec une majuscule
+    if (!SPEC.annV2) {
+      SPEC.annuaire = (SPEC.annuaire || []).filter(function (c) { return !/^\s*vlg\s*$/i.test(c.g || ""); }).map(function (c) { if (/^centre de voile/i.test(c.n || "")) c.n = c.n.replace(/^centre de voile/i, "Centre de Voile"); return c; });
+      SPEC.annV2 = true; ch = true;
+    }
+    return ch;
+  }
   function netState() { if (!CONF.url || !CONF.code) return "local"; if (!navigator.onLine) return "off"; if (Sync.status === "err") return "err"; if (QUEUE.length || Sync.busy) return "send"; return "ok"; }
   function updateNet() {
     var el = document.getElementById("net"); if (!el) return; var s = netState();
     el.className = "net" + (s === "off" || s === "err" ? " off" : "");
     el.textContent = { ok: "● Synchro", local: "● Local", off: "● Hors ligne", err: "● Hors ligne", send: "● Envoi…" }[s];
-    el.title = s === "err" ? Sync.lastError : QUEUE.length ? QUEUE.length + " modification(s) en attente" : CONF.lastSync ? "Dernière synchro : " + new Date(CONF.lastSync).toLocaleString("fr-FR") : "Base partagée non configurée (onglet Bateau)";
+    el.title = s === "err" ? Sync.lastError : QUEUE.length ? QUEUE.length + " modification(s) en attente" : CONF.lastSync ? "Dernière synchro : " + new Date(CONF.lastSync).toLocaleString("fr-FR") : "Base partagée non configurée (onglet Admin)";
   }
   function savedMsg(msg) { var s = netState(); return s === "off" || s === "err" ? msg.replace(/\.$/, "") + " sur le téléphone, envoi au retour du réseau." : msg; }
   /* Compteur moteur : la fin d'une session = compteur relevé à la clôture (pré-rempli avec départ + temps chronométré).
@@ -554,10 +573,10 @@
   function renderStart() {
     if (!sortie.debEdited) sortie.compteurDeb = lastCompteur(); // suit les sessions arrivées par synchronisation
     // 1 : compteur (champ étroit) et lecture de la jauge à gauche, jauge à droite
-    var h = '<div class="card p1"><div class="step"><b>1</b>Saisissez le compteur constaté au bateau et positionnez la jauge.</div>' +
-      '<div class="p1-grid"><div class="p1-left"><div class="field"><label for="cDeb" class="flabel p1-lab">Compteur moteur (h)</label><input id="cDeb" class="cpt-in" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div>' +
-      '<div class="g-side"><span class="flabel">Jauge au départ</span><span class="g-read" data-gread="start">' + gaugeRead(startJauge, true) + "</span></div></div>" +
-      '<div class="gauge-sm p1-g">' + gaugeHtml("start", startJauge) + "</div></div>" +
+    // v2.0 : titre court, jauge remontée, le litrage estimé juste sous la jauge (plus de titre « Jauge au départ »)
+    var h = '<div class="card p1">' + /* v2.0b : titre dans la colonne de gauche, la jauge monte jusqu'au bord haut du cadre */
+      '<div class="p1-grid"><div class="p1-left"><div class="step"><b>1</b><span>Saisir compteur et Essence de départ</span></div><div class="field"><label for="cDeb" class="flabel p1-lab">Compteur moteur (h)</label><input id="cDeb" class="cpt-in" inputmode="decimal" value="' + dec1.format(sortie.compteurDeb) + '"></div></div>' +
+      '<div class="p1-g2"><div class="gauge-sm p1-g">' + gaugeHtml("start", startJauge) + '</div><div class="g-side g-under"><span class="g-read" data-gread="start">' + gaugeRead(startJauge, true) + "</span></div></div></div>" +
       '<div id="cDebWarn">' + startWarnHtml(sortie.compteurDeb) + "</div></div>";
     h += boardHtml("Indiquez les personnes à bord.");
     if (startList.length) h += '<div class="card"><div class="field"><label for="pilStart">Pilote</label><select id="pilStart">' + startList.map(function (p) { return '<option value="' + p.pid + '"' + (p.pid === startPilote ? " selected" : "") + ">" + esc(person(p.pid).name) + "</option>"; }).join("") + "</select></div></div>";
@@ -784,10 +803,10 @@
     if (todo.length) h += '<div class="alert alert-sm"><b>' + todo.map(function (s) { return "Saison " + yearOf(s) + " : " + hm(s.engineMin) + " de moteur à détailler"; }).join(" · ") + "</b></div>"; // v1.9.6 : bandeau réduit à sa ligne de titre
     // jauge estimée du bateau (à gauche) et stock de bidons compact (à droite), sur une même ligne
     var T = theo(), nb = stockN();
-    h += '<div class="fuel-row"><div class="card fuel-g"><div class="gwrap">' + gaugeHtml("theo", T.v, true) + '</div><div class="fg-cap">Stock d’essence estimé<b id="theoL">≈ ' + Math.round(T.L) + " L · " + fracLabel(T.v) + "</b></div></div>" +
-      '<div class="card fuel-c"><div class="fc-h">Stock de bidons</div>' + cansHtml(null, "mini") + '<div class="fc-s"><b>' + nb + " bidon" + (nb > 1 ? "s" : "") + "</b> · ≈ " + int0.format(stockL()) + " L</div></div></div>";
+    h += '<div class="fuel-row"><div class="card fuel-g"><div class="gwrap">' + gaugeHtml("theo", T.v, true) + '</div><div class="fg-cap">Estimation : <b id="theoL">≈ ' + Math.round(T.L) + " L</b></div></div>" +
+      '<div class="card fuel-c"><div class="fc-h fc-h2"><span>Stock de bidons</span><b title="≈ ' + int0.format(stockL()) + ' L">' + nb + " bidon" + (nb > 1 ? "s" : "") + "</b></div>" + cansHtml(null, "mini") + "</div></div>"; // v2.0b : total à droite du titre, ligne plus basse
     dettes.forEach(function (d) { if (!d.regle) h += detteHtml(d); });
-    if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Bateau pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
+    if (!CONF.url || !CONF.code) h += '<div class="alert"><b>Base partagée non connectée</b>Les saisies restent sur ce téléphone. Connectez l’app dans l’onglet Admin pour partager l’historique avec la famille.<div><button class="btn sm" data-go="bateau">Connecter</button></div></div>';
     h += '<div class="kpis"><div class="kpi"><span class="label">Compteur moteur</span><span class="v">' + dec1.format(lastCompteur()) + ' h</span><span class="s">fin de la dernière session</span></div>' +
       '<div class="kpi"><span class="label">Dernier plein</span><span class="v" style="font-size:19px">' + esc(lastPlein || "—") + "</span></div></div>";
     var gaps = findGaps(), rech = gaps.filter(function (g) { return g.rech; });
@@ -811,7 +830,8 @@
       var Y = YEARS[yk], t = Y.fam.YC + Y.fam.OC || 1;
       h += '<div class="card"><div class="row"><h3>Temps moteur ' + yk + '</h3><span class="small muted">' + dec1.format(Y.min / 60) + " h</span></div>" +
         '<div class="split"><i class="yc" style="width:' + (Y.fam.YC / t * 100) + '%"></i><i class="oc" style="width:' + (Y.fam.OC / t * 100) + '%"></i></div>' +
-        '<div class="legend"><span>' + famDot("YC") + 'Yann <b class="num">' + int0.format(Y.fam.YC) + " min</b></span><span>" + famDot("OC") + 'Olivier <b class="num">' + int0.format(Y.fam.OC) + " min</b></span></div></div>";
+        // v2.0 : en heures, et le temps des extérieurs (compris dans celui de la famille qui invite)
+        '<div class="legend"><span>' + famDot("YC") + 'Yann <b class="num">' + hm(Y.fam.YC) + "</b></span><span>" + famDot("OC") + 'Olivier <b class="num">' + hm(Y.fam.OC) + '</b></span><span class="muted">Extérieur : <b class="num">' + hm(Y.ext || 0) + "</b></span></div></div>";
     }
     h += '<div class="card spray-card photo-only"><div class="spray-bg img-ski" aria-hidden="true"></div><span class="brandlogo img-logo" aria-hidden="true"></span></div>'; // photo seule : la jauge est remontée à côté des bidons
     return h;
@@ -835,15 +855,15 @@
   function quickHtml(now) {
     var unread = unreadNotes(), h = '<div class="quick' + (RELIEF ? " relief" : "") + '">' + demoTogHtml("on-quick"); // Live / Démo, au-dessus des boutons essence
     if (sortie.active) h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">Session en cours</span><span class="qa-s">moteur ' + (sortie.engine === "on" ? "en route" : "arrêté") + ' · <b data-timer="engine">' + fmtClock(engineMs(now)) + "</b> · ouvrir</span></button>";
-    else h += '<button class="qa qa-session img-ski" data-go="sortie"><span class="qa-ic" aria-hidden="true">' + QI.play + '</span><span class="qa-t">GO pour session</span><span class="qa-s">chrono par skieur</span></button>';
+    else h += '<button class="qa qa-session qa-go2 img-ski" data-go="sortie"><span class="qa-t">GO pour session</span></button>'; // v2.0b : sans la flèche, texte centré sous le skieur
     // 1re ligne : session (double largeur), achat essence, remplissage ; 2e ligne : quatre petits boutons
-    h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat essence") +
+    h += qa("qa-achat qa-mid", 'data-qa="achat"', QI.achat, "Achat SP95 E10") +
       qa("qa-mise qa-mid", 'data-qa="mise"', QI.mise, "Plein bateau") +
       // 2e ligne : dépense et balance ; 3e ligne : quatre petits boutons
       qa("qa-dep qa-wide", 'data-depnew="1"', QI.euro, "Saisir une dépense") +
       qa("qa-bal qa-wide", 'data-fin="balance"', QI.balance, "Faire la balance", balanceText(balance()).replace(/\.$/, "")) +
       qa("qa-stats qa-sm", 'data-qa="stats"', QI.stats, "Statistiques") +
-      qa("qa-camp qa-sm", 'data-qa="camp"', QI.camp, "Réservation Camp.") + // v1.9.9 : à la place d'Historique sessions (liste des sessions toujours dans Activité)
+      qa("qa-meteo qa-sm", 'data-go="meteo"', CP_HUB_IC.meteo, "Météo") + // v2.0 : la réservation du camping a son espace depuis la page de lancement
       qa("qa-journal qa-sm", 'data-go="journal"', QI.journal, "Journal - Notes", "", unread ? '<span class="qa-dot big" aria-label="' + unread + ' note(s) à lire">' + unread + "</span>" : "") +
       qa("qa-urg qa-sm", 'data-go="annuaire"', URG_ICON, "Contact urgence");
     return h + "</div>";
@@ -861,18 +881,26 @@
     var T = theo();
     if (Number(svg.getAttribute("aria-valuenow")) !== T.v) setGauge(svg, T.v);
     var l = document.getElementById("theoL"), t = document.getElementById("theoTxt");
-    if (l) l.textContent = "≈ " + Math.round(T.L) + " L · " + fracLabel(T.v);
+    if (l) l.textContent = "≈ " + Math.round(T.L) + " L";
     if (t) t.textContent = T.txt;
   }
 
   /* ---------- Essence ---------- */
+  /* v2.0 : versements en double du 23/11/2026 (famille Yann, 1 bidon de 20 L) et leurs annulations « Versement fictif annulé ». */
+  function dupClean() {
+    var vs = moves.filter(function (m) { return m.type === "verse" && (m.date === "2026-11-23" || m.d === "23/11/2026") && /Yann/.test(m.who || "") && (/20 L/.test(m.v || "") || Number(m.litres) === 20); });
+    var ids = vs.map(function (m) { return m.id; });
+    var fx = moves.filter(function (m) { return m.type === "vfictif" && ids.indexOf(m.ref) >= 0; });
+    return { items: vs.concat(fx), ids: ids.concat(fx.map(function (m) { return m.id; })) };
+  }
   /* Stock de bidons : encart réduit, calé à droite ; à sa gauche, le bouton de correction (saisie erronée ou en double, vol, perte, autre usage) */
   function stockCardHtml() {
     var n = bidons.length;
-    return '<div class="stock-row">' + (!view.essence ? '<div class="stock-left"><button class="corr-btn" id="corrOpen">Correction Stock<span>saisie erronée ou en double, vol, perte…</span></button>' +
-      '<div class="legend small"><span>' + famDot("YC") + "payé Yann</span><span>" + famDot("OC") + "payé Olivier</span></div></div>" : "") +
-      '<div class="card stock-c"><div class="fc-h">Stock de bidons</div>' + cansHtml(null, "mini") +
-      '<div class="fc-s"><b>' + n + " bidon" + (n > 1 ? "s" : "") + "</b> · ≈ " + int0.format(stockL()) + " L · " + eur.format(stockEur()) + "</div></div></div>";
+    // v2.0 : le stock au milieu (un peu plus large en v2.0b), un petit bouton « Correction » à sa droite, calé en bas
+    return '<div class="stock-row stock-row2"><div class="card stock-c"><div class="fc-h">Stock de bidons</div>' + cansHtml(null, "mini") +
+      '<div class="fc-s"><b>' + n + " bidon" + (n > 1 ? "s" : "") + "</b> · ≈ " + int0.format(stockL()) + " L · " + eur.format(stockEur()) + "</div>" +
+      '<div class="legend small"><span>' + famDot("YC") + "payé Yann</span><span>" + famDot("OC") + "payé Olivier</span></div></div>" +
+      (!view.essence ? '<button class="corr-btn corr-sm" id="corrOpen">Correction</button>' : "") + "</div>";
   }
   function isAchat(m) { return m.type === "achat" && !m.annule; } // un achat extourné (saisie erronée ou en double) ne compte plus
   function achatFormHtml() {
@@ -912,6 +940,11 @@
     h += achatsTotHtml();
     h += '<div class="card"><h3>De plein à plein</h3><div class="small">Dernier plein : <b>' + esc(lastPlein || "—") + "</b></div></div>"; // après le total des achats
     h += '<div class="card">' + collHead("mvts", "Mouvements", moves.length + " mouvement" + (moves.length > 1 ? "s" : "") + (moves[0] ? " · dernier le " + esc(moves[0].d) : ""));
+    // v2.0 : nettoyage demandé par Yann : versements en double du 23/11/2026 (famille Yann, 1 bidon de 20 L) et leurs annulations
+    var dc = dupClean();
+    if (dc.items.length && canValidate()) h += '<div class="alert"><b>Nettoyage : ' + dc.items.length + " mouvement" + (dc.items.length > 1 ? "s" : "") + " à supprimer</b>Versements du 23/11/2026 (famille Yann, 20 L) et leurs annulations, sans raison d’exister :" +
+      '<div class="list small" style="margin:6px 0">' + dc.items.map(function (m) { return '<div class="item"><span>' + esc(m.t) + (m.annule ? ' <b class="todo">annulé</b>' : "") + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; }).join("") + "</div>" +
+      '<div><button class="btn sm' + (ui.dupAsk ? " stop" : "") + '" id="dupClean">' + (ui.dupAsk ? "Confirmer la suppression définitive" : "Supprimer ces mouvements") + "</button></div></div>";
     if (ui.mvts) {
       h += '<div class="list small" style="margin-top:8px">';
       moves.slice(0, 30).forEach(function (m) { h += '<div class="item"><span>' + esc(m.t) + (m.annule ? ' <b class="todo">' + (m.type === "verse" ? "annulé" : "extourné") + "</b>" : m.corrige ? ' <b class="todo">corrigé</b>' : "") + '</span><span class="num">' + esc(m.v) + '</span><span class="d">' + esc(m.d) + " · " + esc(m.who) + "</span></div>"; });
@@ -1406,7 +1439,7 @@
   /* Lien vers le Google Sheet (base de données) : donné par le serveur à la synchro, ou saisi dans la fiche technique */
   function sheetLinkHtml() {
     var u = CONF.sheetUrl || SPEC.sheetUrl || "";
-    if (!/^https:\/\/docs\.google\.com\//.test(u)) return '<div class="small muted sheet-link">Lien vers le Google Sheet : disponible après la mise à jour du serveur (1.3.0), ou à coller dans la fiche technique (onglet Bateau).</div>';
+    if (!/^https:\/\/docs\.google\.com\//.test(u)) return '<div class="small muted sheet-link">Lien vers le Google Sheet : disponible après la mise à jour du serveur (1.3.0), ou à coller dans la fiche technique (onglet Admin).</div>';
     return '<a class="card link-card sheet-link" href="' + esc(u) + '" target="_blank" rel="noopener"><span><b>Ouvrir la base de données (Google Sheet)</b><span class="small muted">Carnet Noskids – données · réservé aux comptes autorisés</span></span><span class="chev" aria-hidden="true">›</span></a>';
   }
   function depFormHtml() {
@@ -1425,7 +1458,7 @@
   }
   function depListHtml() {
     var h = '<div class="card"><h3>Dépenses</h3><table class="rtable"><thead><tr><th>Dépense</th><th>Total</th><th>Yann</th><th>Olivier</th></tr></thead><tbody>';
-    if (!depenses.length) h += '<tr><td colspan="4" class="muted">Aucune dépense. Importez l’historique (onglet Bateau) ou ajoutez la première.</td></tr>';
+    if (!depenses.length) h += '<tr><td colspan="4" class="muted">Aucune dépense. Importez l’historique (onglet Admin) ou ajoutez la première.</td></tr>';
     depenses.forEach(function (d) {
       var s = sharesOf(d), pay = FAM[d.payeur] ? FAM[d.payeur].s : "?";
       h += "<tr><td>" + esc(d.lib) + " " + tagOf(s) + '<span class="sub">' + esc(d.d || isoToFr(d.date)) + " · " + esc(d.cat) + " · payé par " + pay + "</span></td><td><b>" + eur.format(Number(d.m) || 0) + '</b></td><td class="part">' + (s.YC ? eur.format(s.YC) : "—") + '</td><td class="part">' + (s.OC ? eur.format(s.OC) : "—") + "</td></tr>";
@@ -1639,7 +1672,7 @@
       h = '<div class="small">' + eur0.format(SPEC.prix) + " amortis sur " + SPEC.ans + " ans = " + eur0.format(amortAn()) + " par saison × " + D.years + " saison" + (D.years > 1 ? "s" : "") + ". Le moteur (" + eur0.format(SPEC.valMoteur) + ") est compté à part, en usure.</div>";
       if (D.it.achat.length) h += '<div class="small muted">Paiements de l’achat notés dans les dépenses (déjà compris dans l’amortissement, non ajoutés) :</div>' + list(D.it.achat).map(depRow).join("");
     } else if (k === "bateau") {
-      h = list(D.it.achat).map(depRow).join("") + row("Revente du bateau", "fiche technique (onglet Bateau)", -D.vente);
+      h = list(D.it.achat).map(depRow).join("") + row("Revente du bateau", "fiche technique (onglet Admin)", -D.vente);
       if (D.years < boatYears("old").length) h += '<div class="small muted">Achat moins revente réparti sur ' + boatYears("old").length + " saisons : " + eur.format(D.bateau) + " pour " + esc(D.ys.join(", ")) + ".</div>";
     } else {
       var a = list(D.it[k] || []);
@@ -1680,7 +1713,7 @@
     h += '<div class="card">' + collHead("coutDet", "Détail du coût", "par poste, " + per) + (!ui.coutDet ? "" : '<table class="rtable"><thead><tr><th>Poste</th><th>Montant</th><th>€/min</th></tr></thead><tbody>' +
       lines.map(function (l) { var op = ui.detK === l[3]; return '<tr class="det-click' + (op ? " open" : "") + '" data-detk="' + l[3] + '" aria-expanded="' + op + '"><td>' + TRI + l[0] + '<span class="sub">' + l[1] + "</span></td><td>" + eur0.format(l[2]) + "</td><td>" + (D.min ? dec2.format(l[2] / D.min) : "—") + "</td></tr>" + (op ? '<tr class="det-row"><td colspan="3">' + detItemsHtml(D, l[3]) + "</td></tr>" : ""); }).join("") +
       '<tr class="tot"><td>Coût total</td><td>' + eur0.format(D.total) + "</td><td>" + (D.min ? dec2.format(D.total / D.min) : "—") + "</td></tr></tbody></table>" +
-      '<div class="small muted">' + (bilanBoat === "old" ? "Ancien bateau : dépenses jusqu’à fin 2025. Revente à " + eur0.format(D.vente) + " (modifiable dans la fiche technique, onglet Bateau)." : "Nouveau bateau : dépenses depuis 2026 ; amortissement et usure d’après la fiche technique (achat " + eur0.format(D.achat) + ").") + "</div>") + "</div>";
+      '<div class="small muted">' + (bilanBoat === "old" ? "Ancien bateau : dépenses jusqu’à fin 2025. Revente à " + eur0.format(D.vente) + " (modifiable dans la fiche technique, onglet Admin)." : "Nouveau bateau : dépenses depuis 2026 ; amortissement et usure d’après la fiche technique (achat " + eur0.format(D.achat) + ").") + "</div>") + "</div>";
     if (bilanYear !== "Toutes" && D.curve.length) h += chartHtml(D, D.fixedYear, essM + usM);
     if (D.min) {
       var t = D.fam.YC + D.fam.OC || 1;
@@ -1956,7 +1989,7 @@
      vitesse moyenne et maximale du bateau moteur en route, et pour chaque tour de skieur. Les mesures douteuses sont écartées
      (précision au-delà de 30 m, plus de 90 km/h, saut de plus de 5 s compté 5 s).
      Tours des skieurs : les 3 premières secondes après le départ ou la reprise du tour (prise de vitesse) ne comptent pas. */
-  var gpsWatch = null, gpsLast = null, gpsKmh = null, GPS_VMAX = 25, GPS_DEMARRAGE = 3000;
+  var gpsWatch = null, gpsLast = null, gpsKmh = null, GPS_VMAX = 25, GPS_DEMARRAGE = 3000, GPS_MIN_KMH = 19;
   function gpsAsk() { if (navigator.geolocation) try { navigator.geolocation.getCurrentPosition(function () {}, function () {}, { enableHighAccuracy: true, timeout: 20000, maximumAge: 60000 }); } catch (e) { /* GPS indisponible */ } }
   function gpsDist(a, b) { var R0 = 6371000, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lon - a.lon) * r, x = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2); return 2 * R0 * Math.asin(Math.sqrt(x)); }
   function gpsAdd(o, v, dt) { o.sum = (o.sum || 0) + v * dt; o.dur = (o.dur || 0) + dt; if (!(o.max >= v)) o.max = v; }
@@ -1969,8 +2002,14 @@
     if (v == null || isNaN(v) || v < 0 || v > GPS_VMAX) return;
     gpsKmh = v * 3.6;
     var dt = sortie.gpsT ? Math.min(5, Math.max(0, (tm - sortie.gpsT) / 1000)) : 0; sortie.gpsT = tm;
-    if (dt > 0 && sortie.pas) { sortie.pas.sum += v * dt; sortie.pas.dur += dt; var pl = document.getElementById("bigPasLive"); if (pl) pl.textContent = pasLive(); }
-    if (dt > 0 && sortie.engine === "on") { gpsAdd(sortie.gps || (sortie.gps = {}), v, dt); var r = running(); if (r && r.since && tm - r.since >= GPS_DEMARRAGE) gpsAdd(r.gps || (r.gps = {}), v, dt); }
+    // v2.0 : sous 19 km/h, ce n'est plus un sport tracté (chute, bateau qui ralentit) : la mesure n'est pas retenue pour les skieurs
+    var tracte = v * 3.6 >= GPS_MIN_KMH;
+    if (dt > 0 && sortie.pas) {
+      var P0 = sortie.pas, avg0 = P0.dur > 0 ? P0.sum / P0.dur : 0;
+      if (P0.dur >= 2 && v < avg0 * 0.85) { pasEnd(true); } // baisse brutale de plus de 15 % : chute, fin de la mesure du passage
+      else if (tracte) { P0.sum += v * dt; P0.dur += dt; var pl = document.getElementById("bigPasLive"); if (pl) pl.textContent = pasLive(); }
+    }
+    if (dt > 0 && sortie.engine === "on") { gpsAdd(sortie.gps || (sortie.gps = {}), v, dt); var r = running(); if (r && r.since && tm - r.since >= GPS_DEMARRAGE && tracte) gpsAdd(r.gps || (r.gps = {}), v, dt); }
     var el = document.getElementById("gpsV"); if (el) el.textContent = gpsTxt();
     var bg = document.getElementById("bigGps"); if (bg) bg.innerHTML = bigGpsHtml(bigTour());
   }
@@ -2102,12 +2141,12 @@
   /* Passages de slalom (v1.9.4) : « Départ passage » puis « Arrivée passage » mesure la vitesse moyenne GPS entre les deux appuis.
      Les passages du skieur sont numérotés P1, P2… ; un appui long sur un passage le supprime (chute). */
   function pasStart() { var r = running(); if (!r) return toast("Lancez d'abord un skieur."); sortie.pas = { tid: r.id, at: Date.now(), sum: 0, dur: 0 }; bigKey = ""; render(); }
-  function pasEnd() {
+  function pasEnd(chute) { // chute : arrêt automatique (v2.0), la vitesse a baissé brutalement de plus de 15 %
     var P = sortie.pas; sortie.pas = null; bigKey = "";
     var tr = P && findTour(P.tid);
     if (!tr || !(P.dur >= 2)) { render(); return toast("Passage trop court ou sans mesure GPS : non enregistré."); }
     (tr.pg = tr.pg || []).push({ moy: Math.round(P.sum / P.dur * 36) / 10, s: Math.round(P.dur) });
-    render(); toast("P" + tr.pg.length + " : " + dec1.format(tr.pg[tr.pg.length - 1].moy) + " km/h");
+    render(); toast((chute ? "Chute détectée, mesure arrêtée. " : "") + "P" + tr.pg.length + " : " + dec1.format(tr.pg[tr.pg.length - 1].moy) + " km/h");
   }
   var PAS_ICON = '<svg class="bp-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M12 2.5v3.5M18.5 6.5l1.5-1.5"/></svg>';
   function pasLive() { var P = sortie.pas; return P && P.dur > 0 ? dec1.format(P.sum / P.dur * 3.6) + " km/h" : "mesure…"; }
@@ -2123,37 +2162,54 @@
     var br = e.target.closest && e.target.closest("#bigView [data-rstar], #bigView [data-eau]"); if (br) { resInput(br); return; }
     var bs = e.target.closest && e.target.closest("#bigView [data-bsk]"); if (bs) bigSki(bs.dataset.bsk);
   });
-  /* ---------- Camping « Les petits Pellegrins » (v1.9.9) ----------
+  /* ---------- Camping « Les petits Pellegrins » (v1.9.9, refondu en v2.0) ----------
      Réservation de jours au camp, de juin à août. Indépendant du bateau : les réservations sont rangées dans la table « etat »
      (kind = "resa") et ne créent ni dépense, ni dette, ni écriture d'essence. Le coût affiché n'est qu'une estimation.
-     Hébergements : caravane 4 places + 1 enfant de moins de 12 ans, deux tentes de 3 places. */
-  var CP_LODGE = { car: { n: "Caravane", cap: 4, kid: 1, s: "4 places + 1 enfant de moins de 12 ans" }, t1: { n: "Tente 1", cap: 3, kid: 0, s: "3 places" }, t2: { n: "Tente 2", cap: 3, kid: 0, s: "3 places" } };
-  var CP_CAP = 10, CP_CAPK = 1, CP_RATE = { ad: 8, kid: 5 }, CP_N = 92; // 92 nuits : du 1er juin au 31 août
-  var CP_FAMN = { YC: "Famille Yann", OC: "Famille Olivier", EXT: "Extérieurs" };
+     Hébergements : caravane 4 places + 1 enfant de moins de 12 ans, deux tentes de 3 places ; une réservation peut en prendre plusieurs. */
+  var CP_LODGE = { car: { n: "Caravane", cap: 4, kid: 1, s: "4 places + 1 enfant" }, t1: { n: "Tente 1", cap: 3, kid: 0, s: "3 places" }, t2: { n: "Tente 2", cap: 3, kid: 0, s: "3 places" } };
+  var CP_CAP = 10, CP_CAPK = 1, CP_N = 92; // 92 nuits : du 1er juin au 31 août
+  var CP_FAMN = { YC: "Famille Yann", OC: "Famille Olivier", JC: "Famille Julien", EXT: "Extérieurs" };
+  var CP_FAMS = { YC: "Yann", OC: "Olivier", JC: "Julien", EXT: "Extér." };
+  var CP_JUL = ["julien", "jessica", "louca", "mateu", "alba"]; // famille Julien (au camping)
+  var CP_AMIS = [["amis-o", "Amis O"], ["amis-y", "Amis Y"], ["amis-j", "Amis J"]];
   var CP_MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
-  var CP_LOCK = '<svg class="cp-ic" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.3" y="5.3" width="7.4" height="5.4" rx="1.2"/><path d="M3.9 5.3V3.9a2.1 2.1 0 0 1 4.2 0v1.4"/></svg>';
+  var CP_LOCK = '<svg class="cp-ic cp-lk" viewBox="0 0 12 12" aria-hidden="true"><rect x="2.3" y="5.3" width="7.4" height="5.4" rx="1.2"/><path d="M3.9 5.3V3.9a2.1 2.1 0 0 1 4.2 0v1.4"/></svg>';
   var CP_NOSH = '<svg class="cp-ic cp-ns" viewBox="0 0 22 12" aria-hidden="true"><circle cx="4" cy="3.2" r="1.8"/><path d="M1 11.2c0-2.6 1.3-4.2 3-4.2s3 1.6 3 4.2"/><path d="M11 4.6v3.2M9.4 6.2h3.2"/><circle cx="18" cy="3.2" r="1.8"/><path d="M15 11.2c0-2.6 1.3-4.2 3-4.2s3 1.6 3 4.2"/><path class="x" d="M1.5 1L20.5 11.5"/></svg>';
   var CP_WARN = '<svg class="cp-ic cp-warn" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.3L11 10.5H1z"/><path d="M6 4.6v2.8M6 8.9v.1"/></svg>';
-  var cpUi = { m: 6, form: false, sel: {}, from: "", to: "", lodge: "t1", share: true, cost: {}, del: "" };
+  var CP_ICON = {
+    car: '<svg class="cp-lg" viewBox="0 0 48 30" aria-hidden="true"><path d="M5 6h28a8 8 0 0 1 8 8v8H5z"/><rect x="9" y="10" width="9" height="6" rx="1"/><rect x="22" y="10" width="7" height="12" rx="1"/><circle cx="16" cy="24" r="3.2"/><path d="M41 21h5"/><path d="M2 22h3"/></svg>',
+    tent: '<svg class="cp-lg" viewBox="0 0 48 30" aria-hidden="true"><path d="M6 26L24 4l18 22z"/><path d="M24 4v22M19 26l5-9 5 9"/><path d="M2 26h44"/></svg>'
+  };
+  var cpUi = { m: 6, form: false, sel: {}, ext: "", from: "", to: "", lodges: { car: true }, share: true, cost: {}, del: "", tarEdit: false };
+  var cpTar = null; // tarifs des nuits par année (table « etat », kind = "camptarif")
   function cpYear() { var d = new Date(); return d.getMonth() > 7 ? d.getFullYear() + 1 : d.getFullYear(); } // après août : l'été suivant
+  function cpRate() { var t = cpTar && cpTar.t && cpTar.t[String(cpYear())]; return { ad: t && t.ad != null ? Number(t.ad) : 8, kid: t && t.kid != null ? Number(t.kid) : 5 }; }
   function cpT0() { return Date.UTC(cpYear(), 5, 1); }
   function cpDi(iso) { var a = String(iso || "").split("-"); return a.length < 3 ? NaN : Math.round((Date.UTC(+a[0], +a[1] - 1, +a[2]) - cpT0()) / 86400000); }
   function cpDt(i) { return new Date(cpT0() + i * 86400000); }
   function cpIso(i) { return cpDt(i).toISOString().slice(0, 10); }
   function cpLab(i) { var d = cpDt(i); return d.getUTCDate() + " " + CP_MOIS[d.getUTCMonth()]; }
-  function cpFam(p) { return !p ? "EXT" : p.c === "YF" ? "YC" : p.c === "OF" ? "OC" : "EXT"; }
-  function cpName(id) { var p = person(id); return p ? p.name : id; }
-  function cpCounts(b) { var k = (b.ppl || []).filter(function (id) { var p = person(id); return p && p.kid; }).length; return { ad: (b.ppl || []).length - k, kid: k, n: (b.ppl || []).length }; }
+  function cpFamId(id) { if (CP_JUL.indexOf(id) >= 0) return "JC"; if (/^amis-|^x:/.test(id)) return "EXT"; var p = person(id); return !p ? "EXT" : p.c === "YF" ? "YC" : p.c === "OF" ? "OC" : "EXT"; }
+  function cpName(id) { var a = CP_AMIS.filter(function (x) { return x[0] === id; })[0]; if (a) return a[1]; if (/^x:/.test(id)) return id.slice(2); var p = person(id); return p ? p.name : id; }
+  function cpKid(id) { var p = person(id); return !!(p && p.kid); }
+  function cpPpl(b) { return (b.ppl || []).concat((b.ext || []).map(function (n) { return "x:" + n; })); }
+  function cpCounts(b) { var all = cpPpl(b), k = all.filter(cpKid).length; return { ad: all.length - k, kid: k, n: all.length }; }
+  function cpLodges(b) { var l = (b.lodges && b.lodges.length ? b.lodges : [b.lodge || "t1"]).filter(function (k) { return CP_LODGE[k]; }); return l.length ? l : ["t1"]; }
+  function cpLodgeTxt(b) { return cpLodges(b).map(function (k) { return CP_LODGE[k].n; }).join(" + "); }
   function cpNights(b) { return cpDi(b.to) - cpDi(b.from); }
-  function cpCost(b) { var c = cpCounts(b); return cpNights(b) * (c.ad * CP_RATE.ad + c.kid * CP_RATE.kid); }
+  function cpCost(b) { var c = cpCounts(b), r = cpRate(); return cpNights(b) * (c.ad * r.ad + c.kid * r.kid); }
   function cpById(id) { return resas.filter(function (b) { return b.id === id; })[0]; }
   function cpSeason() { var y = String(cpYear()); return resas.filter(function (b) { return String(b.from || "").slice(0, 4) === y; }); }
-  /* Occupation de chaque nuit, par hébergement et au total. Conflit : hébergement trop plein (satL), ou une réservation
-     « pas ouverte au chevauchement » qui partage la nuit avec une autre (ns). */
+  /* Occupation de chaque nuit, par hébergement et au total ; les personnes d'une réservation sont réparties dans ses hébergements
+     (la caravane d'abord, enfants compris). Conflit : hébergement trop plein (satL) ou réservation « pas ouverte » qui partage la nuit (ns). */
   function cpOcc(list) {
     var O = [], byId = {}; list.forEach(function (b) { byId[b.id] = b; });
     for (var n = 0; n < CP_N; n++) O.push({ tot: 0, L: { car: { n: 0, k: 0 }, t1: { n: 0, k: 0 }, t2: { n: 0, k: 0 } }, b: [] });
-    list.forEach(function (b) { var c = cpCounts(b), l0 = CP_LODGE[b.lodge] ? b.lodge : "t1"; for (var n = Math.max(0, cpDi(b.from)); n < Math.min(CP_N, cpDi(b.to)); n++) { var o = O[n]; o.tot += c.n; o.L[l0].n += c.n; o.L[l0].k += c.kid; o.b.push(b.id); } });
+    list.forEach(function (b) {
+      var c = cpCounts(b), ls = cpLodges(b), split = [], rem = c.n, kr = c.kid;
+      ls.forEach(function (l, i) { var cap = CP_LODGE[l].cap + Math.min(CP_LODGE[l].kid, kr), take = i === ls.length - 1 ? rem : Math.min(rem, cap), kt = Math.min(kr, take); split.push([l, take, kt]); rem -= take; kr -= kt; });
+      for (var n = Math.max(0, cpDi(b.from)); n < Math.min(CP_N, cpDi(b.to)); n++) { var o = O[n]; o.tot += c.n; split.forEach(function (s) { o.L[s[0]].n += s[1]; o.L[s[0]].k += s[2]; }); o.b.push(b.id); }
+    });
     O.forEach(function (o) {
       o.satL = {}; Object.keys(CP_LODGE).forEach(function (k) { var l = o.L[k], cap = CP_LODGE[k]; o.satL[k] = l.n > cap.cap + Math.min(cap.kid, l.k); });
       o.ns = o.b.length > 1 && o.b.some(function (id) { return byId[id].share === false; });
@@ -2161,6 +2217,7 @@
     });
     return O;
   }
+  function cpSat(o, b) { return cpLodges(b).some(function (l) { return o.satL[l]; }); }
   function cpAnyConf(o) { return o.ns || Object.keys(o.satL).some(function (k) { return o.satL[k]; }); }
   function cpOverlaps(O) {
     var out = [], cur = null;
@@ -2173,22 +2230,23 @@
     return out;
   }
   function cpFreeCls(f) { return f >= 5 ? "f-ok" : f > 0 ? "f-mid" : "f-full"; }
-  function cpCalendar(O, list) {
-    var Y = cpYear(), m = cpUi.m, first = Date.UTC(Y, m, 1), last = Date.UTC(Y, m + 1, 0), T0 = cpT0(), h = '<div class="cp-dow">' + ["L", "M", "M", "J", "V", "S", "D"].map(function (d) { return "<span>" + d + "</span>"; }).join("") + "</div>";
+  function cpSec(key, title, sub, body) { return '<div class="card">' + collHead(key, title, sub) + (ui[key] ? body : "") + "</div>"; }
+  /* v2.0b : les semaines d'un mois (jours, barres de réservation et lignes), utilisées par le planning, l'agenda et l'image à partager */
+  function cpWeeks(O, list, m) {
+    var Y = cpYear(), first = Date.UTC(Y, m, 1), last = Date.UTC(Y, m + 1, 0), T0 = cpT0(), out = [];
     var start = first - ((new Date(first).getUTCDay() + 6) % 7) * 86400000;
     for (var w = start; w <= last; w += 7 * 86400000) {
-      var i0 = Math.round((w - T0) / 86400000), cells = "", segs = [];
+      var i0 = Math.round((w - T0) / 86400000), days = [], segs = [];
       for (var d = 0; d < 7; d++) {
-        var i = i0 + d, inM = cpDt(i).getUTCMonth() === m && i >= 0 && i < CP_N, o = inM ? O[i] : null, cf = o && cpAnyConf(o);
-        cells += '<div class="cp-day' + (inM ? "" : " out") + (cf ? " sat" : "") + '">' + (inM ? '<span class="n">' + cpDt(i).getUTCDate() + '</span><span class="f ' + (cf ? "f-full" : cpFreeCls(o.free)) + '">' + o.free + " pl.</span>" : "") + "</div>";
+        var i = i0 + d, inM = cpDt(i).getUTCMonth() === m && i >= 0 && i < CP_N, o = inM ? O[i] : null;
+        days.push({ i: i, inM: inM, n: cpDt(i).getUTCDate(), free: o ? o.free : 0, cf: !!(o && cpAnyConf(o)) });
       }
-      // segments de chaque réservation dans la semaine, coupés là où il y a conflit (pointillé + pictogramme)
       list.forEach(function (b) {
         var a = Math.max(cpDi(b.from), i0), z = Math.min(cpDi(b.to), i0 + 7); if (!(a < z)) return;
         var run = null;
         for (var n = a; n < z; n++) {
           if (cpDt(n).getUTCMonth() !== m || n < 0 || n >= CP_N) { if (run) { segs.push(run); run = null; } continue; }
-          var s = !!(O[n].satL[b.lodge] || O[n].ns), why = !s ? "" : O[n].ns ? "ns" : "cap";
+          var s = !!(cpSat(O[n], b) || O[n].ns), why = !s ? "" : O[n].ns ? "ns" : "cap";
           if (run && (run.sat !== s || run.why !== why)) { segs.push(run); run = null; }
           if (!run) run = { b: b, a: n - i0, z: n - i0 + 1, sat: s, why: why, first: !segs.some(function (x) { return x.b === b; }) };
           else run.z = n - i0 + 1;
@@ -2197,94 +2255,278 @@
       });
       var lanes = [], laneOf = {};
       segs.forEach(function (s) { if (laneOf[s.b.id] != null) return; var l = 0; while (lanes[l] && lanes[l].some(function (x) { return !(x.z <= s.a || x.a >= s.z); })) l++; lanes[l] = (lanes[l] || []).concat(segs.filter(function (x) { return x.b.id === s.b.id; })); laneOf[s.b.id] = l; });
-      var bars = segs.map(function (s) {
+      segs.forEach(function (s) { s.lane = laneOf[s.b.id]; });
+      out.push({ i0: i0, days: days, segs: segs, nl: lanes.length });
+    }
+    return out;
+  }
+  function cpCalendar(O, list, mm) {
+    var m = mm != null ? mm : cpUi.m, h = '<div class="cp-dow">' + ["L", "M", "M", "J", "V", "S", "D"].map(function (d) { return "<span>" + d + "</span>"; }).join("") + "</div>";
+    cpWeeks(O, list, m).forEach(function (W) {
+      var cells = W.days.map(function (x) { return '<div class="cp-day' + (x.inM ? "" : " out") + (x.cf ? " sat" : "") + '">' + (x.inM ? '<span class="n">' + x.n + '</span><span class="f ' + (x.cf ? "f-full" : cpFreeCls(x.free)) + '">' + x.free + " pl.</span>" : "") + "</div>"; }).join("");
+      var bars = W.segs.map(function (s) {
         var c = cpCounts(s.b), mk = (s.b.ok ? CP_LOCK : "") + (s.b.share === false ? CP_NOSH : "");
         var t = s.sat ? (s.why === "ns" ? CP_NOSH : CP_WARN) + (s.first ? esc(s.b.who) : "") : (s.first ? mk + esc(s.b.who) + " · " + c.n : "");
-        return '<div class="cp-bar ' + s.b.f + (s.sat ? " sat" : "") + '" style="left:calc(' + (s.a / 7 * 100) + '% + 2px);width:calc(' + ((s.z - s.a) / 7 * 100) + '% - 4px);top:' + (laneOf[s.b.id] * 18 + 2) + 'px" title="' + esc(s.b.who + " · " + (CP_LODGE[s.b.lodge] || CP_LODGE.t1).n + (s.b.ok ? " · confirmée" : "") + (s.b.share === false ? " · pas de chevauchement" : "")) + '">' + t + "</div>";
+        return '<div class="cp-bar ' + s.b.f + (s.sat ? " sat" : "") + '" style="left:calc(' + (s.a / 7 * 100) + '% + 2px);width:calc(' + ((s.z - s.a) / 7 * 100) + '% - 4px);top:' + (s.lane * 18 + 2) + 'px" title="' + esc(s.b.who + " · " + cpLodgeTxt(s.b) + (s.b.ok ? " · confirmée" : "") + (s.b.share === false ? " · seuls pendant le séjour" : "")) + '">' + t + "</div>";
       }).join("");
-      h += '<div class="cp-week"><div class="cp-days">' + cells + '</div><div class="cp-lanes" style="height:' + (lanes.length ? lanes.length * 18 + 4 : 0) + 'px">' + bars + "</div></div>";
-    }
+      h += '<div class="cp-week"><div class="cp-days">' + cells + '</div><div class="cp-lanes" style="height:' + (W.nl ? W.nl * 18 + 4 : 0) + 'px">' + bars + "</div></div>";
+    });
     return h;
   }
   function cpFormHtml(list) {
-    var sel = Object.keys(cpUi.sel).filter(function (k) { return cpUi.sel[k]; }), Y = cpYear();
-    var h = '<div class="card"><h3>Nouvelle réservation</h3>' + ["YC", "OC", "EXT"].map(function (f) {
-      var ps = PEOPLE.filter(function (p) { return !p.hidden && cpFam(p) === f; });
-      return '<div class="cp-grp"><span class="cp-dot ' + f + '"></span>' + CP_FAMN[f] + '</div><div class="cp-sel">' + ps.map(function (p) { return '<button class="chip" data-cpp="' + esc(p.id) + '" aria-pressed="' + !!cpUi.sel[p.id] + '">' + esc(p.name) + (p.kid ? " (enf.)" : "") + "</button>"; }).join("") + "</div>";
-    }).join("") +
-      '<div class="two" style="margin-top:8px"><div class="field"><label for="cpFrom">Arrivée</label><input id="cpFrom" type="date" min="' + Y + '-06-01" max="' + Y + '-08-31" value="' + esc(cpUi.from) + '"></div><div class="field"><label for="cpTo">Départ</label><input id="cpTo" type="date" min="' + Y + '-06-02" max="' + Y + '-09-01" value="' + esc(cpUi.to) + '"></div></div>' +
-      '<div class="field"><span class="flabel">Hébergement</span><div class="seg">' + Object.keys(CP_LODGE).map(function (k) { return '<button data-cpl="' + k + '" aria-pressed="' + (cpUi.lodge === k) + '">' + CP_LODGE[k].n + "</button>"; }).join("") + "</div></div>" +
-      '<div class="field"><span class="flabel">Ouvert au chevauchement ?</span><div class="seg"><button data-cpsh="1" aria-pressed="' + cpUi.share + '">Oui, on peut partager</button><button data-cpsh="0" aria-pressed="' + !cpUi.share + '">' + CP_NOSH + " Non</button></div></div>";
-    var b = { id: "new", who: "?", f: sel.length ? cpFam(person(sel[0])) : "YC", ppl: sel, from: cpUi.from, to: cpUi.to, lodge: cpUi.lodge, share: cpUi.share }, nn = cpNights(b);
-    if (!sel.length || !(nn > 0)) return h + '<div class="small muted">Choisissez les personnes et les dates.</div></div>';
+    var Y = cpYear(), sel = Object.keys(cpUi.sel).filter(function (k) { return cpUi.sel[k]; }), extN = cpUi.ext.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+    var chip = function (id, nm, kid) { return '<button class="chip" data-cpp="' + esc(id) + '" aria-pressed="' + !!cpUi.sel[id] + '"' + (kid ? ' title="enfant"' : "") + ">" + esc(nm) + "</button>"; };
+    var row = function (f, chips) { return '<div class="cp-frow"><span class="cp-grp ' + f + '"><span class="cp-dot ' + f + '"></span>' + CP_FAMS[f] + '</span><div class="cp-sel">' + chips + "</div></div>"; };
+    var h = '<div class="card"><h3>Nouvelle réservation</h3>' +
+      row("YC", PEOPLE.filter(function (p) { return !p.hidden && p.c === "YF"; }).map(function (p) { return chip(p.id, p.name, p.kid); }).join("")) +
+      row("OC", PEOPLE.filter(function (p) { return !p.hidden && p.c === "OF"; }).map(function (p) { return chip(p.id, p.name, p.kid); }).join("")) +
+      row("JC", CP_JUL.map(function (id) { var p = person(id); return p ? chip(id, p.name, p.kid) : ""; }).join("")) +
+      row("EXT", CP_AMIS.map(function (a) { return chip(a[0], a[1], false); }).join("")) +
+      '<div class="field cp-extf"><input id="cpExt" placeholder="Autres personnes : prénoms séparés par des virgules" value="' + esc(cpUi.ext) + '" aria-label="Autres personnes"></div>' +
+      '<div class="two"><div class="field"><label for="cpFrom">Arrivée</label><input id="cpFrom" type="date" min="' + Y + '-06-01" max="' + Y + '-08-31" value="' + esc(cpUi.from) + '"></div><div class="field"><label for="cpTo">Départ</label><input id="cpTo" type="date" min="' + Y + '-06-02" max="' + Y + '-09-01" value="' + esc(cpUi.to) + '"></div></div>' +
+      '<div class="field"><span class="flabel">Hébergement (plusieurs possibles)</span><div class="seg cp-lseg">' + Object.keys(CP_LODGE).map(function (k) { return '<button data-cpl="' + k + '" aria-pressed="' + !!cpUi.lodges[k] + '">' + CP_LODGE[k].n + "</button>"; }).join("") + "</div></div>" +
+      '<div class="field"><span class="flabel">Ouvert à la présence d’autres personnes pendant le séjour ?</span><div class="seg"><button data-cpsh="1" aria-pressed="' + cpUi.share + '">Oui</button><button data-cpsh="0" aria-pressed="' + !cpUi.share + '">' + CP_NOSH + " Non</button></div></div>";
+    var ls = Object.keys(CP_LODGE).filter(function (k) { return cpUi.lodges[k]; });
+    var b = { id: "new", who: "?", f: sel.length ? cpFamId(sel[0]) : "EXT", ppl: sel, ext: extN, from: cpUi.from, to: cpUi.to, lodges: ls, share: cpUi.share }, nn = cpNights(b);
+    if (!(sel.length + extN.length) || !(nn > 0) || !ls.length) return h + '<div class="small muted">Choisissez les personnes, les dates et au moins un hébergement.</div><div class="actions"><button class="btn ghost" id="cpCancel">Annuler</button></div></div>';
     var O2 = cpOcc(list.concat([b])), satN = [], ovN = [], nsW = {};
     for (var n = Math.max(0, cpDi(b.from)); n < Math.min(CP_N, cpDi(b.to)); n++) {
-      if (O2[n].satL[b.lodge]) satN.push(n);
+      if (cpSat(O2[n], b)) satN.push(n);
       if (O2[n].b.length > 1) { ovN.push(n); O2[n].b.forEach(function (id) { var x = cpById(id); if (x && x.share === false) nsW[x.who] = 1; }); }
     }
     var c = cpCounts(b);
     h += '<div class="cp-sum bal-sep">' + nn + " nuit" + (nn > 1 ? "s" : "") + " · " + c.ad + " adulte" + (c.ad > 1 ? "s" : "") + (c.kid ? " + " + c.kid + " enfant" + (c.kid > 1 ? "s" : "") : "") + " · coût estimé <b>" + eur0.format(cpCost(b)) + "</b></div>";
-    if (satN.length) h += '<div class="alert bad"><b>Chevauchement : ' + CP_LODGE[b.lodge].n + " complète du " + cpLab(satN[0]) + " au " + cpLab(satN[satN.length - 1] + 1) + "</b>Choisissez un autre hébergement ou d’autres dates. Vous pouvez aussi réserver quand même : seules les nuits en chevauchement seront en pointillé avec le pictogramme.</div>";
-    else if (ovN.length && (!cpUi.share || Object.keys(nsW).length)) h += '<div class="alert bad"><b>Chevauchement du ' + cpLab(ovN[0]) + " au " + cpLab(ovN[ovN.length - 1] + 1) + "</b>" + (!cpUi.share ? "Vous ne souhaitez pas de chevauchement, mais d’autres ont déjà réservé ces dates." : esc(Object.keys(nsW).join(", ")) + " ne souhaite pas de chevauchement.") + " Vous pouvez réserver quand même : seules les nuits en chevauchement seront en pointillé avec le pictogramme.</div>";
-    else if (ovN.length) h += '<div class="alert ok"><b>Chevauchement avec une autre réservation, mais il reste de la place</b>Du ' + cpLab(ovN[0]) + " au " + cpLab(ovN[ovN.length - 1] + 1) + ".</div>";
+    if (satN.length) h += '<div class="alert bad"><b>Chevauchement : ' + cpLodgeTxt(b) + " trop plein du " + cpLab(satN[0]) + " au " + cpLab(satN[satN.length - 1] + 1) + "</b>Ajoutez un hébergement ou changez de dates. Vous pouvez aussi réserver quand même : seules les nuits en chevauchement seront en pointillé avec le pictogramme.</div>";
+    else if (ovN.length && (!cpUi.share || Object.keys(nsW).length)) h += '<div class="alert bad"><b>Chevauchement du ' + cpLab(ovN[0]) + " au " + cpLab(ovN[ovN.length - 1] + 1) + "</b>" + (!cpUi.share ? "Vous souhaitez être seuls, mais d’autres ont déjà réservé ces dates." : esc(Object.keys(nsW).join(", ")) + " souhaite être seul pendant son séjour.") + " Vous pouvez réserver quand même : seules les nuits en chevauchement seront en pointillé avec le pictogramme.</div>";
+    else if (ovN.length) h += '<div class="alert ok"><b>D’autres personnes seront présentes, mais il reste de la place</b>Du ' + cpLab(ovN[0]) + " au " + cpLab(ovN[ovN.length - 1] + 1) + ".</div>";
     return h + '<div class="actions"><button class="btn ghost" id="cpCancel">Annuler</button><button class="btn" id="cpSave">Enregistrer la réservation</button></div></div>';
   }
   function renderCamp() {
-    var Y = cpYear(), list = cpSeason(), O = cpOcc(list), ov = cpOverlaps(O), h = "";
-    if (!cpUi.from) { cpUi.from = Y + "-07-01"; cpUi.to = Y + "-07-08"; }
-    // taux d'occupation du 1er juillet au 31 août : jours avec au moins une personne, et couchages occupés (11 par nuit)
+    var Y = cpYear(), list = cpSeason(), O = cpOcc(list), ov = cpOverlaps(O), h = "", R = cpRate();
+    if (!ui.cpInit) { ui.cpInit = true; ui.cpCamp = ui.cpPlan = ui.cpChev = ui.cpRes = true; } // parties ouvertes à la première visite
+    if (!cpUi.from) { cpUi.from = Y + "-07-03"; cpUi.to = Y + "-07-10"; }
+    h += campBackHtml();
+    // le camp : taux d'occupation du 1er juillet au 31 août (jours avec au moins une personne, couchages occupés sur 11 par nuit)
     var a0 = cpDi(Y + "-07-01"), nJ = CP_N - a0, jOcc = 0, pn = 0;
     for (var q = a0; q < CP_N; q++) { if (O[q].tot > 0) jOcc++; pn += Math.min(O[q].tot, CP_CAP + CP_CAPK); }
-    h += '<div class="card"><div class="cp-top"><h3>Le Camp</h3><div class="cp-occ" title="Du 1er juillet au 31 août"><span><b>' + Math.round(jOcc / nJ * 100) + ' %</b> des jours</span><span><b>' + Math.round(pn / (nJ * (CP_CAP + CP_CAPK)) * 100) + ' %</b> des couchages</span></div><button class="btn sm" id="cpBook">' + (cpUi.form ? "Fermer" : "Réserver") + "</button></div>" +
-      '<div class="small muted cp-occ-l">Été ' + Y + " · occupation moyenne du 1er juillet au 31 août : " + jOcc + " jours occupés sur " + nJ + ", " + pn + " nuitées sur " + nJ * (CP_CAP + CP_CAPK) + " couchages.</div>" +
-      '<div class="cp-cap">' + Object.keys(CP_LODGE).map(function (k) { return "<div><b>" + CP_LODGE[k].n + "</b><span>" + CP_LODGE[k].s + "</span></div>"; }).join("") + "</div></div>";
+    h += '<div class="card"><div class="cp-top"><button class="coll cp-tog" data-coll="cpCamp" aria-expanded="' + !!ui.cpCamp + '"><span class="ctitle">Le Camp</span>' + TRI + '</button><div class="cp-occ" title="Du 1er juillet au 31 août"><span><b>' + Math.round(jOcc / nJ * 100) + ' %</b> des jours</span><span><b>' + Math.round(pn / (nJ * (CP_CAP + CP_CAPK)) * 100) + ' %</b> des couchages</span></div><button class="btn sm" id="cpBook">' + (cpUi.form ? "Fermer" : "Réserver") + "</button></div>" +
+      (ui.cpCamp ? '<div class="cp-cap">' + Object.keys(CP_LODGE).map(function (k) { return '<div class="cp-lodge">' + (k === "car" ? CP_ICON.car : CP_ICON.tent) + "<b>" + CP_LODGE[k].n + "</b><span>" + CP_LODGE[k].s + "</span></div>"; }).join("") + "</div>" : "") + "</div>";
     if (cpUi.form) h += cpFormHtml(list);
-    h += '<div class="card"><div class="cp-months">' + ["Juin", "Juillet", "Août"].map(function (l, k) { return '<button class="chip" data-cpm="' + (5 + k) + '" aria-pressed="' + (cpUi.m === 5 + k) + '">' + l + "</button>"; }).join("") + "</div>" + cpCalendar(O, list) +
-      '<div class="cp-legend"><span><i style="background:var(--yc)"></i>Famille Yann</span><span><i style="background:var(--oc)"></i>Famille Olivier</span><span><i style="background:#14a3b5"></i>Extérieurs</span><span><i class="dash"></i>Chevauchement en conflit</span><span class="lg-ic">' + CP_LOCK + 'Confirmée</span><span class="lg-ic">' + CP_NOSH + 'Pas de chevauchement</span><span>« 7 pl. » : places libres cette nuit-là</span></div></div>';
-    if (ov.length) h += '<div class="card"><h3>Chevauchements</h3>' + ov.map(function (c) {
+    // planning
+    h += cpSec("cpPlan", "Planning", "été " + Y, '<div class="cp-months">' + ["Juin", "Juillet", "Août"].map(function (l, k) { return '<button class="chip" data-cpm="' + (5 + k) + '" aria-pressed="' + (cpUi.m === 5 + k) + '">' + l + "</button>"; }).join("") + "</div>" + cpCalendar(O, list) +
+      '<div class="cp-legend"><span><i class="YC"></i>Famille Yann</span><span><i class="OC"></i>Famille Olivier</span><span><i class="JC"></i>Famille Julien</span><span><i class="EXT"></i>Extérieurs</span><span><i class="dash"></i>Chevauchement</span><span class="lg-ic">' + CP_LOCK + 'Confirmée</span><span class="lg-ic">' + CP_NOSH + "Seuls pendant le séjour</span></div>");
+    if (ov.length) h += cpSec("cpChev", "Chevauchements", ov.length + " période" + (ov.length > 1 ? "s" : ""), ov.map(function (c) {
       var bs = c.ids.map(cpById).filter(Boolean), who = bs.map(function (b) { return b.who; }).join(" + "), why = [];
       c.sat.forEach(function (k) { why.push(CP_LODGE[k].n + " : trop de monde pour " + CP_LODGE[k].s); });
-      if (c.ns) bs.filter(function (b) { return b.share === false; }).forEach(function (b) { why.push(b.who + " ne souhaite pas de chevauchement"); });
+      if (c.ns) bs.filter(function (b) { return b.share === false; }).forEach(function (b) { why.push(b.who + " souhaite être seul pendant son séjour"); });
       return why.length ? '<div class="alert bad"><b>' + cpLab(c.a) + " → " + cpLab(c.z + 1) + " : " + esc(who) + "</b>" + esc(why.join(" ; ")) + ". À régler entre vous (autre hébergement ou autres dates).</div>"
         : '<div class="alert ok"><b>' + cpLab(c.a) + " → " + cpLab(c.z + 1) + " : " + esc(who) + "</b>" + c.tot + " personnes sur 11 places : ça passe, chacun a son hébergement.</div>";
-    }).join("") + "</div>";
-    // périodes réservées (sans la partie financière) ; le cadenas confirme la réservation ; suppression réservée à Yann et Olivier
+    }).join(""));
+    // périodes réservées : le cadenas confirme la réservation ; suppression réservée à Yann et Olivier
     var sorted = list.slice().sort(function (a, b) { return a.from < b.from ? -1 : 1; });
-    h += '<div class="card"><h3>Périodes réservées</h3>' + (!sorted.length ? '<div class="small muted">Aucune réservation pour l’été ' + Y + ". Touchez « Réserver ».</div>" :
+    h += cpSec("cpRes", "Périodes réservées", sorted.length + " réservation" + (sorted.length > 1 ? "s" : ""), !sorted.length ? '<div class="small muted">Aucune réservation pour l’été ' + Y + ". Touchez « Réserver ».</div>" :
       '<table class="rtable cp-res"><thead><tr><th>Qui</th><th>Dates</th><th class="r">Nuits</th><th class="r">Pers.</th><th class="r">Confirmée</th></tr></thead><tbody>' +
       sorted.map(function (b) {
         var c = cpCounts(b), del = canValidate() ? (cpUi.del === b.id ? ' <button class="btn link cp-delok" data-cpdel="' + esc(b.id) + '">Supprimer ?</button>' : ' <button class="cp-x" data-cpdel="' + esc(b.id) + '" aria-label="Supprimer la réservation">×</button>') : "";
-        return '<tr><td><span class="cp-dot ' + b.f + '"></span>' + esc(b.who) + (b.share === false ? CP_NOSH : "") + '<span class="sub">' + (CP_LODGE[b.lodge] || CP_LODGE.t1).n + " · " + esc((b.ppl || []).map(cpName).join(", ")) + "</span></td><td>" + cpLab(cpDi(b.from)) + " → " + cpLab(cpDi(b.to)) + '</td><td class="r">' + cpNights(b) + '</td><td class="r">' + c.ad + (c.kid ? " + " + c.kid + " enf." : "") + '</td><td class="r cp-act"><button class="cp-lock" data-cpok="' + esc(b.id) + '" aria-pressed="' + !!b.ok + '" aria-label="' + (b.ok ? "Réservation confirmée, toucher pour annuler la confirmation" : "Confirmer la réservation") + '">' + CP_LOCK + "</button>" + del + "</td></tr>";
-      }).join("") + "</tbody></table>") + "</div>";
-    // semaines libres
-    var weeks = [], w0 = 0 - ((new Date(cpT0()).getUTCDay() + 6) % 7);
-    for (var w = w0; w < CP_N; w += 7) { var a = Math.max(0, w), z = Math.min(CP_N, w + 7), min = 99; for (var n = a; n < z; n++) min = Math.min(min, O[n].free); weeks.push({ a: a, z: z, min: min }); }
+        return '<tr><td><span class="cp-dot ' + b.f + '"></span>' + esc(b.who) + (b.share === false ? CP_NOSH : "") + '<span class="sub">' + cpLodgeTxt(b) + " · " + esc(cpPpl(b).map(cpName).join(", ")) + "</span></td><td>" + cpLab(cpDi(b.from)) + " → " + cpLab(cpDi(b.to)) + '</td><td class="r">' + cpNights(b) + '</td><td class="r">' + c.ad + (c.kid ? " + " + c.kid + " enf." : "") + '</td><td class="r cp-act"><button class="cp-lock" data-cpok="' + esc(b.id) + '" aria-pressed="' + !!b.ok + '" aria-label="' + (b.ok ? "Réservation confirmée, toucher pour annuler la confirmation" : "Confirmer la réservation") + '">' + CP_LOCK + "</button>" + del + "</td></tr>";
+      }).join("") + "</tbody></table>");
+    // semaines libres, du samedi au samedi
+    var weeks = [], w0 = 0 - ((new Date(cpT0()).getUTCDay() + 1) % 7);
+    for (var w = w0; w < CP_N; w += 7) { var a = Math.max(0, w), z = Math.min(CP_N, w + 7), min = 99; for (var n = a; n < z; n++) min = Math.min(min, O[n].free); if (z > a) weeks.push({ a: a, z: z, min: min }); }
     var libres = weeks.filter(function (x) { return x.min >= CP_CAP + CP_CAPK; }), part = weeks.filter(function (x) { return x.min > 0 && x.min < CP_CAP + CP_CAPK; });
-    h += '<div class="card"><h3>Semaines libres</h3>' + (libres.length ? '<div class="chips">' + libres.map(function (x) { return '<span class="chip">' + cpLab(x.a) + " → " + cpLab(x.z) + "</span>"; }).join("") + "</div>" : '<div class="small muted">Aucune semaine entièrement libre.</div>') +
-      (part.length ? '<div class="label" style="margin-top:10px">En partie occupées</div><table class="rtable"><tbody>' + part.map(function (x) { return "<tr><td>" + cpLab(x.a) + " → " + cpLab(x.z) + '</td><td class="r">au moins ' + x.min + " places libres chaque nuit</td></tr>"; }).join("") + "</tbody></table>" : "") + "</div>";
-    // coût estimé par famille, dépliable pour voir chaque personne (simple estimation : aucune dépense n'est créée)
+    h += cpSec("cpFree", "Semaines libres", "du samedi au samedi · " + libres.length + " libre" + (libres.length > 1 ? "s" : ""), (libres.length ? '<div class="chips">' + libres.map(function (x) { return '<span class="chip">' + cpLab(x.a) + " → " + cpLab(x.z) + "</span>"; }).join("") + "</div>" : '<div class="small muted">Aucune semaine entièrement libre.</div>') +
+      (part.length ? '<div class="label" style="margin-top:10px">En partie occupées</div><table class="rtable"><tbody>' + part.map(function (x) { return "<tr><td>" + cpLab(x.a) + " → " + cpLab(x.z) + '</td><td class="r">au moins ' + x.min + " places libres chaque nuit</td></tr>"; }).join("") + "</tbody></table>" : ""));
+    // coût estimé par famille, dépliable (simple estimation : aucune dépense n'est créée)
     var per = {}, grand = 0;
-    list.forEach(function (b) { (b.ppl || []).forEach(function (id) { var p = person(id) || { id: id, name: id, c: "EXT" }; per[id] = per[id] || { p: p, n: 0 }; per[id].n += cpNights(b); }); });
-    if (Object.keys(per).length) h += '<div class="card"><h3>Coût estimé du séjour</h3>' + ["YC", "OC", "EXT"].map(function (f) {
-      var rows = Object.keys(per).map(function (k) { return per[k]; }).filter(function (x) { return cpFam(x.p) === f; }); if (!rows.length) return "";
-      var tot = 0, nn = 0; rows.forEach(function (x) { x.c = x.n * (x.p.kid ? CP_RATE.kid : CP_RATE.ad); tot += x.c; nn += x.n; }); grand += tot;
+    list.forEach(function (b) { cpPpl(b).forEach(function (id) { per[id] = per[id] || { id: id, n: 0 }; per[id].n += cpNights(b); }); });
+    var costBody = ["YC", "OC", "JC", "EXT"].map(function (f) {
+      var rows = Object.keys(per).map(function (k) { return per[k]; }).filter(function (x) { return cpFamId(x.id) === f; }); if (!rows.length) return "";
+      var tot = 0, nn = 0; rows.forEach(function (x) { x.c = x.n * (cpKid(x.id) ? R.kid : R.ad); tot += x.c; nn += x.n; }); grand += tot;
       var op = !!cpUi.cost[f];
       return '<button class="cp-fam" data-cpcost="' + f + '" aria-expanded="' + op + '"><span class="cp-dot ' + f + '"></span><b>' + CP_FAMN[f] + '</b><span class="muted">' + rows.length + " pers. · " + nn + ' nuitées</span><b class="r">' + eur0.format(tot) + "</b>" + TRI + "</button>" +
-        (op ? '<table class="rtable cp-det"><tbody>' + rows.map(function (x) { return "<tr><td>" + esc(x.p.name) + (x.p.kid ? ' <span class="muted">(enfant)</span>' : "") + '</td><td class="r">' + x.n + ' nuits</td><td class="r">' + eur0.format(x.c) + "</td></tr>"; }).join("") + "</tbody></table>" : "");
-    }).join("") + '<div class="cp-grand"><span>Total du séjour</span><b>' + eur0.format(grand) + '</b></div><div class="small muted" style="margin-top:6px">8 € par nuit et par adulte, 5 € par enfant de moins de 10 ans. Estimation seulement : rien n’est ajouté aux dépenses du bateau.</div></div>';
+        (op ? '<table class="rtable cp-det"><tbody>' + rows.map(function (x) { return "<tr><td>" + esc(cpName(x.id)) + (cpKid(x.id) ? ' <span class="muted">(enfant)</span>' : "") + '</td><td class="r">' + x.n + ' nuits</td><td class="r">' + eur0.format(x.c) + "</td></tr>"; }).join("") + "</tbody></table>" : "");
+    }).join("");
+    if (Object.keys(per).length) grand = grand || 0;
+    h += cpSec("cpCost", "Coût estimé du séjour", eur0.format(grand), (costBody || '<div class="small muted">Aucune réservation.</div>') + '<div class="cp-grand"><span>Total du séjour</span><b>' + eur0.format(grand) + '</b></div><div class="small muted" style="margin-top:6px">Estimation seulement : rien n’est ajouté aux dépenses du bateau.</div>');
+    // tarifs des nuits de l'année (modifiables par Yann et Olivier)
+    h += cpSec("cpTarif", "Tarifs " + Y, eur.format(R.ad) + " adulte · " + eur.format(R.kid) + " enfant, par nuit", !cpUi.tarEdit ?
+      '<div class="small">Adulte : <b>' + eur.format(R.ad) + '</b> par nuit · enfant de moins de 10 ans : <b>' + eur.format(R.kid) + "</b> par nuit.</div>" + (canValidate() ? '<div><button class="btn ghost sm" id="cpTarEdit">Modifier les tarifs ' + Y + "</button></div>" : RESERVE_TXT) :
+      '<div class="two"><div class="field"><label for="cpTarAd">Adulte (€ / nuit)</label><input id="cpTarAd" inputmode="decimal" value="' + dec2.format(R.ad) + '"></div><div class="field"><label for="cpTarKid">Enfant de moins de 10 ans (€ / nuit)</label><input id="cpTarKid" inputmode="decimal" value="' + dec2.format(R.kid) + '"></div></div>' +
+      '<div class="actions"><button class="btn ghost" id="cpTarCancel">Annuler</button><button class="btn" id="cpTarSave">Enregistrer</button></div>');
     return h;
+  }
+  /* ---------- v2.0 : espace Camping (accueil, capacité, agenda, états des lieux) et page Météo ----------
+     Tout reste indépendant du bateau : lits et états des lieux sont rangés dans la table « etat » (kind « camplits » et « edl »). */
+  var cpLits = null, cpEdl = [], edlForm = { txt: "", photo: null, video: null, busy: false };
+  var CP_HUB_IC = {
+    cap: '<svg viewBox="0 0 24 24"><path d="M3 18V8M3 14h18v4M21 18v-6a2 2 0 0 0-2-2h-8v4"/><circle cx="7" cy="11" r="1.6"/></svg>',
+    res: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M12 12.5v5M9.5 15h5"/></svg>',
+    agenda: '<svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4M6.5 13h6M9 16.5h8"/></svg>',
+    edl: '<svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.3"/></svg>',
+    meteo: '<svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3.4"/><path d="M9 2.5v1.6M2.5 9h1.6M4.4 4.4l1.1 1.1M13.6 4.4l-1.1 1.1"/><path d="M8 19h9.5a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.4A2.8 2.8 0 0 0 8 19z"/></svg>'
+  };
+  function campBackHtml() { return '<button class="btn link" data-go="camphub">← Espace camping</button>'; }
+  function renderCampHub() {
+    var list = cpSeason(), conf = list.filter(function (b) { return b.ok; }).length;
+    var tile = function (go, ic, t, s) { return '<button class="hub-t" data-go="' + go + '"><span class="hub-ic" aria-hidden="true">' + ic + '</span><span class="hub-tt">' + t + '</span><span class="hub-s">' + s + "</span></button>"; };
+    return '<div class="hub">' +
+      tile("camp", CP_HUB_IC.res, "Réserver", list.length + " réservation" + (list.length > 1 ? "s" : "") + " · " + conf + " confirmée" + (conf > 1 ? "s" : "")) +
+      tile("campcap", CP_HUB_IC.cap, "Capacité du camp", "caravane et tentes, qui dort où") +
+      tile("campagenda", CP_HUB_IC.agenda, "Visualiser l’agenda", "les réservations en grand, été " + cpYear()) +
+      tile("campedl", CP_HUB_IC.edl, "États des lieux", cpEdl.length + " état" + (cpEdl.length > 1 ? "s" : "") + " des lieux enregistré" + (cpEdl.length > 1 ? "s" : "")) +
+      "</div>"; // v2.0b : 4 boutons, sans la phrase sur l'indépendance du bateau
+  }
+  /* Capacité : la caravane vue de dessus (lit double à gauche, lit double à droite, lit superposé au-dessus du lit de gauche)
+     et les deux tentes ; on pose une personne sur chaque couchage (toucher la place, puis le prénom). */
+  var CP_SLOTS = { car: [["carL1", "Lit gauche"], ["carL2", "Lit gauche"], ["carS", "Lit superposé"], ["carR1", "Lit droit"], ["carR2", "Lit droit"]], t1: [["t1a", ""], ["t1b", ""], ["t1c", ""]], t2: [["t2a", ""], ["t2b", ""], ["t2c", ""]] };
+  function litOf(slot) { return cpLits && cpLits.a ? cpLits.a[slot] || "" : ""; }
+  /* v2.0c : un dormeur vu de dessus, la tête en bas sur l'oreiller : bras le long du corps, jambes un peu écartées */
+  var FIG_SVG = '<svg class="fig" viewBox="0 0 36 82" aria-hidden="true"><path class="fl" d="M14.5 38L11.5 6M21.5 38L24.5 6M11.5 57L4.5 41M24.5 57L31.5 41"/>' +
+    '<rect class="fb" x="10.5" y="33" width="15" height="29" rx="6.5"/><circle class="fb" cx="18" cy="71" r="8.2"/></svg>';
+  function slotBtn(slot) { var id = litOf(slot), on = cpUi.capSlot === slot; return '<button class="lit2' + (id ? " pris " + cpFamId(id) : "") + (on ? " on" : "") + '" data-lit="' + slot + '" aria-label="' + (id ? esc(cpName(id)) : "Place libre") + '"><span class="lit-n">' + (id ? esc(cpName(id)) : "libre") + "</span>" + FIG_SVG + "</button>"; }
+  /* La caravane vue de dessus : les lits sont dans la largeur, les dormeurs côte à côte, la tête en bas ; lit superposé à droite, porte en bas entre les deux lits. */
+  function renderCampCap() {
+    var h = campBackHtml();
+    h += '<div class="card"><h3>Caravane <span class="small muted">4 places + 1 enfant</span></h3><div class="cv2-car" aria-label="Caravane vue de dessus">' +
+      '<div class="cv2-bed"><span class="cv2-l">Lit double</span><div class="cv2-sl">' + slotBtn("carL1") + slotBtn("carL2") + "</div></div>" +
+      '<div class="cv2-mid"></div>' +
+      '<div class="cv2-bed"><span class="cv2-l">Lit double</span><div class="cv2-sl">' + slotBtn("carR1") + slotBtn("carR2") + "</div></div>" +
+      '<div class="cv2-bed cv2-bunk"><span class="cv2-l">Superposé</span><div class="cv2-sl">' + slotBtn("carS") + "</div></div>" +
+      '<div class="cv2-door" aria-hidden="true"><span>porte</span></div><div class="cv2-hitch" aria-hidden="true"></div></div></div>';
+    ["t1", "t2"].forEach(function (t) { h += '<div class="card"><h3>' + CP_LODGE[t].n + ' <span class="small muted">3 places</span></h3><div class="cv2-tent"><div class="cv2-bed"><div class="cv2-sl">' + CP_SLOTS[t].map(function (s) { return slotBtn(s[0]); }).join("") + "</div></div></div></div>"; });
+    if (cpUi.capSlot) {
+      var cands = PEOPLE.filter(function (p) { return !p.hidden; }).map(function (p) { return [p.id, p.name]; }).concat(CP_AMIS);
+      h += '<div class="card cv-pick"><div class="row"><h3>Qui dort ici ?</h3><button class="btn link" data-lit="">Fermer</button></div><div class="chips">' +
+        cands.map(function (c) { return '<button class="chip ' + cpFamId(c[0]) + '" data-litp="' + esc(c[0]) + '" aria-pressed="' + (litOf(cpUi.capSlot) === c[0]) + '">' + esc(c[1]) + "</button>"; }).join("") + "</div>" +
+        (litOf(cpUi.capSlot) ? '<div><button class="btn ghost sm" data-litp="-">Libérer cette place</button></div>' : "") + "</div>";
+    }
+    return h + '<div class="small muted">Touchez une place, puis le prénom de la personne qui y dort. Les places sont partagées avec la famille.</div>';
+  }
+  /* v2.0b : l'agenda reprend le format du planning de réservation, les trois mois l'un sous l'autre, et s'envoie en image (WhatsApp, e-mail…) */
+  function cpLegendHtml() { return '<div class="cp-legend"><span><i class="YC"></i>Famille Yann</span><span><i class="OC"></i>Famille Olivier</span><span><i class="JC"></i>Famille Julien</span><span><i class="EXT"></i>Extérieurs</span><span><i class="dash"></i>Chevauchement</span><span class="lg-ic">' + CP_LOCK + 'Confirmée</span><span class="lg-ic">' + CP_NOSH + "Seuls pendant le séjour</span></div>"; }
+  function renderCampAgenda() {
+    var Y = cpYear(), list = cpSeason(), O = cpOcc(list), h = campBackHtml();
+    h += '<div class="card ag2-top"><div class="row"><h3>Agenda · été ' + Y + '</h3><button class="btn sm" id="agShare">' + CP_SHARE_IC + "Envoyer</button></div>" +
+      '<div class="small muted">' + list.length + " réservation" + (list.length > 1 ? "s" : "") + ". « Envoyer » prépare une image du planning à partager par WhatsApp ou par e-mail.</div>" + (ui.agImg ? agShareHtml() : "") + "</div>";
+    [5, 6, 7].forEach(function (m) { h += '<div class="card ag2"><h3>' + ["Juin", "Juillet", "Août"][m - 5] + " " + Y + "</h3>" + cpCalendar(O, list, m) + "</div>"; });
+    return h + '<div class="card">' + cpLegendHtml() + "</div>";
+  }
+  var CP_SHARE_IC = '<svg class="sh-ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="M8.3 10.8l7.4-4.4M8.3 13.2l7.4 4.4"/></svg>';
+  /* Repli quand le téléphone ne sait pas partager une image directement : aperçu, enregistrement, WhatsApp et e-mail avec le texte du planning */
+  function agShareHtml() {
+    var Y = cpYear(), t = encodeURIComponent(ui.agTxt || "");
+    return '<div class="ag-share"><img src="' + ui.agImg + '" alt="Planning du camping, été ' + Y + '"><div class="actions ag-sh-btns"><a class="btn sm" href="' + ui.agImg + '" download="planning-camping-' + Y + '.png">Enregistrer l’image</a>' +
+      '<a class="btn ghost sm" href="https://wa.me/?text=' + t + '" target="_blank" rel="noopener">WhatsApp</a><a class="btn ghost sm" href="mailto:?subject=' + encodeURIComponent("Planning camping " + Y) + "&body=" + t + '">E-mail</a></div>' +
+      '<div class="small muted">Enregistrez l’image, puis joignez-la au message WhatsApp ou à l’e-mail. <button class="btn link small" id="agShClose">Fermer</button></div></div>';
+  }
+  function cpPlanText() {
+    var Y = cpYear(), list = cpSeason().slice().sort(function (a, b) { return a.from < b.from ? -1 : 1; });
+    return "Camping Les petits Pellegrins · planning été " + Y + "\n" + (list.length ? list.map(function (b) { var c = cpCounts(b); return "• " + b.who + " : " + cpLab(cpDi(b.from)) + " → " + cpLab(cpDi(b.to)) + " (" + cpNights(b) + " nuits, " + c.n + " pers., " + cpLodgeTxt(b) + ")" + (b.ok ? " · confirmée" : ""); }).join("\n") : "Aucune réservation pour l’instant.");
+  }
+  /* L'image du planning, dessinée sur un canvas (mêmes semaines et mêmes barres que l'écran) */
+  function cpPlanCanvas() {
+    var Y = cpYear(), list = cpSeason(), O = cpOcc(list), W = 1080, P = 36, cw = (W - 2 * P) / 7, cs = getComputedStyle(document.documentElement);
+    var col = { YC: (cs.getPropertyValue("--yc") || "").trim() || "#2f6fd6", OC: (cs.getPropertyValue("--oc") || "").trim() || "#d23a3a", JC: "#2e9e4f", EXT: "#14a3b5" };
+    var c = document.createElement("canvas"); c.width = W; c.height = 4200; var x = c.getContext("2d"), y = P;
+    var F = "Barlow, 'Segoe UI', Arial, sans-serif";
+    x.fillStyle = "#ffffff"; x.fillRect(0, 0, W, c.height);
+    x.fillStyle = "#1f5a3a"; x.font = "700 40px " + F; x.textBaseline = "top"; x.fillText("Camping Les petits Pellegrins", P, y); y += 50;
+    x.fillStyle = "#5b6b75"; x.font = "500 24px " + F; x.fillText("Planning été " + Y + " · " + list.length + " réservation" + (list.length > 1 ? "s" : ""), P, y); y += 48;
+    function rr(X, Yy, w, h, r) { x.beginPath(); x.moveTo(X + r, Yy); x.arcTo(X + w, Yy, X + w, Yy + h, r); x.arcTo(X + w, Yy + h, X, Yy + h, r); x.arcTo(X, Yy + h, X, Yy, r); x.arcTo(X, Yy, X + w, Yy, r); x.closePath(); }
+    [5, 6, 7].forEach(function (m) {
+      x.fillStyle = "#1c2b36"; x.font = "700 30px " + F; x.fillText(["Juin", "Juillet", "Août"][m - 5] + " " + Y, P, y); y += 42;
+      x.font = "700 18px " + F; x.fillStyle = "#6b7a84"; ["L", "M", "M", "J", "V", "S", "D"].forEach(function (d, k) { x.fillText(d, P + k * cw + 8, y); }); y += 26;
+      cpWeeks(O, list, m).forEach(function (Wk) {
+        var hh = 52 + Wk.nl * 32 + 6;
+        x.strokeStyle = "#dde3e6"; x.lineWidth = 1; x.beginPath(); x.moveTo(P, y); x.lineTo(W - P, y); x.stroke();
+        Wk.days.forEach(function (d, k) {
+          var X = P + k * cw;
+          if (!d.inM) { x.fillStyle = "#f3f5f6"; x.fillRect(X, y, cw, hh); return; }
+          if (d.cf) { x.fillStyle = "rgba(210,58,58,.09)"; x.fillRect(X, y, cw, hh); }
+          if (k) { x.strokeStyle = "#e7ecee"; x.beginPath(); x.moveTo(X, y); x.lineTo(X, y + hh); x.stroke(); }
+          x.fillStyle = "#1c2b36"; x.font = "700 20px " + F; x.fillText(String(d.n), X + 8, y + 6);
+          x.fillStyle = d.cf || d.free <= 0 ? "#c62828" : d.free >= 5 ? "#1f7a3a" : "#e07b00"; x.font = "600 16px " + F; x.fillText(d.free + " pl.", X + 8, y + 29);
+        });
+        Wk.segs.forEach(function (s) {
+          var X = P + s.a * cw + 4, w = (s.z - s.a) * cw - 8, Yb = y + 52 + s.lane * 32, cc = col[s.b.f] || col.EXT;
+          rr(X, Yb, w, 26, 6);
+          if (s.sat) { x.fillStyle = "#ffffff"; x.fill(); x.setLineDash([7, 5]); x.strokeStyle = cc; x.lineWidth = 3; x.stroke(); x.setLineDash([]); x.lineWidth = 1; } else { x.fillStyle = cc; x.fill(); }
+          if (s.first || s.sat) {
+            x.save(); rr(X, Yb, w, 26, 6); x.clip(); x.fillStyle = s.sat ? cc : "#ffffff"; x.font = "700 16px " + F;
+            x.fillText((s.sat ? "⚠ " : s.b.ok ? "✔ " : "") + (s.first ? s.b.who + " · " + cpCounts(s.b).n : ""), X + 8, Yb + 5); x.restore();
+          }
+        });
+        y += hh;
+      });
+      x.strokeStyle = "#dde3e6"; x.beginPath(); x.moveTo(P, y); x.lineTo(W - P, y); x.stroke(); y += 30;
+    });
+    // légende et liste des réservations
+    x.font = "600 18px " + F; var lx = P;
+    [["YC", "Famille Yann"], ["OC", "Famille Olivier"], ["JC", "Famille Julien"], ["EXT", "Extérieurs"]].forEach(function (l) { x.fillStyle = col[l[0]]; rr(lx, y + 2, 20, 16, 4); x.fill(); x.fillStyle = "#1c2b36"; x.fillText(l[1], lx + 28, y); lx += x.measureText(l[1]).width + 56; });
+    y += 30; x.fillStyle = "#5b6b75"; x.fillText("✔ confirmée   ⚠ chevauchement à régler   pl. = places libres sur 11", P, y); y += 40;
+    x.fillStyle = "#1c2b36"; x.font = "700 24px " + F; x.fillText("Réservations", P, y); y += 34; x.font = "500 19px " + F;
+    cpPlanText().split("\n").slice(1).forEach(function (l) { x.fillText(l, P, y); y += 28; });
+    var out = document.createElement("canvas"); out.width = W; out.height = Math.ceil(y + P); out.getContext("2d").drawImage(c, 0, 0); return out;
+  }
+  function agShare() {
+    var Y = cpYear(), url = cpPlanCanvas().toDataURL("image/png"), txt = cpPlanText(), f = null;
+    try { var bin = atob(url.split(",")[1]), u8 = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); f = new File([u8], "planning-camping-" + Y + ".png", { type: "image/png" }); } catch (e) { f = null; }
+    if (f && navigator.canShare && navigator.canShare({ files: [f] })) {
+      navigator.share({ files: [f], title: "Planning camping " + Y, text: txt }).catch(function (e) { if (e && e.name !== "AbortError") { ui.agImg = url; ui.agTxt = txt; render(); } });
+      return;
+    }
+    ui.agImg = url; ui.agTxt = txt; render(); // pas de partage direct : aperçu et boutons WhatsApp / e-mail
+  }
+  /* États des lieux : photos ou vidéo de l'état au départ, avec un commentaire. */
+  function renderCampEdl() {
+    var h = campBackHtml() + '<div class="card"><h3>Nouvel état des lieux</h3>' +
+      (edlForm.photo ? '<img class="edl-ph" src="' + photoSrc(edlForm.photo) + '" alt="Photo de l’état des lieux">' : "") +
+      '<div class="edl-btns"><label class="btn ghost sm photo-btn">' + (edlForm.photo ? "Reprendre la photo" : "Prendre une photo") + '<input type="file" accept="image/*" capture="environment" id="edlPhoto" hidden></label>' +
+      '<label class="btn ghost sm media-btn">' + VID_ICON + (edlForm.video ? "Changer la vidéo" : "Filmer une vidéo") + '<input type="file" accept="video/*" capture="environment" id="edlVideo" hidden></label></div>' + // v2.0c : vidéo possible
+      (edlForm.video ? '<div class="note-att small">' + VID_ICON + " " + esc(edlForm.video.name) + " · " + sizeTxt(edlForm.video.size) + ' <button class="btn link" id="edlVidRm">Retirer</button></div><div class="small muted">20 à 30 secondes (15 Mo au plus). Elle est envoyée sur le Drive partagé avec un lien dans l’état des lieux.</div>' : "") +
+      '<div class="field"><label for="edlTxt">Commentaire</label><textarea id="edlTxt" rows="3" placeholder="État de la caravane, des tentes, ce qui manque…">' + esc(edlForm.txt) + "</textarea></div>" +
+      '<div class="actions"><button class="btn" id="edlSave"' + (edlForm.busy ? " disabled" : "") + ">Enregistrer l’état des lieux</button></div></div>";
+    var list = cpEdl.slice().sort(function (a, b) { return (a.date || "") < (b.date || "") ? 1 : -1; });
+    h += '<div class="card"><h3>États des lieux enregistrés</h3>' + (!list.length ? '<div class="small muted">Aucun pour l’instant.</div>' : list.map(function (e) {
+      return '<div class="edl-it"><div class="small"><b>' + esc(fmtDateTime(e.date)) + "</b> · " + esc(e.auteurNom || "?") + "</div>" + (photoSrc(e.photo) ? '<img class="edl-ph" src="' + photoSrc(e.photo) + '" alt="Photo de l’état des lieux">' : "") +
+        (e.video && e.video.url ? '<a class="note-vid" href="' + esc(e.video.url) + '" target="_blank" rel="noopener">' + VID_ICON + "Voir la vidéo</a>" : "") +
+        (e.txt ? '<div class="small">' + esc(e.txt) + "</div>" : "") + (canValidate() ? '<div><button class="btn link small" data-edldel="' + esc(e.id) + '">' + (ui.edlDel === e.id ? "Confirmer l’effacement" : "Effacer") + "</button></div>" : "") + "</div>";
+    }).join("")) + "</div>";
+    return h;
+  }
+  /* Météo : prévisions Windguru du spot 192 et webcam de la plage de Lacanau Océan. */
+  var METEO = { wg: "https://www.windguru.cz/192", cam: "https://www.windy.com/webcams/1334243169", camEmbed: "https://webcams.windy.com/webcams/public/embed/player/1334243169/day" };
+  function renderMeteo() {
+    return '<div class="card"><div class="row"><h3>Prévisions Windguru</h3><a class="btn link" href="' + METEO.wg + '" target="_blank" rel="noopener">Ouvrir Windguru</a></div>' +
+      '<div class="wg-box" id="wgBox">' + (navigator.onLine ? '<div class="small muted">Chargement des prévisions…</div>' : '<div class="small muted">Hors ligne : les prévisions s’afficheront avec une connexion.</div>') + "</div></div>" +
+      '<div class="card"><div class="row"><h3>Webcam Lacanau Océan</h3><a class="btn link" href="' + METEO.cam + '" target="_blank" rel="noopener">Plein écran</a></div>' +
+      (navigator.onLine ? '<div class="cam-box"><iframe src="' + METEO.camEmbed + '" title="Webcam de la plage de Lacanau Océan" loading="lazy" allowfullscreen></iframe></div>' : '<div class="small muted">Hors ligne.</div>') + "</div>";
+  }
+  function meteoLoad() {
+    var box = document.getElementById("wgBox"); if (!box || !navigator.onLine || box.dataset.ok) return;
+    box.dataset.ok = "1";
+    var uid0 = "wg_fwdg_192_100_" + Date.now(), anchor = document.createElement("script"); anchor.id = uid0; anchor.type = "text/plain";
+    box.innerHTML = ""; box.appendChild(anchor);
+    var arg = ["s=192", "m=100", "uid=" + uid0, "wj=knots", "tj=c", "waj=m", "tij=cm", "odh=0", "doh=24", "fhours=240", "hrsm=2", "vt=forecasts", "lng=fr", "idbs=1", "p=WINDSPD,GUST,SMER,TMPE,CDC,APCP1s,RATING"];
+    var s = document.createElement("script"); s.src = "https://www.windguru.cz/js/widget.php?" + arg.join("&"); s.async = true;
+    s.onerror = function () { box.innerHTML = '<div class="small muted">Prévisions indisponibles : touchez « Ouvrir Windguru ».</div>'; };
+    box.appendChild(s);
   }
   function render() {
     computeYears();
-    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau, camp: renderCamp };
+    var map = { accueil: renderAccueil, sortie: renderSortie, essence: renderEssence, activite: renderActivite, pilotes: renderPilotes, annuaire: renderAnnuaire, journal: renderJournal, bateau: renderBateau, camp: renderCamp, camphub: renderCampHub, campcap: renderCampCap, campagenda: renderCampAgenda, campedl: renderCampEdl, meteo: renderMeteo };
     screen.innerHTML = map[tab]();
     var fr = screen.querySelector(".bal-frise"); // frise de la balance : on garde la position de défilement, sinon on s'ouvre sur « Aujourd'hui »
     if (fr) { fr.scrollLeft = ui.friseX != null ? ui.friseX : fr.scrollWidth; fr.addEventListener("scroll", function () { ui.friseX = fr.scrollLeft; }, { passive: true }); } else ui.friseX = null;
     setTimeout(function () { persistAll(); updateNet(); }, 0);
-    var navTab = tab === "pilotes" || tab === "annuaire" ? "bateau" : tab === "journal" || tab === "camp" ? "accueil" : tab; // Pilotes et Annuaire sont des sous-menus de Bateau ; Journal et Camping, de l'Accueil
+    var navTab = tab === "pilotes" || tab === "annuaire" ? "bateau" : tab === "journal" || tab === "meteo" || /^camp/.test(tab) ? "accueil" : tab; // Pilotes et Annuaire sont des sous-menus de Bateau ; Journal, Météo et Camping, de l'Accueil
     document.querySelectorAll(".tabs button").forEach(function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === navTab)); });
     if (tab === "activite" && finView === "dep") depPreview();
     if (tab === "essence" && view.essence === "achat") achatPreview();
+    if (tab === "meteo") meteoLoad(); // v2.0 : prévisions Windguru chargées à l'ouverture de la page
+    document.body.classList.toggle("camp-mode", /^camp/.test(tab)); // v2.0 : l'espace camping est séparé du ski nautique (pas de barre d'onglets du bateau)
+    var hl = document.getElementById("launchBtn"); if (hl) hl.hidden = !!screen.querySelector(".dt-launch"); // v2.0b : un seul bouton de lancement à l'écran
+    if (tab === "campagenda") { var ags = document.getElementById("agScroll"); if (ags) { ags.scrollLeft = ui.agX != null ? ui.agX : Math.max(0, (cpDi(cpYear() + "-07-01") - 2) * 20); ags.addEventListener("scroll", function () { ui.agX = ags.scrollLeft; }, { passive: true }); } }
     renderHead();
     navSync();
     gpsSync(); applyOrientation(); updateBig(); keepAwake(); // GPS lancé avant le grand affichage, qui affiche son état
@@ -2312,6 +2554,7 @@
     if (s.tab === "pilotes") return { tab: "bateau", fin: "", pil: "", ess: "", dep: 0, up: "" };
     if (s.tab === "annuaire") return s.up === "bateau" ? { tab: "bateau", fin: "", pil: "", ess: "", dep: 0, up: "" } : NAV_ROOT; // urgence : ouvert depuis Bateau ou depuis l'Accueil
     if (s.tab === "accueil") return null;
+    if (s.tab === "camp" || s.tab === "campcap" || s.tab === "campagenda" || s.tab === "campedl") return { tab: "camphub", fin: "", pil: "", ess: "", dep: 0, up: "" }; // v2.0 : pages du camping > espace camping
     return NAV_ROOT;
   }
   function navSync() {
@@ -2426,7 +2669,7 @@
   function starsHtml(n, size) { var s = '<span class="stars" role="img" aria-label="' + (n ? n + " étoile" + (n > 1 ? "s" : "") : "aucun grade") + '">'; for (var i = 1; i <= 4; i++) s += starSvg(i <= n, size); return s + "</span>"; }
   function canValidate() { return CONF.moi === "yann" || CONF.moi === "olivier"; }
   /* Actions réservées à Yann et Olivier (choix « Je suis ») : effacer, importer ou restaurer, valider la balance, noter un virement */
-  var RESERVE_TXT = '<div class="small muted reserve">Réservé à Yann et Olivier (choix « Je suis » dans Bateau, Connexion et partage).</div>';
+  var RESERVE_TXT = '<div class="small muted reserve">Réservé à Yann et Olivier (choix « Je suis » dans Admin, Connexion et partage).</div>';
   function reserveOk() { if (canValidate()) return true; toast("Réservé à Yann et Olivier."); return false; }
   /* Fiche pilote : modifiable par la personne elle-même (choix « Je suis »), Yann et Olivier modifient tout */
   function canEdit(p) { return canValidate() || (!!CONF.moi && !!p && CONF.moi === p.id); }
@@ -2456,7 +2699,7 @@
   function renderPilotes() {
     var sel = pilotSel && person(pilotSel);
     if (sel) return pilotDetailHtml(sel);
-    var h = '<button class="btn link" data-go="bateau">← Retour au bateau</button><div class="card"><h3>Les pilotes</h3><div class="small muted">Grades validés par Yann ou Olivier. Touchez une personne pour voir sa fiche.</div><div class="list">';
+    var h = '<button class="btn link" data-go="bateau">← Retour à Admin</button><div class="card"><h3>Les pilotes</h3><div class="small muted">Grades validés par Yann ou Olivier. Touchez une personne pour voir sa fiche.</div><div class="list">';
     ["YF", "OF", "EXT"].forEach(function (c) {
       PEOPLE.filter(function (p) { return p.c === c && !p.hidden; }).forEach(function (p) {
         var s = pilotStats(p.id), f = c === "EXT" ? (p.host || "") : CATF[c];
@@ -2479,7 +2722,7 @@
     var s = pilotStats(p.id), g = p.grade || 0;
     var h = '<button class="btn link" data-pilot="">← Tous les pilotes</button>';
     var age = ageTxt(p.naissance), ed = canEdit(p);
-    if (!ed) h += '<div class="alert ro-note"><b>Fiche en lecture seule</b>Seuls ' + esc(p.name) + (p.id === "yann" || p.id === "olivier" ? "" : ", Yann") + (p.id === "olivier" ? " et Yann" : " et Olivier") + " peuvent la modifier" + (CONF.moi ? "." : " (choix « Je suis » dans Bateau, Connexion et partage).") + "</div>";
+    if (!ed) h += '<div class="alert ro-note"><b>Fiche en lecture seule</b>Seuls ' + esc(p.name) + (p.id === "yann" || p.id === "olivier" ? "" : ", Yann") + (p.id === "olivier" ? " et Yann" : " et Olivier") + " peuvent la modifier" + (CONF.moi ? "." : " (choix « Je suis » dans Admin, Connexion et partage).") + "</div>";
     h += '<fieldset class="pf-lock"' + (ed ? "" : " disabled") + '>';
     h += '<div class="card pilot-hero"><div class="ph-left">' +
       '<div class="name-line"><h3>' + esc(p.name) + "</h3>" + starsHtml(g, 22) + "</div>" +
@@ -2567,7 +2810,7 @@
   /* Annuaire urgence : numéros nationaux fixes, contacts du lac gardés dans la base partagée (SPEC.annuaire), modifiables */
   var URG_NAT = [["112", "Urgences (numéro européen)"], ["15", "SAMU"], ["18", "Pompiers"], ["17", "Police, gendarmerie"]];
   /* Sections : Propriétaires (numéros des fiches de Yann et Olivier) en tête, puis l'ordre choisi dans l'app (SPEC.annOrdre) */
-  var OWN_G = "Propriétaires", ANN_ORDRE = [OWN_G, "Police du lac", "Sport Service Pitrot", "Association SNLG", "VLG"];
+  var OWN_G = "Propriétaires", ANN_ORDRE = [OWN_G, "Police du lac", "Sport Service Pitrot", "Association SNLG", "Camping"];
   /* Section « Propriétaire(s) » déjà saisie dans l'annuaire (quel que soit l'accord ou les accents) : c'est elle qui passe en tête, sans doublon */
   function annNorm(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim(); }
   function annOwnSaisie(list) { for (var i = 0; i < list.length; i++) if (/^propri/.test(annNorm(list[i].g))) return list[i].g; return ""; }
@@ -2577,7 +2820,7 @@
     return gs.sort(function (a, b) { return rk(a) - rk(b); });
   }
   function renderAnnuaire() {
-    var list = SPEC.annuaire || [], edit = ui.annEdit, h = '<button class="btn link" data-go="bateau">← Retour au bateau</button>';
+    var list = SPEC.annuaire || [], edit = ui.annEdit, h = '<button class="btn link" data-go="bateau">← Retour à Admin</button>';
     h += '<div class="card urg-nat"><h3>Numéros d’urgence</h3><div class="urg-grid">' + URG_NAT.map(function (u) { return '<a class="urg-big" href="tel:' + u[0] + '"><b>' + u[0] + "</b><span>" + u[1] + "</span></a>"; }).join("") + "</div></div>";
     var groups = annGroups(list);
     h += '<div class="card"><div class="row"><h3>Contacts du lac</h3><button class="btn link" id="annEdit">' + (edit ? "Terminé" : "Modifier") + "</button></div>";
@@ -2715,6 +2958,11 @@
     pilotes: { t: "Pilotes", v: '<span class="hv" style="background:#3b2a00;color:#f6c445" aria-hidden="true">' + WHEEL_ICON + "</span>" },
     journal: { t: "Journal - Notes", v: '<span class="hv" style="background:#ffffff;color:#1e4d6b" aria-hidden="true">' + QI.journal + "</span>" },
     camp: { t: "Camping Les petits Pellegrins", v: '<span class="hv" style="background:#ffffff;color:#2f7d4f" aria-hidden="true">' + QI.camp + "</span>" },
+    camphub: { t: "Camping Les petits Pellegrins", v: '<span class="hv" style="background:#ffffff;color:#2f7d4f" aria-hidden="true">' + QI.camp + "</span>" },
+    campcap: { t: "Capacité du camp", v: '<span class="hv" style="background:#ffffff;color:#2f7d4f" aria-hidden="true">' + QI.camp + "</span>" },
+    campagenda: { t: "Agenda du camp", v: '<span class="hv" style="background:#ffffff;color:#2f7d4f" aria-hidden="true">' + QI.camp + "</span>" },
+    campedl: { t: "États des lieux", v: '<span class="hv" style="background:#ffffff;color:#2f7d4f" aria-hidden="true">' + QI.camp + "</span>" },
+    meteo: { t: "Météo · Lacanau", v: '<span class="hv" style="background:#ffffff;color:#1d6fa5" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3.4"/><path d="M9 2.5v1.6M2.5 9h1.6M4.4 4.4l1.1 1.1M13.6 4.4l-1.1 1.1"/><path d="M8 19h9.5a3.5 3.5 0 0 0 .3-7 5 5 0 0 0-9.6 1.4A2.8 2.8 0 0 0 8 19z"/></svg></span>' },
     annuaire: { t: "Urgence - Dépannage", v: '<span class="hv urg-ic" aria-hidden="true">' + URG_ICON + "</span>" },
     bateau: { t: "", v: '<span class="nk-wrap">' + NK_SVG + "</span>" } // le logo suffit : pas de titre « Bateau »
   };
@@ -2746,7 +2994,10 @@
     toast("Retour en live : les saisies de démo sont effacées.");
     setTimeout(function () { location.reload(); }, 600); // DEMO reste vrai jusqu'au rechargement : rien de la démo n'est écrit
   }
-  function demoTogHtml(cls) { return '<div class="demo-tog ' + (cls || "") + '" role="group" aria-label="Mode de saisie"><button data-demo="0" aria-pressed="' + !DEMO + '">Live</button><button data-demo="1" aria-pressed="' + DEMO + '">Démo</button></div>'; }
+  /* v2.0b : le bouton de retour à la page de lancement se tient à côté de Live / Démo */
+  function demoTogHtml(cls) { return '<div class="dt-wrap ' + (cls || "") + '"><button class="dt-launch" data-launch="1" aria-label="Retour à la page de lancement" title="Page de lancement">' + LAUNCH_IC + "</button>" + demoTogIn() + "</div>"; }
+  var LAUNCH_IC = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/></svg>';
+  function demoTogIn(cls) { return '<div class="demo-tog ' + (cls || "") + '" role="group" aria-label="Mode de saisie"><button data-demo="0" aria-pressed="' + !DEMO + '">Live</button><button data-demo="1" aria-pressed="' + DEMO + '">Démo</button></div>'; }
   document.getElementById("demoBar").addEventListener("click", function (e) { if (e.target.closest("button")) setDemo(false); });
   document.querySelector(".tabs").addEventListener("click", function (e) { var b = e.target.closest("button[data-tab]"); if (b) goTab(b.dataset.tab); });
 
@@ -2763,24 +3014,63 @@
     if ((ds.rstar || ds.eau) && resInput(b)) return;
     if (ds.go) return goTab(ds.go);
     // v1.9.9 : camping « Les petits Pellegrins » (indépendant du bateau : aucune dépense)
+    if (b.id === "dupClean") { if (!canValidate()) return toast("Réservé à Yann et Olivier."); if (!ui.dupAsk) { ui.dupAsk = true; return render(); } var dci = dupClean().ids; moves = moves.filter(function (m) { return dci.indexOf(m.id) < 0; }); ui.dupAsk = false; toast(dci.length + " mouvement(s) supprimé(s) de la base et de l’historique."); return render(); } // v2.0 : nettoyage
+    // v2.0 : capacité (qui dort où) et états des lieux du camping
+    if (ds.lit !== undefined) { cpUi.capSlot = cpUi.capSlot === ds.lit ? "" : ds.lit; return render(); }
+    if (ds.litp) { if (!cpLits) cpLits = { id: "camplits", kind: "camplits", a: {} }; cpLits.a = cpLits.a || {}; if (ds.litp === "-") delete cpLits.a[cpUi.capSlot]; else cpLits.a[cpUi.capSlot] = ds.litp; cpUi.capSlot = ""; return render(); }
+    if (b.id === "edlSave") {
+      var et0 = document.getElementById("edlTxt"); edlForm.txt = et0 ? et0.value.trim() : edlForm.txt;
+      if (!edlForm.txt && !edlForm.photo && !edlForm.video) return toast("Ajoutez une photo, une vidéo ou un commentaire.");
+      var au0 = person(CONF.moi), erec = { id: "edl-" + uid(), kind: "edl", date: nowIso(), auteur: au0 ? au0.id : "", auteurNom: au0 ? au0.name : "", txt: edlForm.txt };
+      if (edlForm.photo) erec.photo = edlForm.photo;
+      var efin = function () { cpEdl.push(erec); edlForm = { txt: "", photo: null, video: null, busy: false }; toast("État des lieux enregistré."); render(); };
+      // v2.0c : la vidéo part dans le dossier Drive des documents (comme celles du journal), l'état des lieux garde son lien
+      var ev = edlForm.video;
+      if (!ev || DEMO) return efin();
+      if (!(CONF.url && CONF.code && navigator.onLine)) return toast("Pas de connexion : la vidéo ne peut pas partir. Retirez-la ou réessayez avec du réseau.");
+      if (ev.size > 15 * 1048576) return toast("Vidéo trop lourde (15 Mo au plus) : filmez 20 à 30 secondes.");
+      edlForm.busy = true; render(); toast("Envoi de la vidéo…");
+      readB64(ev).then(function (b64) { return Sync.call({ action: "upload", name: "État des lieux " + todayIso() + " - " + ev.name, mime: ev.type || "video/mp4", data: b64, cat: "Camping - États des lieux", y: String(new Date().getFullYear()) }); })
+        .then(function (res) { if (!res.ok) throw new Error(res.error || "erreur du serveur"); erec.video = { url: res.url, n: ev.name }; efin(); })
+        .catch(function (er) { edlForm.busy = false; toast("Envoi de la vidéo impossible : " + ((er && er.message) || er)); render(); });
+      return;
+    }
+    if (b.id === "edlVidRm") { edlForm.video = null; return render(); }
+    if (ds.edldel) { if (!canValidate()) return toast("Réservé à Yann et Olivier."); if (ui.edlDel !== ds.edldel) { ui.edlDel = ds.edldel; return render(); } cpEdl = cpEdl.filter(function (x) { return x.id !== ds.edldel; }); ui.edlDel = ""; toast("État des lieux effacé."); return render(); }
     if (b.id === "cpBook") { cpUi.form = !cpUi.form; cpUi.del = ""; return render(); }
-    if (b.id === "cpCancel") { cpUi.form = false; cpUi.sel = {}; return render(); }
+    if (b.id === "cpCancel") { cpUi.form = false; cpUi.sel = {}; cpUi.ext = ""; return render(); }
+    if (ds.launch) return introShow(); // v2.0b : bouton à côté de Live / Démo
+    if (b.id === "agShare") return agShare(); // v2.0b : image du planning à envoyer
+    if (b.id === "agShClose") { ui.agImg = null; ui.agTxt = ""; return render(); }
     if (ds.cpm) { cpUi.m = +ds.cpm; return render(); }
     if (ds.cpp) { cpUi.sel[ds.cpp] = !cpUi.sel[ds.cpp]; return render(); }
-    if (ds.cpl) { cpUi.lodge = ds.cpl; return render(); }
+    if (ds.cpl) { cpUi.lodges[ds.cpl] = !cpUi.lodges[ds.cpl]; return render(); } // plusieurs hébergements possibles
     if (ds.cpsh) { cpUi.share = ds.cpsh === "1"; return render(); }
     if (ds.cpcost) { cpUi.cost[ds.cpcost] = !cpUi.cost[ds.cpcost]; return render(); }
     if (ds.cpok) { var cpb = cpById(ds.cpok); if (cpb) { cpb.ok = !cpb.ok; toast(cpb.ok ? "Réservation confirmée." : "Confirmation retirée."); } return render(); }
     if (ds.cpdel) { if (!canValidate()) return toast("Réservé à Yann et Olivier."); if (cpUi.del !== ds.cpdel) { cpUi.del = ds.cpdel; return render(); } resas = resas.filter(function (x) { return x.id !== ds.cpdel; }); cpUi.del = ""; toast("Réservation supprimée."); return render(); }
+    if (b.id === "cpTarEdit") { cpUi.tarEdit = true; return render(); }
+    if (b.id === "cpTarCancel") { cpUi.tarEdit = false; return render(); }
+    if (b.id === "cpTarSave") {
+      if (!canValidate()) return toast("Réservé à Yann et Olivier.");
+      var ta = parseNum(document.getElementById("cpTarAd").value), tk = parseNum(document.getElementById("cpTarKid").value);
+      if (!(ta >= 0) || !(tk >= 0)) return toast("Indiquez les deux tarifs.");
+      if (!cpTar) cpTar = { id: "camptarif", kind: "camptarif", t: {} };
+      cpTar.t = cpTar.t || {}; cpTar.t[String(cpYear())] = { ad: ta, kid: tk };
+      cpUi.tarEdit = false; toast("Tarifs " + cpYear() + " enregistrés."); return render();
+    }
     if (b.id === "cpSave") {
-      var cps = Object.keys(cpUi.sel).filter(function (k) { return cpUi.sel[k]; }), cpn = cpDi(cpUi.to) - cpDi(cpUi.from);
-      if (!cps.length) return toast("Choisissez au moins une personne.");
+      var cpx = document.getElementById("cpExt"); if (cpx) cpUi.ext = cpx.value;
+      var cps = Object.keys(cpUi.sel).filter(function (k) { return cpUi.sel[k]; }), cpe = cpUi.ext.split(",").map(function (s) { return s.trim(); }).filter(Boolean), cpn = cpDi(cpUi.to) - cpDi(cpUi.from);
+      var cpls = Object.keys(CP_LODGE).filter(function (k) { return cpUi.lodges[k]; });
+      if (!cps.length && !cpe.length) return toast("Choisissez au moins une personne.");
+      if (!cpls.length) return toast("Choisissez au moins un hébergement.");
       if (!(cpn > 0) || cpDi(cpUi.from) < 0 || cpDi(cpUi.to) > CP_N) return toast("Dates à vérifier : arrivée avant le départ, entre le 1er juin et le 31 août.");
-      var cpf = cpFam(person(cps[0])), cpfs = {}; cps.forEach(function (id) { cpfs[cpFam(person(id))] = 1; });
-      var cpwho = Object.keys(cpfs).length === 1 && cpf !== "EXT" ? CP_FAMN[cpf] : cpName(cps[0]);
+      var cpf = cps.length ? cpFamId(cps[0]) : "EXT", cpfs = {}; cps.forEach(function (id) { cpfs[cpFamId(id)] = 1; }); if (cpe.length) cpfs.EXT = 1;
+      var cpwho = Object.keys(cpfs).length === 1 && cpf !== "EXT" ? CP_FAMN[cpf] : (cps.length ? cpName(cps[0]) : cpe[0]);
       var me = person(CONF.moi);
-      resas.push({ id: "resa-" + uid(), kind: "resa", date: nowIso(), who: cpwho, f: cpf, ppl: cps, from: cpUi.from, to: cpUi.to, lodge: cpUi.lodge, ok: false, share: cpUi.share, auteur: me ? me.id : "", auteurNom: me ? me.name : "" });
-      cpUi.form = false; cpUi.sel = {}; cpUi.share = true; cpUi.m = cpDt(cpDi(cpUi.from)).getUTCMonth(); toast("Réservation enregistrée."); return render();
+      resas.push({ id: "resa-" + uid(), kind: "resa", date: nowIso(), who: cpwho, f: cpf, ppl: cps, ext: cpe, from: cpUi.from, to: cpUi.to, lodges: cpls, lodge: cpls[0], ok: false, share: cpUi.share, auteur: me ? me.id : "", auteurNom: me ? me.name : "" });
+      cpUi.form = false; cpUi.sel = {}; cpUi.ext = ""; cpUi.share = true; cpUi.m = cpDt(cpDi(cpUi.from)).getUTCMonth(); toast("Réservation enregistrée."); return render();
     }
     if (ds.demo) return setDemo(ds.demo === "1");
     if (ds.essyear) { essYear = ds.essyear; return render(); }
@@ -3083,6 +3373,8 @@
 
   screen.addEventListener("input", function (e) {
     var el = e.target;
+    if (el.id === "cpExt") { cpUi.ext = el.value; return; } // v2.0 : camping, saisie libre sans redessiner
+    if (el.id === "edlTxt") { edlForm.txt = el.value; return; } // v2.0 : état des lieux, sans redessiner
     if (el.id === "cQty") { corrForm.qty = Math.max(0, parseNum(el.value)); var ce = document.getElementById("corrEff"), cs = document.getElementById("corrSave"), tk0 = corrTakes(corrSel()); if (ce) ce.innerHTML = corrEffText(tk0); if (cs) cs.disabled = !tk0.length; return; } // litres retirés du stock (correction)
     if (el.dataset.f && el.tagName === "INPUT") { findTour(Number(el.dataset.id))[el.dataset.f] = el.value.replace(/\D/g, ""); return; }
     if (el.dataset.spec) { var key = el.dataset.spec; SPEC[key] = el.classList.contains("txt") ? el.value : parseNum(el.value); return; }
@@ -3095,6 +3387,9 @@
   });
   screen.addEventListener("change", function (e) {
     var el = e.target;
+    if (el.id === "edlVideo" && el.files && el.files[0]) { var et1 = document.getElementById("edlTxt"); if (et1) edlForm.txt = et1.value; edlForm.video = el.files[0]; return render(); } // v2.0c
+    if (el.id === "edlPhoto" && el.files && el.files[0]) { edlForm.busy = true; render(); shrinkMeter(el.files[0]).then(function (ph) { edlForm.photo = ph; edlForm.busy = false; render(); }).catch(function () { edlForm.busy = false; toast("Photo illisible."); render(); }); return; } // v2.0 : état des lieux
+    if (el.id === "cpExt") { cpUi.ext = el.value; return render(); } // v2.0 : camping, autres personnes
     if (el.id === "cpFrom" || el.id === "cpTo") { cpUi[el.id === "cpFrom" ? "from" : "to"] = el.value; if (el.id === "cpFrom" && cpUi.to <= el.value) { var nd = cpDi(el.value) + 7; cpUi.to = cpIso(Math.min(nd, CP_N)); } return render(); } // v1.9.9 : camping
     if (el.dataset.res && resInput(el)) return;
     if (el.dataset.f && el.tagName === "SELECT") { var t = findTour(Number(el.dataset.id)); t[el.dataset.f] = el.value; if (el.dataset.f === "act") { t.speed = ""; t.passes = ""; } save(1); return render(); }
@@ -3215,6 +3510,7 @@
     startJauge = lastLevel; // la jauge de départ part du niveau estimé (réservoir vide après l'hivernage)
   })();
   if (CONF.moi) { startPilote = CONF.moi; corrForm.who = CONF.moi; }
+  if (!CONF.url || !CONF.code) annCampAdd(); // v2.0 : appli non connectée, pas d'annuaire partagé à écraser
   /* ---------- Écran d'ouverture (v1.9.8) : logo en plein écran, bouton « Entrer » ----------
      Au toucher : moteur V8 (son fabriqué par le code, aucun fichier), demande du GPS (un vrai geste de l'utilisateur,
      sinon le téléphone peut bloquer la question en silence), le bateau du logo traverse l'Accueil, l'appli s'ouvre aussitôt. */
@@ -3247,6 +3543,32 @@
     }
     return (V8BUF = buf);
   }
+  /* v2.0c : chant de cigales (fabriqué par le code, aucun fichier) au toucher de « Réservation camping », environ 3,5 s.
+     Trois cigales : un sifflement aigu haché par des pulsations rapides, qui gonfle puis s'éteint. */
+  var CIGBUF = null;
+  function cigBuffer(c) {
+    if (CIGBUF) return CIGBUF;
+    var sr = c.sampleRate, dur = 3.6, n = Math.floor(sr * dur), buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), TAU = 6.2832;
+    var V = [{ f: 5200, pr: 52, tr: 2.6, a: 1, del: 0 }, { f: 6100, pr: 61, tr: 3.4, a: 0.7, del: 0.35 }, { f: 4700, pr: 46, tr: 1.9, a: 0.55, del: 0.8 }];
+    for (var i = 0; i < n; i++) {
+      var t = i / sr, s = 0, fade = t > dur - 0.9 ? Math.max(0, (dur - t) / 0.9) : 1;
+      for (var k = 0; k < V.length; k++) {
+        var v = V[k], tt = t - v.del; if (tt < 0) continue;
+        var env = Math.min(1, tt / 0.5) * fade, trem = Math.pow(0.5 + 0.5 * Math.sin(TAU * v.tr * tt), 1.5), pulse = Math.pow(0.5 + 0.5 * Math.sin(TAU * v.pr * tt), 6);
+        s += v.a * env * (0.35 + 0.65 * trem) * pulse * (Math.sin(TAU * v.f * tt + 3 * Math.sin(TAU * 230 * tt)) + 0.6 * (Math.random() * 2 - 1));
+      }
+      d[i] = s * 0.3;
+    }
+    return (CIGBUF = buf);
+  }
+  function cigales() {
+    try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    var c = AC; if (c.state === "suspended" && c.resume) c.resume();
+    var src = c.createBufferSource(); src.buffer = cigBuffer(c);
+    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 5300; bp.Q.value = 1.1;
+    var out = c.createGain(); out.gain.value = 0.5;
+    src.connect(bp); bp.connect(out); out.connect(c.destination); src.start();
+  }
   function vroom() {
     try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
     var c = AC; if (c.state === "suspended" && c.resume) c.resume();
@@ -3264,30 +3586,37 @@
   }
   function introShow() {
     var old = document.getElementById("introV"); if (old) old.remove();
-    var src = document.querySelector("#hVis .nk-logo");
-    if (!src) return setTimeout(introShow, 200);
+    var src = document.querySelector("#hVis .nk-logo"), tmpL = null;
+    if (!src) { // v2.0 : page sans le logo dans l'en-tête (espace camping) : on le dessine à part, hors de l'écran
+      tmpL = document.createElement("span"); tmpL.className = "nk-wrap"; tmpL.style.cssText = "position:fixed;left:-9999px;top:0"; tmpL.innerHTML = NK_SVG; document.body.appendChild(tmpL);
+      src = tmpL.querySelector(".nk-logo"); try { nkLayout(src); } catch (e) { /* police pas encore prête */ }
+    }
     var v = document.createElement("div"); v.id = "introV";
-    v.innerHTML = '<svg class="iv-waves" viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true">' +
+    v.innerHTML = '<div class="iv-ski" aria-hidden="true"><svg class="iv-waves" viewBox="0 0 400 120" preserveAspectRatio="none" aria-hidden="true">' +
       '<path d="M0 60 Q50 40 100 60 T200 60 T300 60 T400 60 V120 H0Z" fill="#14b5c8" opacity=".18"/>' +
       '<path d="M0 78 Q50 62 100 78 T200 78 T300 78 T400 78 V120 H0Z" fill="#0f6f86" opacity=".35"/>' +
-      '<path d="M0 96 Q50 84 100 96 T200 96 T300 96 T400 96 V120 H0Z" fill="#0a3a48" opacity=".7"/></svg>' +
+      '<path d="M0 96 Q50 84 100 96 T200 96 T300 96 T400 96 V120 H0Z" fill="#0a3a48" opacity=".7"/></svg></div>' + /* v2.0b : zone ski nautique délimitée, coins arrondis */
+      // v2.0 : le premier tiers de l'écran ouvre l'espace camping ; le reste reste la partie ski nautique
+      '<div class="iv-camp"><button class="iv-campbtn" id="ivCamp">' + CP_ICON.tent + '<span><b>Réservation camping</b><small>Les petits Pellegrins</small></span></button></div>' +
       '<div class="iv-logo"></div><button class="iv-start rbtn-red" aria-label="Entrer dans l’application">Entrer</button><div class="iv-hint">Touchez Entrer pour démarrer le moteur</div>';
-    var logo = src.cloneNode(true); logo.removeAttribute("class");
+    var logo = src.cloneNode(true); logo.removeAttribute("class"); if (tmpL) tmpL.remove();
     v.querySelector(".iv-logo").appendChild(logo); v.querySelector(".iv-logo").insertAdjacentHTML("beforeend", '<span class="iv-shine"></span>');
     document.body.appendChild(v);
     requestAnimationFrame(function () { v.classList.add("in"); });
     var tr = logo.querySelector(".nk-trace"); if (tr && tr.getTotalLength) tr.style.setProperty("--len", Math.ceil(tr.getTotalLength()) + "px");
     [].forEach.call(logo.querySelectorAll(".nk-buoys circle"), function (c, i) { c.style.animationDelay = (0.75 + i * 0.2) + "s"; });
     // le son est préparé pendant que le logo arrive : au toucher d'« Entrer », il part sans délai
-    setTimeout(function () { try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); v8Buffer(AC); } catch (e) { /* son indisponible */ } }, 1500);
+    setTimeout(function () { try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); v8Buffer(AC); cigBuffer(AC); } catch (e) { /* son indisponible */ } }, 1500);
     function go() {
       if (v.classList.contains("go")) return finish();
       v.classList.add("go"); vroom(); gpsAsk(); boatCross();
+      if (/^camp/.test(tab)) goTab("accueil"); // v2.0 : « Entrer » mène toujours au ski nautique
       var lb = v.querySelector(".nk-boat"); if (lb) lb.style.visibility = "hidden"; // le bateau du logo part : c'est lui qui traverse l'Accueil
       setTimeout(finish, 120); // ouverture instantanée : le moteur continue de tourner sur l'Accueil
     }
     function finish() { if (v.classList.contains("out")) return; v.classList.add("out"); setTimeout(function () { v.remove(); }, 320); }
     v.querySelector(".iv-start").addEventListener("click", function (e) { e.stopPropagation(); go(); });
+    v.querySelector("#ivCamp").addEventListener("click", function (e) { e.stopPropagation(); cigales(); finish(); goTab("camphub"); }); // espace camping : cigales, sans moteur ni GPS
     v.addEventListener("click", function () { if (v.classList.contains("go")) finish(); });
   }
   /* Le bateau du logo traverse l'Accueil, à la même taille et à la même hauteur que sur l'écran d'ouverture, écume derrière. */
@@ -3328,6 +3657,8 @@
   }
   // au lancement : écran d'ouverture ; si une session est déjà en cours, on retourne directement au chrono (GPS demandé comme avant)
   if (sortie.active) gpsAsk(); else introShow();
+  // v2.0 : bouton de l'en-tête, sur chaque page, pour revenir à la page de lancement (ski nautique ou camping)
+  var lb0 = document.getElementById("launchBtn"); if (lb0) lb0.addEventListener("click", function () { introShow(); });
   window.addEventListener("online", function () { updateNet(); Sync.run(); });
   window.addEventListener("offline", updateNet);
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") Sync.run(); });

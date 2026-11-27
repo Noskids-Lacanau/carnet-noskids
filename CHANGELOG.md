@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 2.0.0 — 2026-11-27
+
+- Page de lancement en deux zones : Réservation camping (avec cigales) en haut, ski nautique dessous ; bouton de retour à la page de lancement
+- Espace camping : Réserver, Capacité du camp (caravane et tentes, qui dort où), Agenda au format du planning avec envoi en image (WhatsApp, e-mail), États des lieux avec photo ou vidéo ; plusieurs hébergements par réservation, Famille Julien, Amis, tarifs annuels modifiables, semaines du samedi au samedi
+- Accueil : Météo (Windguru et webcam de Lacanau Océan), Achat SP95 E10, bouton GO allégé, ligne jauge et bidons plus compacte, temps moteur en heures avec Extérieur
+- Onglet Bateau renommé Admin ; contacts : rubrique Camping, VLG retiré ; Session et Essence réorganisées ; GPS : vitesses sous 19 km/h ignorées, chute détectée au passage ; outil de nettoyage des versements en double du 23/11/2026
+
 ## 1.9.9 — 2026-11-26
 
 - Nouvelle page Camping Les petits Pellegrins : réservation de jours au camp de juin à août (caravane et deux tentes), calendrier, chevauchements, confirmation par cadenas, refus de chevauchement, semaines libres, taux d'occupation, coût estimé par famille

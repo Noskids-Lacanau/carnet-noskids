@@ -1341,3 +1341,218 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 .cp-act { white-space: nowrap; }
 .cp-x { width: 26px; height: 28px; margin-left: 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); font-size: 16px; cursor: pointer; }
 .cp-delok { color: var(--bad); font-weight: 600; margin-left: 4px; }
+/* v2.0 : accueil, lignes de boutons plus espacées, bouton GO un peu moins large, photo rognée à gauche seulement */
+.quick { row-gap: 20px; }
+.quick .qa-session { justify-self: start; width: calc(100% - 8px); background-position: 100% 40%; }
+/* v2.0 : étape 1 de la session, jauge remontée et litrage sous la jauge */
+.card.p1 .p1-grid { align-items: start; }
+.card.p1 .p1-g2 { display: grid; justify-items: center; margin-top: -10px; }
+.card.p1 .p1-g2 .p1-g { justify-self: center; margin-right: 0; }
+.card.p1 .g-under { text-align: center; margin-top: -4px; }
+.card.p1 .g-under .g-read { padding-left: 0; white-space: nowrap; font-size: 12.5px; }
+.card.p1 .g-under .g-read b { font-size: 17px; }
+/* v2.0 : Essence, stock de bidons au milieu, petit bouton Correction à sa droite */
+.stock-row.stock-row2 { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+.stock-row.stock-row2 > .stock-c { grid-column: 2; min-width: 210px; }
+.stock-row.stock-row2 > .corr-btn.corr-sm { grid-column: 3; justify-self: start; width: auto; height: auto; padding: 6px 10px; font-size: 12.5px; border-radius: 10px; }
+/* v2.0 : page Camping refondue */
+.cp-bar.JC { background: #2e9e4f; }
+.cp-bar.sat.JC { color: #23803f; border-color: #2e9e4f; background: rgba(46, 158, 79, .12); }
+.cp-dot.JC { background: #2e9e4f; }
+.cp-legend i.YC { background: var(--yc); } .cp-legend i.OC { background: var(--oc); } .cp-legend i.JC { background: #2e9e4f; } .cp-legend i.EXT { background: #14a3b5; }
+/* cadenas noir, bien visible sur les barres ; bouton noir quand la réservation est confirmée */
+.cp-ic.cp-lk { stroke: #111; fill: rgba(255, 255, 255, .92); stroke-width: 1.6; }
+.cp-bar.sat .cp-ic.cp-lk { fill: none; }
+.cp-lock .cp-ic.cp-lk { fill: none; stroke: #111; }
+.cp-lock[aria-pressed="true"] { background: #111; border-color: #111; color: #fff; }
+.cp-lock[aria-pressed="true"] .cp-ic.cp-lk { stroke: #fff; }
+/* le camp : petits carrés avec pictogrammes de caravane et de tente */
+.cp-cap { grid-template-columns: repeat(3, minmax(0, 100px)); justify-content: center; margin-top: 8px; }
+.cp-cap > .cp-lodge { display: grid; justify-items: center; text-align: center; gap: 1px; padding: 6px 4px; }
+.cp-lg { width: 44px; height: 28px; fill: none; stroke: #2f7d4f; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.cp-lodge b { font-size: 13px; }
+.cp-lodge span { font-size: 11px; }
+.cp-top .cp-tog { flex: none; padding: 0; gap: 2px; width: auto; }
+.cp-top .cp-tog .ctitle { font: 700 18px var(--f-display); }
+/* nouvelle réservation : famille et prénoms sur une même ligne */
+.cp-frow { display: flex; align-items: flex-start; gap: 6px; margin: 4px 0; }
+.cp-frow .cp-grp { flex: none; width: 62px; margin: 5px 0 0 2px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+.cp-frow .cp-grp.YC { color: var(--yc); } .cp-frow .cp-grp.OC { color: var(--oc); } .cp-frow .cp-grp.JC { color: #23803f; } .cp-frow .cp-grp.EXT { color: #0e8796; }
+.cp-frow .cp-sel { margin-left: 0; flex: 1; min-width: 0; gap: 3px; }
+.cp-frow .cp-sel .chip { padding: 4px 7px; font-size: 12px; }
+.cp-extf { margin: 4px 0 6px 68px; }
+.cp-extf input { font-size: 13px; }
+.cp-lseg button[aria-pressed="true"] { font-weight: 700; }
+/* v2.0 : page de lancement scindée (camping en haut, ski nautique dessous) */
+#introV { grid-template-rows: 33vh 1fr; place-items: stretch; }
+#introV .iv-camp { grid-row: 1; display: grid; place-items: center; padding: max(14px, env(safe-area-inset-top)) 16px 10px; background: linear-gradient(160deg, #1f5a3a, #2f7d4f 60%, #4f9b5f); border-bottom: 3px solid rgba(255, 255, 255, .25); position: relative; z-index: 1; }
+#introV .iv-campbtn { display: flex; align-items: center; gap: 14px; padding: 14px 22px; border-radius: 18px; border: 2px solid rgba(255, 255, 255, .7); background: rgba(255, 255, 255, .12); color: #fff; cursor: pointer; text-align: left; box-shadow: 0 8px 22px rgba(0, 0, 0, .3); touch-action: manipulation; }
+#introV .iv-campbtn .cp-lg { width: 54px; height: 34px; stroke: #fff; }
+#introV .iv-campbtn b { display: block; font: 700 22px/1.1 var(--f-display); letter-spacing: .02em; }
+#introV .iv-campbtn small { display: block; font: 500 13px var(--f-body); opacity: .85; }
+#introV .iv-logo { grid-row: 2; align-self: center; justify-self: center; margin-bottom: 16vh; }
+/* bouton de l'en-tête : retour à la page de lancement */
+.hd-launch { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 0; background: rgba(255, 255, 255, .88); color: #1c2b36; display: grid; place-items: center; cursor: pointer; margin-left: auto; }
+.hd-launch svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; }
+.hd-launch + .net { margin-left: 0; }
+/* en-têtes de l'espace camping et de la météo */
+.app-head.h-camphub, .app-head.h-campcap, .app-head.h-campagenda, .app-head.h-campedl { background: linear-gradient(120deg, #1f5a3a, #2f7d4f 55%, #4f9b5f); color: #fff; }
+.app-head.h-camphub .ht { font-size: 21px; line-height: 1.05; }
+.app-head.h-meteo { background: linear-gradient(120deg, #11496e, #1d6fa5 60%, #3c95c9); color: #fff; }
+.qa-meteo { background: #e6f1f9; border-color: #bcd7ea; } .qa-meteo .qa-ic { background: #1d6fa5; color: #fff; }
+.relief .qa-meteo { background: linear-gradient(180deg, #f1f7fc, #d9e9f5); border-color: #a5c6de; --edge: #84a9c4; }
+:root[data-theme="dark"] .quick .qa-meteo { background: linear-gradient(180deg, #1c3446, #142735); border-color: #3b5f7a; color: #e3eef6; }
+/* espace camping : quatre grands boutons */
+.hub { display: grid; gap: 12px; margin-top: 4px; }
+.hub-t { display: grid; grid-template-columns: 52px 1fr; grid-template-rows: auto auto; align-items: center; column-gap: 14px; text-align: left; padding: 14px 16px; border-radius: 16px; border: 1px solid #c4dcc9; background: linear-gradient(180deg, #f4faf5, #e3f0e6); color: var(--ink); cursor: pointer; box-shadow: 0 3px 0 #a9c9b1, 0 10px 16px -10px rgba(20, 60, 30, .4); }
+.hub-t:active { transform: translateY(2px); box-shadow: 0 1px 0 #a9c9b1; }
+.hub-ic { grid-row: span 2; width: 52px; height: 52px; border-radius: 14px; background: #2f7d4f; color: #fff; display: grid; place-items: center; }
+.hub-ic svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.hub-tt { font: 700 18px var(--f-display); }
+.hub-s { font-size: 12.5px; color: var(--muted); }
+.hub-n { margin-top: 10px; }
+/* capacité : caravane vue de dessus */
+.cv-car { position: relative; display: grid; grid-template-columns: 1fr 0.8fr 1fr; gap: 6px; padding: 10px; border: 3px solid #5b7380; border-radius: 26px 26px 18px 18px; background: #f6f3ec; margin-right: 18px; }
+.cv-hitch { position: absolute; right: -18px; top: 50%; width: 18px; height: 4px; background: #5b7380; border-radius: 2px; }
+.cv-bed { display: grid; gap: 4px; align-content: start; padding: 6px; border-radius: 10px; background: #e8dfcb; border: 1px solid #cdbf9f; }
+.cv-l { font-size: 10.5px; color: #6b5a36; font-weight: 600; }
+.cv-bunk { margin-top: 4px; padding: 5px; border: 2px dashed #8d7a52; border-radius: 8px; display: grid; gap: 3px; background: rgba(255, 255, 255, .45); }
+.cv-mid { display: grid; gap: 6px; align-content: center; text-align: center; font-size: 10.5px; color: var(--muted); }
+.cv-mid span { padding: 6px 2px; border: 1px dashed var(--line); border-radius: 8px; }
+.cv-mid .cv-door { border-style: solid; border-color: #5b7380; }
+.cv-tent { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 10px; border: 2px solid #2f7d4f; border-radius: 40% 40% 10px 10px / 30% 30% 10px 10px; background: #eef6f0; }
+.lit { display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 34px; padding: 3px 4px; border-radius: 8px; border: 1px dashed #9aa8b0; background: #fff; color: var(--muted); font: 600 11.5px var(--f-body); cursor: pointer; overflow: hidden; }
+.lit span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lit .ext-ic { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
+.lit.pris { border-style: solid; color: #fff; }
+.lit.pris.YC { background: var(--yc); border-color: var(--yc); } .lit.pris.OC { background: var(--oc); border-color: var(--oc); } .lit.pris.JC { background: #2e9e4f; border-color: #2e9e4f; } .lit.pris.EXT { background: #14a3b5; border-color: #14a3b5; }
+.lit.on { box-shadow: 0 0 0 3px #ffd84d; }
+.cv-pick .chip.YC { border-color: var(--yc); } .cv-pick .chip.OC { border-color: var(--oc); } .cv-pick .chip.JC { border-color: #2e9e4f; } .cv-pick .chip.EXT { border-color: #14a3b5; }
+/* agenda en grand */
+.ag-scroll { overflow-x: auto; overscroll-behavior-x: contain; margin: 4px -4px 0; padding-bottom: 4px; }
+.ag-grid { position: relative; }
+.ag-row { display: flex; align-items: stretch; border-top: 1px solid var(--line); min-height: 26px; }
+.ag-lab { position: sticky; left: 0; z-index: 2; flex: none; width: 110px; padding: 4px 6px; background: var(--surface); font-size: 12px; font-weight: 600; border-right: 1px solid var(--line); }
+.ag-lab .sub { display: block; font-weight: 400; color: var(--muted); font-size: 10.5px; }
+.ag-track { position: relative; display: flex; flex: none; }
+.ag-d, .ag-f { flex: none; width: 20px; text-align: center; font: 600 10px var(--f-mono); padding: 3px 0; border-left: 1px solid rgba(0, 0, 0, .04); }
+.ag-d.we { background: rgba(47, 125, 79, .08); }
+.ag-d.m1 { border-left: 2px solid var(--ink); }
+.ag-d b { position: absolute; top: -1px; font: 700 9px var(--f-body); color: #2f7d4f; margin-left: 2px; }
+.ag-h .ag-track { padding-top: 0; }
+.ag-row .cp-bar { top: 5px; height: 16px; line-height: 16px; }
+/* états des lieux */
+.edl-ph { display: block; width: 100%; max-width: 340px; border-radius: 10px; border: 1px solid var(--line); margin: 6px 0; }
+.edl-it { padding: 8px 0; border-top: 1px solid var(--line); display: grid; gap: 4px; }
+/* météo */
+.wg-box { min-height: 120px; overflow-x: auto; }
+.cam-box { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #0f2a36; }
+.cam-box iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+body.camp-mode .tabs { display: none; }
+/* v2.0b : accueil, ligne jauge + bidons plus basse (total à droite du titre, jauge réduite, estimation sur une ligne) */
+.fuel-row .card { padding: 8px 10px; gap: 4px; }
+.fuel-g .gauge svg { max-width: 88px !important; }
+.fuel-g .fg-cap { white-space: nowrap; font-size: 12px; }
+.fuel-g .fg-cap b { display: inline; font-size: 14px; }
+.fc-h.fc-h2 { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.fc-h.fc-h2 b { font: 700 13px var(--f-body); white-space: nowrap; color: var(--ink); }
+.fuel-c { align-content: start; }
+/* v2.0b : bouton GO plus petit, sans flèche, texte centré sous le skieur */
+.quick .qa-session.qa-go2 { min-height: 104px; justify-items: center; text-align: center; align-content: end; padding: 8px 10px 10px; }
+.quick .qa-session.qa-go2::before { background: linear-gradient(180deg, rgba(8, 20, 28, 0) 35%, rgba(8, 20, 28, .72) 100%); }
+.quick .qa-session.qa-go2 .qa-t { font-size: 19px; text-shadow: 0 1px 4px rgba(0, 0, 0, .6); }
+/* v2.0b : retour à la page de lancement à côté de Live / Démo */
+.dt-wrap { display: flex; align-items: center; gap: 6px; }
+.dt-wrap.on-quick { position: absolute; right: 0; top: -16px; z-index: 2; }
+.dt-wrap.on-ess { width: max-content; margin-left: auto; }
+.dt-launch { flex: none; width: 28px; height: 26px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: grid; place-items: center; cursor: pointer; box-shadow: 0 1px 3px rgba(0, 0, 0, .12); padding: 0; }
+.dt-launch svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+.hd-launch[hidden] { display: none; }
+/* v2.0b : session, étape 1 : titre à gauche, jauge collée au bord haut du cadre */
+.card.p1 { padding-top: 6px; }
+.card.p1 .p1-left { padding-left: 0; padding-top: 7px; gap: 10px; }
+.card.p1 .p1-left .step { margin: 0; }
+.card.p1 .p1-left .field { padding-left: 30px; }
+.card.p1 .p1-g2 { margin-top: 0; }
+.card.p1 .g-under { margin-top: -6px; }
+/* v2.0b : Essence, stock de bidons plus large, bouton Correction en bas à droite */
+.stock-row.stock-row2 { grid-template-columns: minmax(0, .45fr) auto minmax(0, 1fr); align-items: end; }
+.stock-row.stock-row2 > .stock-c { min-width: 250px; }
+.stock-row.stock-row2 > .corr-btn.corr-sm { align-self: end; margin-bottom: 2px; }
+@media (max-width: 400px) { .stock-row.stock-row2 { grid-template-columns: 0 auto minmax(0, 1fr); column-gap: 8px; } .stock-row.stock-row2 > .stock-c { min-width: 240px; } }
+/* v2.0b : page de lancement, deux zones délimitées (coins arrondis, petit espace) */
+#introV { padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom)); row-gap: 10px; background: #050d12; }
+#introV .iv-camp { border-radius: 22px; border-bottom: 0; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12), 0 6px 18px rgba(0, 0, 0, .45); padding: 12px 16px; }
+#introV .iv-ski { grid-row: 2; grid-column: 1; position: relative; overflow: hidden; border-radius: 22px; background: radial-gradient(120% 90% at 50% 40%, #16404f 0%, #0b2530 55%, #04121a 100%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1); }
+#introV .iv-ski .iv-waves { bottom: -4%; }
+#introV .iv-logo { grid-column: 1; z-index: 1; }
+#introV .iv-start, #introV .iv-hint { z-index: 2; }
+#introV .iv-hint { bottom: max(4vh, 26px); }
+/* v2.0b : espace camping en 4 boutons (2 × 2) */
+.hub { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.hub .hub-t { grid-template-columns: 1fr; grid-template-rows: auto auto auto; justify-items: center; text-align: center; row-gap: 6px; padding: 18px 10px 14px; min-height: 150px; align-content: center; }
+.hub .hub-ic { grid-row: auto; width: 58px; height: 58px; border-radius: 16px; }
+.hub .hub-ic svg { width: 32px; height: 32px; }
+.hub .hub-tt { font-size: 17px; line-height: 1.1; }
+.hub .hub-s { font-size: 11.5px; line-height: 1.25; }
+/* v2.0b : capacité du camp, caravane vue de dessus avec des bonhommes allongés (tête en bas, côte à côte) */
+.cv2-car { position: relative; display: flex; align-items: stretch; gap: 6px; padding: 10px 10px 16px; margin-right: 16px; border: 3px solid #5b7380; border-radius: 22px; background: #f6f3ec; min-height: 168px; }
+.cv2-mid { flex: 1 1 auto; min-width: 24px; }
+.cv2-bed { flex: none; display: grid; grid-template-rows: auto 1fr; gap: 3px; padding: 4px 4px 0; border-radius: 10px; background: #e8dfcb; border: 1px solid #cdbf9f; position: relative; overflow: hidden; }
+.cv2-bed::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: 4px; height: 20px; border-radius: 7px; background: #fbf7ee; border: 1px solid #d9ccae; z-index: 0; }
+.cv2-l { font-size: 10px; color: #6b5a36; font-weight: 700; text-align: center; white-space: nowrap; }
+.cv2-sl { display: flex; gap: 3px; align-items: stretch; position: relative; z-index: 1; }
+.cv2-bunk { background: rgba(232, 223, 203, .55); border: 2px dashed #8d7a52; }
+.cv2-door { position: absolute; bottom: -3px; left: calc(50% - 40px); width: 44px; height: 3px; background: #f6f3ec; }
+.cv2-door span { position: absolute; top: 4px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--muted); white-space: nowrap; }
+.cv2-door::before { content: ""; position: absolute; left: 0; bottom: 3px; width: 26px; height: 26px; border: 1px dashed #5b7380; border-width: 1px 1px 0 0; border-radius: 0 26px 0 0; }
+.cv2-hitch { position: absolute; right: -17px; top: calc(50% - 10px); width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-left: 14px solid #5b7380; }
+.cv2-tent { display: flex; justify-content: center; padding: 10px; border: 2px solid #2f7d4f; border-radius: 40% 40% 12px 12px / 26% 26% 12px 12px; background: #eef6f0; }
+.cv2-tent .cv2-bed { background: #dcebdf; border-color: #b6d2bd; padding-top: 6px; }
+.cv2-tent .lit2 { width: 62px; }
+.lit2 { flex: none; width: 44px; display: grid; justify-items: center; align-content: start; gap: 2px; padding: 2px 0 6px; border: 0; background: transparent; cursor: pointer; border-radius: 8px; color: #9aa8b0; touch-action: manipulation; }
+.lit2 .lit-n { max-width: 100%; font: 600 10px/1.1 var(--f-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.lit2 .fig { width: 26px; height: 92px; fill: none; stroke: currentColor; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 3 3; opacity: .7; }
+.lit2 .fig circle { fill: rgba(255, 255, 255, .7); }
+.lit2.pris .fig { stroke-dasharray: none; opacity: 1; }
+.lit2.pris .fig circle { fill: currentColor; }
+.lit2.pris .lit-n { color: var(--ink); font-weight: 700; }
+.lit2.pris.YC { color: var(--yc); } .lit2.pris.OC { color: var(--oc); } .lit2.pris.JC { color: #2e9e4f; } .lit2.pris.EXT { color: #14a3b5; }
+.lit2.on { background: rgba(255, 216, 77, .55); box-shadow: 0 0 0 2px #e0b400; }
+@media (max-width: 370px) { .lit2 { width: 40px; } .cv2-car { padding: 8px 6px 16px; gap: 4px; } }
+/* v2.0b : agenda au format du planning (trois mois), bouton Envoyer et aperçu de l'image */
+.ag2 .cp-day { min-height: 40px; padding: 3px 3px 0; }
+.ag2 .cp-day .n { font-size: 13.5px; }
+.ag2 .cp-day .f { font-size: 10.5px; white-space: nowrap; letter-spacing: -.02em; }
+.ag2 h3 { font-size: 18px; }
+.ag2-top .btn.sm { display: inline-flex; align-items: center; gap: 6px; }
+.sh-ic { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.ag-share { display: grid; gap: 8px; margin-top: 6px; }
+.ag-share img { width: 100%; max-height: 420px; object-fit: contain; object-position: top; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.ag-sh-btns { flex-wrap: wrap; justify-content: flex-start; }
+.ag-sh-btns a { text-decoration: none; }
+.cv2-bed { padding-bottom: 0; }
+.cv2-sl { align-items: flex-end; height: 100%; }
+.lit2 { padding: 2px 0 0; align-self: stretch; align-content: space-between; }
+.lit2 .fig rect, .lit2 .fig circle { fill: #fff; }
+.lit2.pris .fig rect, .lit2.pris .fig circle { fill: currentColor; }
+.lit2 .fig { stroke-width: 2.6; }
+.lit2 .fig .lb { stroke-width: 3.4; }
+/* v2.0c : dormeurs plus grands et plus jolis (pictogramme sous la couette), tentes plus étroites */
+.lit2 { width: 44px; }
+.lit2 .fig { width: 34px; height: 78px; stroke-dasharray: none; opacity: 1; stroke-width: 1.4; }
+.lit2 .fig .fb, .lit2 .fig .fq { fill: #fff; stroke: #a9b5bb; stroke-dasharray: 3 2.4; }
+.lit2 .fig .ff { fill: none; stroke: #a9b5bb; stroke-dasharray: 3 2.4; }
+.lit2.pris .fig .fb { fill: currentColor; stroke: none; }
+.lit2.pris .fig .fq { fill: currentColor; fill-opacity: .22; stroke: currentColor; stroke-dasharray: none; stroke-width: 1.6; }
+.lit2.pris .fig .ff { stroke: currentColor; stroke-dasharray: none; stroke-opacity: .55; }
+.lit2 .fig circle, .lit2.pris .fig circle { stroke-dasharray: none; }
+.lit2:not(.pris) .fig circle { stroke-dasharray: 3 2.4; }
+.cv2-tent { width: max-content; max-width: 100%; margin: 0 auto; padding: 8px 14px; }
+.cv2-tent .lit2 { width: 46px; }
+/* v2.0c : espace camping, les deux lignes de boutons bien séparées */
+.hub { row-gap: 26px; column-gap: 12px; }
+.edl-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+/* v2.0c : bonhommes avec jambes (sans couette) */
+.lit2 .fig .fl { fill: none; stroke: #c9d2d6; stroke-width: 5.6; stroke-linecap: round; stroke-dasharray: none; }
+.lit2.pris .fig .fl { stroke: currentColor; }
