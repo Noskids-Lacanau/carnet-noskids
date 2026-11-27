@@ -1,5 +1,10 @@
 # Journal des versions
 
+## 2.0.3 — 2026-11-27
+
+- Page d'ouverture : zone camping moins haute, fondu de la zone camping puis de la zone ski nautique, bouton Entrer affiché à la fin de l'animation du N
+- Accueil : texte GO pour session descendu, posé sur l'eau
+
 ## 2.0.2 — 2026-11-27
 
 - Mise à jour automatique : recherche d'une nouvelle version à l'ouverture et à chaque retour sur l'app, installation seule si aucune session ni saisie en cours, sinon bandeau Mettre à jour

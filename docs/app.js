@@ -113,7 +113,7 @@
   }
 
   /* ---------- État ---------- */
-  var APP_VERSION = "2.0.2", SCHEMA = 1;
+  var APP_VERSION = "2.0.3", SCHEMA = 1;
   var tab = "accueil", nextId = Date.now() % 100000, picker = null, startList = [], startJauge = 16, startPilote = "yann";
   var sortie = { active: false, compteurDeb: 0, tours: [], participants: [] };
   var gap = { open: false, rat: "auto", key: "" };
@@ -3605,7 +3605,7 @@
     document.body.appendChild(v);
     requestAnimationFrame(function () { v.classList.add("in"); });
     var tr = logo.querySelector(".nk-trace"); if (tr && tr.getTotalLength) tr.style.setProperty("--len", Math.ceil(tr.getTotalLength()) + "px");
-    [].forEach.call(logo.querySelectorAll(".nk-buoys circle"), function (c, i) { c.style.animationDelay = (0.75 + i * 0.2) + "s"; });
+    [].forEach.call(logo.querySelectorAll(".nk-buoys circle"), function (c, i) { c.style.animationDelay = (1.35 + i * 0.2) + "s"; });
     // le son est préparé pendant que le logo arrive : au toucher d'« Entrer », il part sans délai
     setTimeout(function () { try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); v8Buffer(AC); cigBuffer(AC); } catch (e) { /* son indisponible */ } }, 1500);
     function go() {

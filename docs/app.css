@@ -1250,7 +1250,7 @@ body.big-on .screen, body.big-on .tabs, body.big-on .app-head { filter: grayscal
 #introV .iv-start { position: absolute; bottom: max(10vh, 60px); left: 50%; transform: translateX(-50%); box-shadow: 0 0 0 6px rgba(201, 214, 220, .18), 0 10px 28px rgba(0, 0, 0, .6); }
 #introV.go .iv-start { animation: none; transform: translateX(-50%) scale(.9); opacity: 0; transition: opacity .3s, transform .3s; }
 #introV .iv-hint { position: absolute; bottom: max(4vh, 22px); width: 100%; text-align: center; color: #9fb6c2; font: 500 13px 'Barlow', sans-serif; }
-#introV.go .iv-hint { opacity: 0; }
+#introV.go .iv-hint, #introV.go .iv-start { opacity: 0; transition-delay: 0s; }
 #boatX { position: fixed; left: 0; top: 0; z-index: 9100; pointer-events: none; will-change: transform; }
 #boatX svg { display: block; width: 100%; height: auto; overflow: visible; filter: drop-shadow(0 3px 4px rgba(0, 0, 0, .35)); animation: bxBob .3s ease-in-out infinite alternate; }
 @keyframes bxBob { from { transform: rotate(-1.2deg) translateY(1px); } to { transform: rotate(.8deg) translateY(-1px); } }
@@ -1582,3 +1582,20 @@ body.camp-mode .tabs { display: none; }
 :root[data-theme="dark"] .hub-t { background: linear-gradient(180deg, #24402f, #1a3022); border-color: #3f6b4f; color: #e3efe6; box-shadow: 0 3px 0 #0c1a11, 0 10px 16px -10px rgba(0, 0, 0, .6); }
 :root[data-theme="dark"] .hub .hub-s { color: #a9c4b1; }
 :root[data-theme="dark"] .hub-ic { background: #4f9b5f; }
+
+/* v2.0.3 : page d'ouverture, zone camping moins haute, sans liseré blanc ; fondu de la zone du haut (plus long), puis de celle du bas ; « Entrer » apparaît une fois l'animation du logo terminée */
+#introV { grid-template-rows: clamp(118px, 21vh, 200px) 1fr; }
+#introV .iv-camp { box-shadow: 0 6px 18px rgba(0, 0, 0, .45); }
+#introV .iv-ski { box-shadow: none; }
+#introV .iv-camp, #introV .iv-ski, #introV .iv-start, #introV .iv-hint { opacity: 0; transition: opacity .7s ease; }
+#introV .iv-ski { transition-duration: .4s; transition-delay: .5s; }
+#introV .iv-start, #introV .iv-hint { visibility: hidden; transition: opacity .4s ease 2.15s, visibility 0s 2.15s; }
+#introV.in .iv-start, #introV.in .iv-hint { visibility: visible; }
+#introV.in .iv-camp, #introV.in .iv-ski, #introV.in .iv-start, #introV.in .iv-hint { opacity: 1; }
+#introV.in .iv-logo { animation-delay: .75s; }
+#introV.in .nk-trace { animation-delay: 1.3s; }
+#introV.in .nk-boat { animation-delay: 1.8s; }
+#introV.go .iv-hint, #introV.go .iv-start { opacity: 0; transition-delay: 0s; }
+/* v2.0.3 : « GO pour session » descendu, posé sur l'eau juste au-dessus du bord du cadre, sans cacher le skieur */
+.quick .qa-session.qa-go2 { padding-bottom: 3px; }
+.quick .qa-session.qa-go2 .qa-t { line-height: 1.1; }
